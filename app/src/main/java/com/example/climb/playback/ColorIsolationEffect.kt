@@ -2,7 +2,6 @@ package com.example.climb.playback
 
 import android.content.Context
 import android.graphics.Color as AndroidColor
-import android.opengl.GLES11Ext
 import android.opengl.GLES20
 import androidx.media3.common.VideoFrameProcessingException
 import androidx.media3.common.util.GlProgram
@@ -10,7 +9,6 @@ import androidx.media3.common.util.GlUtil
 import androidx.media3.common.util.Size
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.BaseGlShaderProgram
-import androidx.media3.effect.ExternalShaderProgram
 import androidx.media3.effect.GlEffect
 import androidx.media3.effect.GlShaderProgram
 import com.example.climb.data.RouteColor
@@ -39,18 +37,13 @@ class ColorIsolationEffect(
     }
 }
 
-/**
- * Implements [ExternalShaderProgram] so Media3 hands us the decoder's texture directly
- * (`samplerExternalOES`) instead of auto-inserting an internal OES->2D conversion stage before us
- * — that automatic conversion stage is the prime suspect for corrupting frames on this device.
- */
 @UnstableApi
 private class ColorIsolationShaderProgram(
     useHdr: Boolean,
     targetColor: RouteColor,
     hueToleranceDegrees: Float,
     hueOffsetDegrees: Float,
-) : BaseGlShaderProgram(useHdr, /* texturePoolCapacity= */ 1), ExternalShaderProgram {
+) : BaseGlShaderProgram(useHdr, /* texturePoolCapacity= */ 1) {
 
     private val glProgram: GlProgram
     private val targetHue: Float
@@ -67,7 +60,6 @@ private class ColorIsolationShaderProgram(
             GlUtil.createVertexBuffer(NDC_SQUARE),
             GlUtil.HOMOGENEOUS_COORDINATE_VECTOR_SIZE,
         )
-        glProgram.setFloatsUniform("uTexTransform", GlUtil.create4x4IdentityMatrix())
 
         val hsv = FloatArray(3)
         AndroidColor.colorToHSV(targetColor.hex.toInt(), hsv)
@@ -86,23 +78,14 @@ private class ColorIsolationShaderProgram(
 
     override fun configure(inputWidth: Int, inputHeight: Int): Size = Size(inputWidth, inputHeight)
 
-    override fun setTextureTransformMatrix(textureTransformMatrix: FloatArray) {
-        glProgram.setFloatsUniform("uTexTransform", textureTransformMatrix)
-    }
-
     override fun drawFrame(inputTexId: Int, presentationTimeUs: Long) {
         try {
             glProgram.use()
-            glProgram.setSamplerTexIdUniform(
-                "uTexSampler",
-                inputTexId,
-                /* texUnitIndex= */ 0,
-                GLES11Ext.GL_TEXTURE_EXTERNAL_OES,
-            )
+            glProgram.setSamplerTexIdUniform("uTexSampler", inputTexId, /* texUnitIndex= */ 0)
             glProgram.setFloatUniform("uTargetHue", targetHue)
             glProgram.setFloatUniform("uHueThreshold", hueThreshold)
             glProgram.bindAttributesAndUniforms()
-            GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+            GLES20.glDrawArrays(GLES20.GL_TRIANGLES, 0, 6)
         } catch (e: GlUtil.GlException) {
             throw VideoFrameProcessingException.from(e, presentationTimeUs)
         }
@@ -118,28 +101,29 @@ private class ColorIsolationShaderProgram(
     }
 
     companion object {
+        // Two explicit triangles (not a strip) — some Mali drivers have had bugs specifically
+        // with GL_TRIANGLE_STRIP vertex ordering that don't reproduce with plain GL_TRIANGLES.
         private val NDC_SQUARE: ImmutableList<FloatArray> = ImmutableList.of(
             floatArrayOf(-1f, -1f, 0f, 1f),
             floatArrayOf(-1f, 1f, 0f, 1f),
+            floatArrayOf(1f, 1f, 0f, 1f),
+            floatArrayOf(-1f, -1f, 0f, 1f),
             floatArrayOf(1f, 1f, 0f, 1f),
             floatArrayOf(1f, -1f, 0f, 1f),
         )
 
         private const val VERTEX_SHADER = """
             attribute vec4 aFramePosition;
-            uniform mat4 uTexTransform;
             varying vec2 vTexSamplingCoord;
             void main() {
               gl_Position = aFramePosition;
-              vec2 uv = vec2(aFramePosition.x * 0.5 + 0.5, aFramePosition.y * 0.5 + 0.5);
-              vTexSamplingCoord = (uTexTransform * vec4(uv, 0.0, 1.0)).xy;
+              vTexSamplingCoord = vec2(aFramePosition.x * 0.5 + 0.5, aFramePosition.y * 0.5 + 0.5);
             }
         """
 
         private const val FRAGMENT_SHADER = """
-            #extension GL_OES_EGL_image_external : require
             precision mediump float;
-            uniform samplerExternalOES uTexSampler;
+            uniform sampler2D uTexSampler;
             uniform float uTargetHue;
             uniform float uHueThreshold;
             varying vec2 vTexSamplingCoord;
