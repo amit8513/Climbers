@@ -1,0 +1,46 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+
+      match /friends/{friendUid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn() &&
+          (request.auth.uid == uid || request.auth.uid == friendUid) &&
+          exists(/databases/$(database)/documents/friendRequests/$(request.auth.uid == uid
+            ? friendUid + '_' + uid
+            : uid + '_' + friendUid)) &&
+          get(/databases/$(database)/documents/friendRequests/$(request.auth.uid == uid
+            ? friendUid + '_' + uid
+            : uid + '_' + friendUid)).data.status == 'ACCEPTED';
+        allow update, delete: if false;
+      }
+    }
+
+    match /usernames/{usernameLower} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /friendRequests/{requestId} {
+      // resource is null when the doc doesn't exist yet (e.g. the existence check inside
+      // sendFriendRequest's transaction, before the very first request between two users) —
+      // that must stay readable or the existence check itself gets denied.
+      allow read: if signedIn() &&
+        (resource == null || request.auth.uid == resource.data.fromUid || request.auth.uid == resource.data.toUid);
+      allow create: if signedIn() && request.auth.uid == request.resource.data.fromUid;
+      allow update: if signedIn() &&
+        (request.auth.uid == resource.data.fromUid || request.auth.uid == resource.data.toUid);
+      allow delete: if false;
+    }
+  }
+}

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,12 +30,14 @@ import com.example.climb.ui.theme.NotchedBarShape
 
 private const val ROUTE_HOME = "home"
 private const val ROUTE_PROGRESS = "progress"
+private const val ROUTE_FRIENDS = "friends"
 
 @Composable
 fun ClimbBottomBar(
     selectedRoute: String?,
     onHomeClick: () -> Unit,
     onProgressClick: () -> Unit,
+    onFriendsClick: () -> Unit,
     onRecordClick: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
@@ -54,19 +57,32 @@ fun ClimbBottomBar(
                     .padding(top = 20.dp)
                     .navigationBarsPadding(),
             ) {
-                NavTab(
-                    label = "Home",
-                    selected = selectedRoute == ROUTE_HOME,
-                    onClick = onHomeClick,
-                    modifier = Modifier.weight(1f),
-                )
-                Spacer(Modifier.weight(1f))
-                NavTab(
-                    label = "Progress",
-                    selected = selectedRoute == ROUTE_PROGRESS,
-                    onClick = onProgressClick,
-                    modifier = Modifier.weight(1f),
-                )
+                // Two equal-width halves around a fixed-width center gap, rather than weighting
+                // each tab equally — that keeps the notch centered regardless of how many tabs
+                // sit on either side (2 left, 1 right, here).
+                Row(modifier = Modifier.weight(1f)) {
+                    NavTab(
+                        label = "Home",
+                        selected = selectedRoute == ROUTE_HOME,
+                        onClick = onHomeClick,
+                        modifier = Modifier.weight(1f),
+                    )
+                    NavTab(
+                        label = "Progress",
+                        selected = selectedRoute == ROUTE_PROGRESS,
+                        onClick = onProgressClick,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                Spacer(Modifier.width(72.dp))
+                Row(modifier = Modifier.weight(1f)) {
+                    NavTab(
+                        label = "Friends",
+                        selected = selectedRoute == ROUTE_FRIENDS,
+                        onClick = onFriendsClick,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
 
