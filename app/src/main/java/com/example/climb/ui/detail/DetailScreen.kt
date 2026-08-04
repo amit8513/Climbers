@@ -2,7 +2,6 @@ package com.example.climb.ui.detail
 
 import android.net.Uri
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -23,7 +21,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -54,7 +51,6 @@ fun DetailScreen(
         return
     }
 
-    var personDetectionEnabled by remember { mutableStateOf(true) }
     var hueTolerancePosition by remember { mutableFloatStateOf(ColorIsolationEffect.DEFAULT_HUE_TOLERANCE_DEGREES) }
     var appliedHueTolerance by remember { mutableFloatStateOf(ColorIsolationEffect.DEFAULT_HUE_TOLERANCE_DEGREES) }
     var hueOffsetPosition by remember { mutableFloatStateOf(0f) }
@@ -71,7 +67,6 @@ fun DetailScreen(
                         targetColor = currentClimb.routeColor,
                         hueToleranceDegrees = appliedHueTolerance,
                         hueOffsetDegrees = appliedHueOffset,
-                        detectPerson = personDetectionEnabled,
                     ),
                 ),
             )
@@ -86,7 +81,7 @@ fun DetailScreen(
 
     var effectsGeneration by remember { mutableStateOf(0) }
 
-    LaunchedEffect(exoPlayer, currentClimb.routeColor, personDetectionEnabled, appliedHueTolerance, appliedHueOffset) {
+    LaunchedEffect(exoPlayer, currentClimb.routeColor, appliedHueTolerance, appliedHueOffset) {
         if (effectsGeneration > 0) {
             exoPlayer.setVideoEffects(
                 listOf(
@@ -94,7 +89,6 @@ fun DetailScreen(
                         targetColor = currentClimb.routeColor,
                         hueToleranceDegrees = appliedHueTolerance,
                         hueOffsetDegrees = appliedHueOffset,
-                        detectPerson = personDetectionEnabled,
                     ),
                 ),
             )
@@ -110,7 +104,6 @@ fun DetailScreen(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     player = exoPlayer
-                    useController = false
                 }
             },
             modifier = Modifier.fillMaxWidth().aspectRatio(9f / 16f),
@@ -127,15 +120,6 @@ fun DetailScreen(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Highlight me", modifier = Modifier.weight(1f))
-                Switch(checked = personDetectionEnabled, onCheckedChange = { personDetectionEnabled = it })
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
             Text("Hue: ${if (hueOffsetPosition >= 0) "+" else ""}${hueOffsetPosition.roundToInt()}°")
             Slider(
                 value = hueOffsetPosition,
