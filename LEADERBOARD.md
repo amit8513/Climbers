@@ -4,32 +4,39 @@ A weekly leaderboard comparing friends' climbing across five categories. This do
 how it's scored, how privacy is enforced, and — importantly — what's real versus mocked in the
 current implementation.
 
-## What's real vs. mocked right now
+## What's real vs. what's still missing
 
 There is currently no backend that syncs friends' climb data across devices — Firebase (used by
 the friends feature) only stores usernames and the accepted-friend graph, nothing about climbs,
 sessions, or videos. Building that sync is a separate, larger project.
 
-So, today:
+So, today (`leaderboard/data/LocalLeaderboardRepository.kt`):
 
 - **Scoring, ranking, tie-breaks, weekly periods, and privacy filtering are all real** — pure,
   unit-tested logic in `com.example.climb.leaderboard.scoring`/`period`/`privacy`.
-- **Friends' data is realistic mock data** (`leaderboard/data/DemoRoster.kt`,
-  `MockLeaderboardRepository`), deterministic per (user, period) so it doesn't change on refresh.
-  It exists specifically to exercise every case the ranking/privacy logic needs to handle: rank
-  movement in both directions, a brand-new participant, every video-visibility level, and a
-  participant below the Consistency qualification minimum.
+- **Only your real accepted friends appear** (`SocialRepository.observeFriends`) — there is no
+  mock/demo roster.
 - **Your own row is real** — computed from your actual logged climbs (`ClimbRepository`), run
-  through the exact same scoring pipeline as the mock friends.
+  through the same scoring pipeline a friend's data would use once sync exists.
+- Because this device can't read a friend's climbs from anywhere, every real friend currently has
+  zero visible activity and shows up under "Friends without data yet" instead of in the ranked
+  list — this is expected, not a bug, until real cross-device climb sync is built. Once a friend's
+  attempts/sessions are readable here, they'll rank normally with no code changes needed beyond
+  wiring in that data source.
 - Because `ClimbEntity` (the current climb log) has no attempt history or shared problem identity
   yet, each logged climb maps to its own one-attempt "problem." Real attempt/problem tracking
   would make your own Consistency/lock-off-style metrics much more meaningful.
+- Per-friend leaderboard privacy settings (`LeaderboardPrivacySettings`) aren't stored anywhere
+  yet either — `LocalLeaderboardRepository` applies a reasonable default (participating, stats
+  visible to friends, friends-only video) to every accepted friend until real settings exist.
 
-**What must move server-side once real cross-friend sync exists:** authoritative scoring
-(currently computed on-device from local + mock data), privacy enforcement (currently done in
-`LeaderboardPrivacyFilter`, called from the "trusted" local repository layer instead of a real
-server), and persisted weekly period rows with real `Active → Calculating → Complete` status
-transitions (currently just computed on demand from calendar time).
+**What must move server-side once real cross-friend sync exists:** the climb-data sync itself
+(so a friend's attempts/sessions/videos are readable from anywhere but their own device),
+authoritative scoring (currently computed on-device from local data only), privacy enforcement
+(currently done in `LeaderboardPrivacyFilter`, called from the "trusted" local repository layer
+instead of a real server), real per-friend `LeaderboardPrivacySettings` storage, and persisted
+weekly period rows with real `Active → Calculating → Complete` status transitions (currently just
+computed on demand from calendar time).
 
 ## The five categories
 
@@ -135,8 +142,8 @@ silent behavior change.
 
 ## Known limitations
 
-- Friends' data is mocked (see above) — real cross-friend rankings need the climb-data sync
-  project.
+- Real friends currently always show "no data yet" (see above) — real cross-friend rankings need
+  the climb-data sync project.
 - Compose UI tests, repository/cache/offline integration tests, and accessibility semantics tests
   weren't added — this app has no UI/instrumented test infrastructure yet (only unit tests exist).
   The pure scoring/period/privacy logic is fully unit-tested instead.

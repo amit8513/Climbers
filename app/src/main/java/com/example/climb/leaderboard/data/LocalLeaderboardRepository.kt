@@ -1,11 +1,14 @@
 package com.example.climb.leaderboard.data
 
+import com.example.climb.analysis.Visibility
 import com.example.climb.data.ClimbOutcome
 import com.example.climb.data.ClimbRepository
+import com.example.climb.data.social.SocialRepository
 import com.example.climb.leaderboard.model.ClimbAttempt
 import com.example.climb.leaderboard.model.LeaderboardCategory
 import com.example.climb.leaderboard.model.LeaderboardEntry
 import com.example.climb.leaderboard.model.LeaderboardPeriod
+import com.example.climb.leaderboard.model.LeaderboardPrivacySettings
 import com.example.climb.leaderboard.model.LeaderboardResult
 import com.example.climb.leaderboard.model.PeriodStatus
 import com.example.climb.leaderboard.model.VGrade
@@ -16,21 +19,32 @@ import kotlinx.coroutines.flow.first
 import java.time.ZoneId
 
 /**
- * The only [LeaderboardRepository] implementation today — there is no backend that owns real
- * friends' climb data yet. Friends are realistic mock fixtures ([demoProfiles]); the signed-in
- * user's own row is computed from their real local climbs via [ClimbRepository]. Both paths run
- * through the same [calculateEntry]/[rankEntries]/[LeaderboardPrivacyFilter] pipeline, so "you"
- * are ranked for real, not overlaid decoratively. See LEADERBOARD.md for what must move
- * server-side once real cross-friend sync exists.
+ * The only [LeaderboardRepository] implementation. Compares the signed-in user only against
+ * their real accepted friends ([SocialRepository]) — no mock/demo roster. There is, however, no
+ * backend yet that syncs a friend's climb data to where this device can read it (Firebase only
+ * stores the friend graph, not climbs/sessions/videos — see LEADERBOARD.md), so every real friend
+ * currently has zero visible activity from this device's point of view and shows up under
+ * [LeaderboardResult.unrankedFriends] rather than in the ranked competition. The signed-in user's
+ * own row is real, computed from their actual local climbs, through the exact same scoring
+ * pipeline a real friend's data would go through once sync exists.
  */
-class MockLeaderboardRepository(
+class LocalLeaderboardRepository(
     private val climbRepository: ClimbRepository,
+    private val socialRepository: SocialRepository,
     private val currentUid: String,
     private val currentDisplayName: String,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) : LeaderboardRepository {
 
     private val cache = LeaderboardCache()
+
+    /** Placeholder until real per-friend leaderboard privacy settings are stored anywhere —
+     * defaults to "on" for every accepted friend, same as a brand new user would see today. */
+    private val defaultFriendPrivacy = LeaderboardPrivacySettings(
+        participateInLeaderboard = true,
+        allowFriendsToViewStats = true,
+        defaultVideoVisibility = Visibility.FRIENDS_ONLY,
+    )
 
     override suspend fun getLeaderboard(viewerUserId: String, category: LeaderboardCategory, period: LeaderboardPeriod): LeaderboardResult {
         cache.get(category, period.id)?.let { (result, _) -> return result }
@@ -55,13 +69,19 @@ class MockLeaderboardRepository(
             status = PeriodStatus.COMPLETE,
         )
 
+        val friends = socialRepository.observeFriends(currentUid).first()
+
         val currentUserRaw = currentUserEntry(period)
-        val rankable = demoEntries(period, viewerUserId, isPreviousPeriod = false) +
-            (if (currentUserRaw.isEligible) listOf(currentUserRaw) else emptyList())
+        val friendEntries = friends.map { friend ->
+            calculateEntry(friend.uid, friend.username, null, emptyList(), emptyList(), zoneId).let { raw ->
+                LeaderboardPrivacyFilter.filterForViewer(raw, viewerUserId, defaultFriendPrivacy, areFriends = true, totalOwnedVideoCount = 0) ?: raw
+            }
+        }
+        val (eligibleFriends, unrankedFriends) = friendEntries.partition { it.isEligible }
+        val rankable = eligibleFriends + (if (currentUserRaw.isEligible) listOf(currentUserRaw) else emptyList())
 
         val previousCurrentUserRaw = currentUserEntry(previousPeriod)
-        val previousRankable = demoEntries(previousPeriod, viewerUserId, isPreviousPeriod = true) +
-            (if (previousCurrentUserRaw.isEligible) listOf(previousCurrentUserRaw) else emptyList())
+        val previousRankable = (if (previousCurrentUserRaw.isEligible) listOf(previousCurrentUserRaw) else emptyList())
         val previousRanks = rankEntries(previousRankable, category, emptyMap()).associate { it.userId to it.rank }
 
         val ranked = rankEntries(rankable, category, previousRanks)
@@ -73,18 +93,9 @@ class MockLeaderboardRepository(
             generatedAt = System.currentTimeMillis(),
             entries = ranked,
             currentUserEntry = currentUserEntry,
+            unrankedFriends = unrankedFriends,
         )
     }
-
-    private fun demoEntries(period: LeaderboardPeriod, viewerUserId: String, isPreviousPeriod: Boolean): List<LeaderboardEntry> =
-        demoProfiles(currentUid).mapNotNull { profile ->
-            val seed = seedFor(profile.uid, period.id)
-            val (attempts, sessions) = generateAttemptsAndSessions(profile, period, seed, isPreviousPeriod)
-            val rawEntry = calculateEntry(profile.uid, profile.displayName, null, attempts, sessions, zoneId)
-            if (!rawEntry.isEligible) return@mapNotNull null
-            val ownedVideoCount = attempts.count { it.videoId != null }
-            LeaderboardPrivacyFilter.filterForViewer(rawEntry, viewerUserId, profile.privacy, areFriends = true, totalOwnedVideoCount = ownedVideoCount)
-        }
 
     private suspend fun currentUserEntry(period: LeaderboardPeriod): LeaderboardEntry {
         val attempts = realUserAttempts(period)

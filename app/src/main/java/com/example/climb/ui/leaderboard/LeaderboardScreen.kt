@@ -142,7 +142,9 @@ private fun LeaderboardContent(
     lastUpdatedAt: Long?,
     onOpenEntry: (LeaderboardEntry) -> Unit,
 ) {
-    if (result.entries.isEmpty()) {
+    val currentUserEligible = result.currentUserEntry?.isEligible == true
+    val hasNothingToShow = result.entries.isEmpty() && result.unrankedFriends.isEmpty() && !currentUserEligible
+    if (hasNothingToShow) {
         EmptyState()
         return
     }
@@ -156,27 +158,53 @@ private fun LeaderboardContent(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        item {
-            Text(text = category.podiumTitle, color = ClimbPalette.textMuted, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.5.sp)
-            LeaderboardPodium(podiumEntries, category, onEntryClick = onOpenEntry)
-            lastUpdatedAt?.let {
-                Text(
-                    text = "Updated ${SimpleDateFormat("MMM d, h:mm a", Locale.US).format(Date(it))}",
-                    color = ClimbPalette.textMuted,
-                    fontSize = 10.sp,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
-                )
+        if (result.entries.isNotEmpty()) {
+            item {
+                Text(text = category.podiumTitle, color = ClimbPalette.textMuted, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.5.sp)
+                LeaderboardPodium(podiumEntries, category, onEntryClick = onOpenEntry)
+                lastUpdatedAt?.let {
+                    Text(
+                        text = "Updated ${SimpleDateFormat("MMM d, h:mm a", Locale.US).format(Date(it))}",
+                        color = ClimbPalette.textMuted,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+                    )
+                }
             }
-        }
 
-        items(rowEntries, key = { it.userId }) { entry ->
-            LeaderboardRow(entry = entry, category = category, onClick = { onOpenEntry(entry) }, onOpenVideos = { onOpenEntry(entry) })
+            items(rowEntries, key = { it.userId }) { entry ->
+                LeaderboardRow(entry = entry, category = category, onClick = { onOpenEntry(entry) }, onOpenVideos = { onOpenEntry(entry) })
+            }
         }
 
         if (showStickyRow) {
             item(key = "sticky_${result.currentUserEntry?.userId}") {
                 result.currentUserEntry?.let {
                     StickyCurrentUserRow(it, category, onClick = { onOpenEntry(it) })
+                }
+            }
+        }
+
+        if (result.unrankedFriends.isNotEmpty()) {
+            item {
+                Spacer(Modifier.height(4.dp))
+                SectionCard(title = "Friends without data yet") {
+                    Text(
+                        text = "Their climbs aren't synced to this device yet, so they can't be ranked — this fills in once cross-device sync exists.",
+                        color = ClimbPalette.textSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    result.unrankedFriends.forEach { friend ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(text = friend.displayName, color = ClimbPalette.textPrimary, fontSize = 13.sp)
+                            Text(text = friend.eligibilityReason ?: "No data yet", color = ClimbPalette.textMuted, fontSize = 11.sp)
+                        }
+                    }
                 }
             }
         }

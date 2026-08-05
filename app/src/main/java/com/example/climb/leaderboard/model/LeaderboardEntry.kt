@@ -62,4 +62,8 @@ data class LeaderboardResult(
     val generatedAt: Long,
     val entries: List<LeaderboardEntry>,
     val currentUserEntry: LeaderboardEntry?,
+    /** Real accepted friends with no climb activity to rank on yet — shown separately from
+     * [entries] rather than silently dropped, since they're real friends, not absent ones.
+     * Always empty once real cross-device climb sync exists and they have data. */
+    val unrankedFriends: List<LeaderboardEntry> = emptyList(),
 )
