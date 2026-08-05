@@ -82,4 +82,7 @@ dependencies {
     implementation(libs.firebase.firestore)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.play.services.auth)
+
+    implementation(libs.mediapipe.tasks.vision)
+    implementation(libs.androidx.work.runtime.ktx)
 }

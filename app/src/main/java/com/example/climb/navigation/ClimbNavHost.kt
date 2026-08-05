@@ -20,6 +20,10 @@ import androidx.navigation.navArgument
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.AppContainer
 import com.example.climb.data.social.UserProfile
+import com.example.climb.ui.analysis.AnalysisProgressScreen
+import com.example.climb.ui.analysis.AnalysisResultScreen
+import com.example.climb.ui.analysis.ClimbDetailsInputScreen
+import com.example.climb.ui.analysis.VideoSourceScreen
 import com.example.climb.ui.auth.AuthScreen
 import com.example.climb.ui.auth.ProfileSetupScreen
 import com.example.climb.ui.detail.DetailScreen
@@ -40,9 +44,17 @@ private object Routes {
     const val RECORD = "record"
     const val TAG = "tag/{videoPath}/{durationMs}"
     const val DETAIL = "detail/{climbId}"
+    const val VIDEO_SOURCE = "video_source"
+    const val ANALYSIS_RECORD = "analysis_record"
+    const val CLIMB_DETAILS_INPUT = "climb_details_input/{videoPath}/{durationMs}"
+    const val ANALYSIS_PROGRESS = "analysis_progress/{attemptId}"
+    const val ANALYSIS_RESULT = "analysis_result/{analysisId}"
 
     fun tag(videoPath: String, durationMs: Long) = "tag/${Uri.encode(videoPath)}/$durationMs"
     fun detail(climbId: Long) = "detail/$climbId"
+    fun climbDetailsInput(videoPath: String, durationMs: Long) = "climb_details_input/${Uri.encode(videoPath)}/$durationMs"
+    fun analysisProgress(attemptId: Long) = "analysis_progress/$attemptId"
+    fun analysisResult(analysisId: Long) = "analysis_result/$analysisId"
 }
 
 private sealed interface ProfileLoadState {
@@ -122,6 +134,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     repository = container.climbRepository,
                     currentUid = currentUid,
                     onClimbClick = { id -> navController.navigate(Routes.detail(id)) },
+                    onAnalyzeClick = { navController.navigate(Routes.VIDEO_SOURCE) },
                 )
             }
 
@@ -177,6 +190,77 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     repository = container.climbRepository,
                     currentUid = currentUid,
                     onDeleted = { navController.popBackStack(Routes.HOME, false) },
+                )
+            }
+
+            composable(Routes.VIDEO_SOURCE) {
+                VideoSourceScreen(
+                    repository = container.climbRepository,
+                    currentUid = currentUid,
+                    onRecordNew = { navController.navigate(Routes.ANALYSIS_RECORD) },
+                    onExistingVideoSelected = { path, duration ->
+                        navController.navigate(Routes.climbDetailsInput(path, duration))
+                    },
+                )
+            }
+
+            composable(Routes.ANALYSIS_RECORD) {
+                RecordScreen(
+                    moviesDir = container.moviesDirFor(currentUid),
+                    onRecorded = { path, duration ->
+                        navController.navigate(Routes.climbDetailsInput(path, duration)) {
+                            popUpTo(Routes.ANALYSIS_RECORD) { inclusive = true }
+                        }
+                    },
+                )
+            }
+
+            composable(
+                route = Routes.CLIMB_DETAILS_INPUT,
+                arguments = listOf(
+                    navArgument("videoPath") { type = NavType.StringType },
+                    navArgument("durationMs") { type = NavType.LongType },
+                ),
+            ) { backStackEntry ->
+                val videoPath = Uri.decode(backStackEntry.arguments?.getString("videoPath").orEmpty())
+                val durationMs = backStackEntry.arguments?.getLong("durationMs") ?: 0L
+                ClimbDetailsInputScreen(
+                    videoPath = videoPath,
+                    durationMs = durationMs,
+                    currentUid = currentUid,
+                    analysisRepository = container.analysisRepository,
+                    onAnalyzeStarted = { attemptId ->
+                        navController.navigate(Routes.analysisProgress(attemptId)) {
+                            popUpTo(Routes.VIDEO_SOURCE) { inclusive = true }
+                        }
+                    },
+                )
+            }
+
+            composable(
+                route = Routes.ANALYSIS_PROGRESS,
+                arguments = listOf(navArgument("attemptId") { type = NavType.LongType }),
+            ) { backStackEntry ->
+                val attemptId = backStackEntry.arguments?.getLong("attemptId") ?: 0L
+                AnalysisProgressScreen(
+                    attemptId = attemptId,
+                    onComplete = { analysisId ->
+                        navController.navigate(Routes.analysisResult(analysisId)) {
+                            popUpTo(Routes.HOME) { inclusive = false }
+                        }
+                    },
+                    onGiveUp = { navController.popBackStack(Routes.HOME, false) },
+                )
+            }
+
+            composable(
+                route = Routes.ANALYSIS_RESULT,
+                arguments = listOf(navArgument("analysisId") { type = NavType.LongType }),
+            ) { backStackEntry ->
+                val analysisId = backStackEntry.arguments?.getLong("analysisId") ?: 0L
+                AnalysisResultScreen(
+                    analysisId = analysisId,
+                    analysisRepository = container.analysisRepository,
                 )
             }
         }
