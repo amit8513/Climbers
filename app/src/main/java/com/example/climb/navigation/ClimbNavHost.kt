@@ -29,6 +29,7 @@ import com.example.climb.ui.auth.ProfileSetupScreen
 import com.example.climb.ui.detail.DetailScreen
 import com.example.climb.ui.friends.FriendsScreen
 import com.example.climb.ui.home.HomeScreen
+import com.example.climb.ui.leaderboard.LeaderboardScreen
 import com.example.climb.ui.nav.ClimbBottomBar
 import com.example.climb.ui.progress.ProgressScreen
 import com.example.climb.ui.record.RecordScreen
@@ -41,6 +42,7 @@ private object Routes {
     const val HOME = "home"
     const val PROGRESS = "progress"
     const val FRIENDS = "friends"
+    const val LEADERBOARD = "leaderboard"
     const val RECORD = "record"
     const val TAG = "tag/{videoPath}/{durationMs}"
     const val DETAIL = "detail/{climbId}"
@@ -149,6 +151,14 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     currentUsername = profile.username,
                     socialRepository = container.socialRepository,
                     authRepository = container.authRepository,
+                    onLeaderboardClick = { navController.navigate(Routes.LEADERBOARD) },
+                )
+            }
+
+            composable(Routes.LEADERBOARD) {
+                LeaderboardScreen(
+                    currentUid = currentUid,
+                    leaderboardRepository = container.leaderboardRepositoryFor(currentUid, profile.username),
                 )
             }
 

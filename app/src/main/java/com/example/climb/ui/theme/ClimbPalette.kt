@@ -30,6 +30,11 @@ object ClimbPalette {
     val holdSheen = Color.White.copy(alpha = 0.32f)
     val wall = Color(0xFF2B2823)
     val wall2 = Color(0xFF35312A)
+    val gold = Color(0xFFD5A62E)
+    val silver = Color(0xFFA9AAAC)
+    val bronze = Color(0xFFB8753E)
+    val positive = Color(0xFF3D9A61)
+    val negative = Color(0xFFD54B4B)
 }
 
 /** A darkened, desaturation-safe tone of a route color, for text/borders drawn on top of it. */

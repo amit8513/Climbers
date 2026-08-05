@@ -47,6 +47,7 @@ fun FriendsScreen(
     currentUsername: String,
     socialRepository: SocialRepository,
     authRepository: AuthRepository,
+    onLeaderboardClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -99,6 +100,26 @@ fun FriendsScreen(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.clickable { authRepository.signOut() },
                 )
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(ClimbPalette.surface)
+                    .border(1.dp, ClimbPalette.border, RoundedCornerShape(14.dp))
+                    .clickable(onClick = onLeaderboardClick)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(text = "Leaderboard", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(text = "See how you stack up this week", color = ClimbPalette.textSecondary, fontSize = 11.sp)
+                }
+                Text(text = "→", color = ClimbPalette.chalk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
 
             Spacer(Modifier.height(18.dp))

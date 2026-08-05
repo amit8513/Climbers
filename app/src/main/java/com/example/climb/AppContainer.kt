@@ -7,6 +7,8 @@ import com.example.climb.data.ClimbDatabase
 import com.example.climb.data.ClimbRepository
 import com.example.climb.data.social.AuthRepository
 import com.example.climb.data.social.SocialRepository
+import com.example.climb.leaderboard.data.LeaderboardRepository
+import com.example.climb.leaderboard.data.MockLeaderboardRepository
 import com.example.climb.pose.MediaPipePoseEstimator
 import com.example.climb.pose.PoseEstimator
 import com.google.firebase.auth.FirebaseAuth
@@ -41,4 +43,11 @@ class AppContainer(context: Context) {
     }
 
     fun moviesDirFor(uid: String): File = File(moviesDir, uid).apply { mkdirs() }
+
+    private val leaderboardRepositories = mutableMapOf<String, LeaderboardRepository>()
+
+    /** Keyed by uid so the in-memory cache inside [MockLeaderboardRepository] survives
+     * navigating away from the leaderboard and back, rather than refetching every time. */
+    fun leaderboardRepositoryFor(uid: String, displayName: String): LeaderboardRepository =
+        leaderboardRepositories.getOrPut(uid) { MockLeaderboardRepository(climbRepository, uid, displayName) }
 }
