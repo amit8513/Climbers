@@ -42,6 +42,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.example.climb.analysis.AnalysisRepository
+import com.example.climb.analysis.AnalysisStatus
+import com.example.climb.analysis.ClimbAttemptEntity
 import com.example.climb.data.ClimbRepository
 import com.example.climb.playback.ColorIsolationEffect
 import com.example.climb.ui.components.HoldBadge
@@ -63,7 +66,11 @@ fun DetailScreen(
     climbId: Long,
     repository: ClimbRepository,
     currentUid: String,
+    analysisRepository: AnalysisRepository,
     onDeleted: () -> Unit,
+    onStartAnalysis: (videoPath: String, durationMs: Long, sourceClimbId: Long) -> Unit,
+    onViewAnalysisProgress: (attemptId: Long) -> Unit,
+    onViewAnalysisResult: (analysisId: Long) -> Unit,
 ) {
     val climb by repository.observeById(climbId, currentUid).collectAsStateWithLifecycle(initialValue = null)
     val context = LocalContext.current
@@ -77,10 +84,12 @@ fun DetailScreen(
         return
     }
 
-    var hueTolerancePosition by remember { mutableFloatStateOf(ColorIsolationEffect.DEFAULT_HUE_TOLERANCE_DEGREES) }
-    var appliedHueTolerance by remember { mutableFloatStateOf(ColorIsolationEffect.DEFAULT_HUE_TOLERANCE_DEGREES) }
-    var hueOffsetPosition by remember { mutableFloatStateOf(0f) }
-    var appliedHueOffset by remember { mutableFloatStateOf(0f) }
+    val initialHueTolerance = currentClimb.hueToleranceDegrees ?: ColorIsolationEffect.DEFAULT_HUE_TOLERANCE_DEGREES
+    val initialHueOffset = currentClimb.hueOffsetDegrees ?: 0f
+    var hueTolerancePosition by remember { mutableFloatStateOf(initialHueTolerance) }
+    var appliedHueTolerance by remember { mutableFloatStateOf(initialHueTolerance) }
+    var hueOffsetPosition by remember { mutableFloatStateOf(initialHueOffset) }
+    var appliedHueOffset by remember { mutableFloatStateOf(initialHueOffset) }
 
     // Effects must be set before prepare() — ExoPlayer decides whether to route through the GL
     // effects pipeline at prepare time, so setting them afterwards (e.g. only from the
@@ -181,7 +190,10 @@ fun DetailScreen(
                 value = hueOffsetPosition,
                 valueRange = ColorIsolationEffect.MIN_HUE_OFFSET_DEGREES..ColorIsolationEffect.MAX_HUE_OFFSET_DEGREES,
                 onValueChange = { hueOffsetPosition = it },
-                onValueChangeFinished = { appliedHueOffset = hueOffsetPosition },
+                onValueChangeFinished = {
+                    appliedHueOffset = hueOffsetPosition
+                    scope.launch { repository.update(currentClimb.copy(hueOffsetDegrees = hueOffsetPosition)) }
+                },
             )
             Spacer(Modifier.height(12.dp))
             TuningSlider(
@@ -190,9 +202,24 @@ fun DetailScreen(
                 value = hueTolerancePosition,
                 valueRange = ColorIsolationEffect.MIN_HUE_TOLERANCE_DEGREES..ColorIsolationEffect.MAX_HUE_TOLERANCE_DEGREES,
                 onValueChange = { hueTolerancePosition = it },
-                onValueChangeFinished = { appliedHueTolerance = hueTolerancePosition },
+                onValueChangeFinished = {
+                    appliedHueTolerance = hueTolerancePosition
+                    scope.launch { repository.update(currentClimb.copy(hueToleranceDegrees = hueTolerancePosition)) }
+                },
             )
         }
+
+        Spacer(Modifier.height(16.dp))
+        PoseAnalysisSection(
+            climbId = currentClimb.id,
+            videoPath = currentClimb.videoPath,
+            durationMs = currentClimb.durationMs,
+            analysisRepository = analysisRepository,
+            onStartAnalysis = onStartAnalysis,
+            onViewProgress = onViewAnalysisProgress,
+            onViewResult = onViewAnalysisResult,
+            modifier = Modifier.padding(horizontal = 16.dp),
+        )
 
         if (currentClimb.notes.isNotBlank()) {
             Spacer(Modifier.height(16.dp))
@@ -226,6 +253,74 @@ fun DetailScreen(
         }
 
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun PoseAnalysisSection(
+    climbId: Long,
+    videoPath: String,
+    durationMs: Long,
+    analysisRepository: AnalysisRepository,
+    onStartAnalysis: (videoPath: String, durationMs: Long, sourceClimbId: Long) -> Unit,
+    onViewProgress: (attemptId: Long) -> Unit,
+    onViewResult: (analysisId: Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val attempt by analysisRepository.observeLatestAttemptForSourceClimb(climbId).collectAsStateWithLifecycle(initialValue = null)
+    val currentAttempt = attempt
+
+    SectionCard(title = "Pose analysis", modifier = modifier) {
+        if (currentAttempt == null) {
+            Text(
+                text = "Run pose analysis to see a skeleton overlay and movement insights.",
+                color = ClimbPalette.textSecondary,
+                fontSize = 13.sp,
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = "Analyze this climb",
+                color = ClimbPalette.chalk,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                modifier = Modifier.clickable { onStartAnalysis(videoPath, durationMs, climbId) },
+            )
+        } else {
+            PoseAnalysisStatusRow(attempt = currentAttempt, analysisRepository = analysisRepository, onViewProgress = onViewProgress, onViewResult = onViewResult)
+        }
+    }
+}
+
+@Composable
+private fun PoseAnalysisStatusRow(
+    attempt: ClimbAttemptEntity,
+    analysisRepository: AnalysisRepository,
+    onViewProgress: (attemptId: Long) -> Unit,
+    onViewResult: (analysisId: Long) -> Unit,
+) {
+    val analysis by analysisRepository.observeLatestAnalysis(attempt.id).collectAsStateWithLifecycle(initialValue = null)
+    val currentAnalysis = analysis
+
+    when {
+        currentAnalysis == null -> Text("Starting…", color = ClimbPalette.textSecondary, fontSize = 13.sp)
+        currentAnalysis.status == AnalysisStatus.COMPLETE -> Text(
+            text = "View analysis",
+            color = ClimbPalette.chalk,
+            fontWeight = FontWeight.Bold,
+            fontSize = 13.sp,
+            modifier = Modifier.clickable { onViewResult(currentAnalysis.id) },
+        )
+        currentAnalysis.status == AnalysisStatus.FAILED -> Text(
+            text = "Analysis failed: ${currentAnalysis.failureReason ?: "unknown error"}",
+            color = ClimbPalette.fell,
+            fontSize = 13.sp,
+        )
+        else -> Text(
+            text = "Analysis in progress — tap to view",
+            color = ClimbPalette.textSecondary,
+            fontSize = 13.sp,
+            modifier = Modifier.clickable { onViewProgress(attempt.id) },
+        )
     }
 }
 

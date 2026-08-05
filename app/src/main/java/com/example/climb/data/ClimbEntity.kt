@@ -14,4 +14,8 @@ data class ClimbEntity(
     val routeColor: RouteColor,
     val outcome: ClimbOutcome,
     val notes: String,
+    /** Last-applied color-isolation tuning for this climb's playback; null means "use the
+     * effect's own defaults" rather than duplicating those defaults here. */
+    val hueOffsetDegrees: Float? = null,
+    val hueToleranceDegrees: Float? = null,
 )

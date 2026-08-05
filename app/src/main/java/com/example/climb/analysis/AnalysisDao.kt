@@ -31,4 +31,10 @@ interface AnalysisDao {
 
     @Query("SELECT * FROM climb_analyses WHERE attemptId = :attemptId ORDER BY createdAt DESC LIMIT 1")
     suspend fun getLatestAnalysis(attemptId: Long): ClimbAnalysisEntity?
+
+    @Query("SELECT * FROM climb_attempts WHERE sourceClimbId = :sourceClimbId ORDER BY createdAt DESC LIMIT 1")
+    fun observeLatestAttemptForSourceClimb(sourceClimbId: Long): Flow<ClimbAttemptEntity?>
+
+    @Query("SELECT * FROM climb_analyses WHERE attemptId = :attemptId ORDER BY createdAt DESC LIMIT 1")
+    fun observeLatestAnalysis(attemptId: Long): Flow<ClimbAnalysisEntity?>
 }

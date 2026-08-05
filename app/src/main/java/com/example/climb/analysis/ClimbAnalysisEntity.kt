@@ -24,5 +24,8 @@ data class ClimbAnalysisEntity(
     val videoWidth: Int?,
     val videoHeight: Int?,
     val poseFramesJson: String,
+    val metricsJson: String = "",
+    val eventsJson: String = "",
+    val tipsJson: String = "",
     val failureReason: String?,
 )

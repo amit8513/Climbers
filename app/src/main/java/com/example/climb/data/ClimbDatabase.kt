@@ -12,7 +12,7 @@ import com.example.climb.analysis.ClimbAttemptEntity
 
 @Database(
     entities = [ClimbEntity::class, ClimbAttemptEntity::class, ClimbAnalysisEntity::class],
-    version = 3,
+    version = 5,
     exportSchema = true,
 )
 abstract class ClimbDatabase : RoomDatabase() {
@@ -79,10 +79,30 @@ abstract class ClimbDatabase : RoomDatabase() {
             }
         }
 
+        // Additive: persisted color-isolation tuning per climb, and a link from an analysis
+        // attempt back to the climb it was run on (when analyzing an already-logged climb).
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE climbs ADD COLUMN hueOffsetDegrees REAL DEFAULT NULL")
+                db.execSQL("ALTER TABLE climbs ADD COLUMN hueToleranceDegrees REAL DEFAULT NULL")
+                db.execSQL("ALTER TABLE climb_attempts ADD COLUMN sourceClimbId INTEGER DEFAULT NULL")
+            }
+        }
+
+        // Additive: metrics/events/coaching-tip JSON columns, added alongside the metrics +
+        // deterministic coaching engine phase of the pose-analysis feature.
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE climb_analyses ADD COLUMN metricsJson TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE climb_analyses ADD COLUMN eventsJson TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE climb_analyses ADD COLUMN tipsJson TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         fun getInstance(context: Context): ClimbDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context, ClimbDatabase::class.java, "climb.db")
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { instance = it }
             }

@@ -7,6 +7,10 @@ import androidx.room.PrimaryKey
 data class ClimbAttemptEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val userId: String,
+    /** Set when this attempt was created from an already-logged [com.example.climb.data.ClimbEntity]
+     * (the "use an existing climb video" path), so its result can be linked back from that
+     * climb's detail screen. Null when the video was recorded/imported fresh for analysis. */
+    val sourceClimbId: Long? = null,
     val videoPath: String,
     val createdAt: Long,
     val durationMs: Long,

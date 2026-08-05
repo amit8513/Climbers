@@ -51,7 +51,7 @@ fun VideoSourceScreen(
     repository: ClimbRepository,
     currentUid: String,
     onRecordNew: () -> Unit,
-    onExistingVideoSelected: (videoPath: String, durationMs: Long) -> Unit,
+    onExistingVideoSelected: (videoPath: String, durationMs: Long, sourceClimbId: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val climbs by repository.observeAll(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -109,7 +109,7 @@ fun VideoSourceScreen(
                     climbs.forEach { climb ->
                         ExistingClimbRow(
                             climb = climb,
-                            onClick = { onExistingVideoSelected(climb.videoPath, climb.durationMs) },
+                            onClick = { onExistingVideoSelected(climb.videoPath, climb.durationMs, climb.id) },
                         )
                         Spacer(Modifier.height(8.dp))
                     }

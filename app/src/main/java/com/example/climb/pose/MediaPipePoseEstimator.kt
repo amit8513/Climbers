@@ -14,6 +14,25 @@ import java.io.File
 private const val MODEL_ASSET_PATH = "pose_landmarker_lite.task"
 
 /**
+ * Frame reliability is judged only on the limb/torso landmarks the metrics actually use — face
+ * points (nose, eyes, ears, mouth) are excluded. In climbing footage the climber's face is
+ * often turned away from the camera or occluded, so including them dragged the whole-frame
+ * average down even when hips/knees/ankles/wrists were tracked perfectly well, which made
+ * movement-derived metrics (pauses, lock-offs, foot adjustments, efficiency) starve for
+ * "reliable" frames and read as zero.
+ */
+private val CONFIDENCE_LANDMARK_TYPES = setOf(
+    PoseLandmarkType.LEFT_SHOULDER, PoseLandmarkType.RIGHT_SHOULDER,
+    PoseLandmarkType.LEFT_ELBOW, PoseLandmarkType.RIGHT_ELBOW,
+    PoseLandmarkType.LEFT_WRIST, PoseLandmarkType.RIGHT_WRIST,
+    PoseLandmarkType.LEFT_HIP, PoseLandmarkType.RIGHT_HIP,
+    PoseLandmarkType.LEFT_KNEE, PoseLandmarkType.RIGHT_KNEE,
+    PoseLandmarkType.LEFT_ANKLE, PoseLandmarkType.RIGHT_ANKLE,
+    PoseLandmarkType.LEFT_HEEL, PoseLandmarkType.RIGHT_HEEL,
+    PoseLandmarkType.LEFT_FOOT_INDEX, PoseLandmarkType.RIGHT_FOOT_INDEX,
+)
+
+/**
  * The concrete Android pose estimator, backed by MediaPipe's Pose Landmarker. All MediaPipe
  * types (NormalizedLandmark, PoseLandmarkerResult, MPImage, ...) are mapped to this app's own
  * [PoseFrame]/[PoseLandmark] before returning — nothing MediaPipe-specific crosses out of this
@@ -141,7 +160,8 @@ class MediaPipePoseEstimator(private val context: Context) : PoseEstimator {
                 presence = landmark.presence().orElse(0f),
             )
         }
-        val averageConfidence = mapped.map { it.presence }.average().toFloat()
+        val bodyLandmarks = mapped.filter { it.type in CONFIDENCE_LANDMARK_TYPES }.ifEmpty { mapped }
+        val averageConfidence = bodyLandmarks.map { it.presence }.average().toFloat()
         return PoseFrame(
             timestampMs = timestampMs,
             landmarks = mapped,

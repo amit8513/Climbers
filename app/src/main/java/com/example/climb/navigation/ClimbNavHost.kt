@@ -46,13 +46,14 @@ private object Routes {
     const val DETAIL = "detail/{climbId}"
     const val VIDEO_SOURCE = "video_source"
     const val ANALYSIS_RECORD = "analysis_record"
-    const val CLIMB_DETAILS_INPUT = "climb_details_input/{videoPath}/{durationMs}"
+    const val CLIMB_DETAILS_INPUT = "climb_details_input/{videoPath}/{durationMs}/{sourceClimbId}"
     const val ANALYSIS_PROGRESS = "analysis_progress/{attemptId}"
     const val ANALYSIS_RESULT = "analysis_result/{analysisId}"
 
     fun tag(videoPath: String, durationMs: Long) = "tag/${Uri.encode(videoPath)}/$durationMs"
     fun detail(climbId: Long) = "detail/$climbId"
-    fun climbDetailsInput(videoPath: String, durationMs: Long) = "climb_details_input/${Uri.encode(videoPath)}/$durationMs"
+    fun climbDetailsInput(videoPath: String, durationMs: Long, sourceClimbId: Long = -1L) =
+        "climb_details_input/${Uri.encode(videoPath)}/$durationMs/$sourceClimbId"
     fun analysisProgress(attemptId: Long) = "analysis_progress/$attemptId"
     fun analysisResult(analysisId: Long) = "analysis_result/$analysisId"
 }
@@ -189,7 +190,13 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     climbId = climbId,
                     repository = container.climbRepository,
                     currentUid = currentUid,
+                    analysisRepository = container.analysisRepository,
                     onDeleted = { navController.popBackStack(Routes.HOME, false) },
+                    onStartAnalysis = { path, duration, sourceClimbId ->
+                        navController.navigate(Routes.climbDetailsInput(path, duration, sourceClimbId))
+                    },
+                    onViewAnalysisProgress = { attemptId -> navController.navigate(Routes.analysisProgress(attemptId)) },
+                    onViewAnalysisResult = { analysisId -> navController.navigate(Routes.analysisResult(analysisId)) },
                 )
             }
 
@@ -198,8 +205,8 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     repository = container.climbRepository,
                     currentUid = currentUid,
                     onRecordNew = { navController.navigate(Routes.ANALYSIS_RECORD) },
-                    onExistingVideoSelected = { path, duration ->
-                        navController.navigate(Routes.climbDetailsInput(path, duration))
+                    onExistingVideoSelected = { path, duration, sourceClimbId ->
+                        navController.navigate(Routes.climbDetailsInput(path, duration, sourceClimbId))
                     },
                 )
             }
@@ -220,18 +227,21 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                 arguments = listOf(
                     navArgument("videoPath") { type = NavType.StringType },
                     navArgument("durationMs") { type = NavType.LongType },
+                    navArgument("sourceClimbId") { type = NavType.LongType },
                 ),
             ) { backStackEntry ->
                 val videoPath = Uri.decode(backStackEntry.arguments?.getString("videoPath").orEmpty())
                 val durationMs = backStackEntry.arguments?.getLong("durationMs") ?: 0L
+                val sourceClimbIdArg = backStackEntry.arguments?.getLong("sourceClimbId") ?: -1L
                 ClimbDetailsInputScreen(
                     videoPath = videoPath,
                     durationMs = durationMs,
                     currentUid = currentUid,
+                    sourceClimbId = sourceClimbIdArg.takeIf { it > 0 },
                     analysisRepository = container.analysisRepository,
                     onAnalyzeStarted = { attemptId ->
                         navController.navigate(Routes.analysisProgress(attemptId)) {
-                            popUpTo(Routes.VIDEO_SOURCE) { inclusive = true }
+                            popUpTo(Routes.HOME) { inclusive = false }
                         }
                     },
                 )

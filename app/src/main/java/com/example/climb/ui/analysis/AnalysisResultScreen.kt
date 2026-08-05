@@ -2,6 +2,8 @@ package com.example.climb.ui.analysis
 
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -28,7 +31,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,7 +44,15 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.example.climb.analysis.AnalysisRepository
 import com.example.climb.analysis.ClimbAnalysisEntity
+import com.example.climb.analysis.ClimbEvent
+import com.example.climb.analysis.ClimbEventType
+import com.example.climb.analysis.formatTimestampMs
+import com.example.climb.analysis.metrics.ClimbMetrics
+import com.example.climb.analysis.toClimbEvents
+import com.example.climb.analysis.toClimbMetrics
+import com.example.climb.analysis.toCoachingTips
 import com.example.climb.analysis.toPoseFrames
+import com.example.climb.coaching.CoachingTip
 import com.example.climb.ui.components.SectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
@@ -51,6 +64,8 @@ import java.util.Locale
 
 private val dateFormatter = SimpleDateFormat("MMM d, yyyy", Locale.US)
 private val PLAYBACK_SPEEDS = listOf(0.25f, 0.5f, 1f, 1.5f)
+
+private fun formatSeconds(ms: Long): String = "${"%.1f".format(ms / 1000f)}s"
 
 @Composable
 fun AnalysisResultScreen(
@@ -84,6 +99,9 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
     }
 
     val frames = remember(analysis.poseFramesJson) { analysis.poseFramesJson.toPoseFrames() }
+    val metrics = remember(analysis.metricsJson) { analysis.metricsJson.toClimbMetrics() }
+    val events = remember(analysis.eventsJson) { analysis.eventsJson.toClimbEvents() }
+    val tips = remember(analysis.tipsJson) { analysis.tipsJson.toCoachingTips() }
     val context = LocalContext.current
 
     val exoPlayer = remember(currentAttempt.videoPath) {
@@ -182,13 +200,31 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
 
         Spacer(Modifier.height(20.dp))
 
-        SectionCard(title = "What's next") {
-            Text(
-                text = "Movement metrics, pause/lock-off detection, and coaching tips are coming in the next update — this pass covers real pose tracking, played back in sync with your video.",
-                color = ClimbPalette.textSecondary,
-                fontSize = 13.sp,
-                lineHeight = 19.sp,
-            )
+        if (metrics != null) {
+            SectionCard(title = "Summary") {
+                MetricsGrid(metrics)
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
+        if (tips.isNotEmpty()) {
+            SectionCard(title = "Coaching tips") {
+                tips.forEachIndexed { index, tip ->
+                    if (index > 0) Spacer(Modifier.height(14.dp))
+                    CoachingTipRow(tip = tip, onJumpToMoment = { ms -> exoPlayer.seekTo(ms) })
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
+        if (events.isNotEmpty()) {
+            SectionCard(title = "Timeline") {
+                events.forEachIndexed { index, event ->
+                    if (index > 0) Spacer(Modifier.height(10.dp))
+                    TimelineEventRow(event = event, onSeek = { ms -> exoPlayer.seekTo(ms) })
+                }
+            }
+            Spacer(Modifier.height(16.dp))
         }
 
         if (currentAttempt.notes.isNotBlank()) {
@@ -218,4 +254,134 @@ private fun ConfidenceBadge(confidence: Float?) {
         fontWeight = FontWeight.Medium,
         modifier = Modifier.padding(top = 8.dp),
     )
+}
+
+@Composable
+private fun MetricsGrid(metrics: ClimbMetrics) {
+    Column {
+        MetricsRow(
+            "Total time" to formatSeconds(metrics.totalDurationMs),
+            "Active movement" to formatSeconds(metrics.activeMovementMs),
+        )
+        Spacer(Modifier.height(10.dp))
+        MetricsRow(
+            "Pause time" to formatSeconds(metrics.pauseTimeMs),
+            "Longest pause" to formatSeconds(metrics.longestPauseMs),
+        )
+        Spacer(Modifier.height(10.dp))
+        MetricsRow(
+            "Lock-off time" to formatSeconds(metrics.totalLockoffMs),
+            "Straight-arm time" to "${metrics.straightArmPercentage.toInt()}%",
+        )
+        Spacer(Modifier.height(10.dp))
+        MetricsRow(
+            "Foot adjustments" to metrics.possibleFootAdjustments.toString(),
+            "Movement efficiency" to "${metrics.estimatedMovementEfficiency}",
+        )
+        if (metrics.possibleDisengagedLegSegments > 0) {
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                MetricCell(label = "Extended-leg moments", value = metrics.possibleDisengagedLegSegments.toString(), modifier = Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun MetricsRow(left: Pair<String, String>, right: Pair<String, String>) {
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        MetricCell(label = left.first, value = left.second, modifier = Modifier.weight(1f))
+        MetricCell(label = right.first, value = right.second, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun MetricCell(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(text = value, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp, fontFamily = FontFamily.Monospace)
+        Text(text = label.uppercase(), color = ClimbPalette.textMuted, fontSize = 10.sp, letterSpacing = 0.5.sp)
+    }
+}
+
+@Composable
+private fun CoachingTipRow(tip: CoachingTip, onJumpToMoment: (Long) -> Unit) {
+    val accent = when (tip.priority) {
+        0 -> ClimbPalette.sent
+        1 -> ClimbPalette.fell
+        else -> ClimbPalette.project
+    }
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(50))
+                    .border(1.dp, accent, RoundedCornerShape(50))
+                    .padding(horizontal = 7.dp, vertical = 2.dp),
+            ) {
+                Text(text = tip.category.uppercase(), color = accent, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp)
+            }
+            Text(text = "${(tip.confidence * 100).toInt()}% confidence", color = ClimbPalette.textMuted, fontSize = 10.sp)
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(text = tip.title, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Spacer(Modifier.height(4.dp))
+        Text(text = tip.explanation, color = ClimbPalette.textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
+        tip.drill?.let { drill ->
+            Spacer(Modifier.height(6.dp))
+            Text(text = "Drill: $drill", color = ClimbPalette.textMuted, fontSize = 12.sp, lineHeight = 17.sp)
+        }
+        tip.timestampMs?.let { ms ->
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Jump to ${formatTimestampMs(ms)}",
+                color = ClimbPalette.chalk,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                modifier = Modifier.clickable { onJumpToMoment(ms) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TimelineEventRow(event: ClimbEvent, onSeek: (Long) -> Unit) {
+    val color = eventColor(event)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onSeek(event.startTimestampMs) },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .width(3.dp)
+                .height(28.dp)
+                .background(color, RoundedCornerShape(2.dp)),
+        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = event.userVisibleTitle, color = ClimbPalette.textPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+            Text(text = event.userVisibleDescription, color = ClimbPalette.textSecondary, fontSize = 11.sp, lineHeight = 15.sp)
+        }
+        Text(
+            text = formatTimestampMs(event.startTimestampMs),
+            color = ClimbPalette.textMuted,
+            fontSize = 11.sp,
+            fontFamily = FontFamily.Monospace,
+        )
+    }
+}
+
+private fun eventColor(event: ClimbEvent): Color = when (event.type) {
+    ClimbEventType.LONG_PAUSE -> ClimbPalette.fell
+    ClimbEventType.SUSTAINED_LOCKOFF -> ClimbPalette.project
+    ClimbEventType.POSSIBLE_FOOT_ADJUSTMENT -> ClimbPalette.project
+    ClimbEventType.POSSIBLE_FOOT_SLIP -> ClimbPalette.fell
+    ClimbEventType.POSSIBLE_DISENGAGED_LEG -> ClimbPalette.project
+    ClimbEventType.LOW_CONFIDENCE_RANGE -> ClimbPalette.textMuted
+    ClimbEventType.EFFICIENT_SEQUENCE -> ClimbPalette.sent
+    ClimbEventType.EXCESSIVE_BODY_REPOSITIONING -> ClimbPalette.fell
+    ClimbEventType.LARGE_DYNAMIC_MOVE -> ClimbPalette.chalk
+    ClimbEventType.CLIMB_START, ClimbEventType.CLIMB_END -> ClimbPalette.textMuted
 }

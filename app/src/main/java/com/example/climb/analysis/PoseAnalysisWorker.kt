@@ -6,6 +6,8 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.example.climb.analysis.metrics.computeAnalysis
+import com.example.climb.coaching.DeterministicCoachingRuleEngine
 import com.example.climb.pose.PoseAnalysisConfiguration
 import com.example.climb.pose.PoseAnalysisPhase
 import com.example.climb.pose.PoseAnalysisResult
@@ -48,6 +50,13 @@ class PoseAnalysisWorker(
 
         return when (result) {
             is PoseAnalysisResult.Success -> {
+                setProgress(progressData(analysisId, AnalysisStatus.CALCULATING_METRICS, 0f))
+                val computation = computeAnalysis(result.frames)
+
+                setProgress(progressData(analysisId, AnalysisStatus.GENERATING_TIPS, 0f))
+                val events = buildEvents(result.frames, computation)
+                val tips = DeterministicCoachingRuleEngine().generateTips(computation, events)
+
                 setProgress(progressData(analysisId, AnalysisStatus.SAVING, 1f))
                 analysisRepository.completeWithFrames(
                     analysis = analysis,
@@ -55,6 +64,9 @@ class PoseAnalysisWorker(
                     videoDurationMs = result.videoDurationMs,
                     videoWidth = result.videoWidth,
                     videoHeight = result.videoHeight,
+                    metrics = computation.metrics,
+                    events = events,
+                    tips = tips,
                 )
                 Result.success(workDataOf(KEY_ANALYSIS_ID to analysisId))
             }

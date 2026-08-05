@@ -47,6 +47,7 @@ fun ClimbDetailsInputScreen(
     videoPath: String,
     durationMs: Long,
     currentUid: String,
+    sourceClimbId: Long?,
     analysisRepository: AnalysisRepository,
     onAnalyzeStarted: (attemptId: Long) -> Unit,
     modifier: Modifier = Modifier,
@@ -170,6 +171,7 @@ fun ClimbDetailsInputScreen(
                         val attemptId = analysisRepository.createAttempt(
                             ClimbAttemptEntity(
                                 userId = currentUid,
+                                sourceClimbId = sourceClimbId,
                                 videoPath = videoPath,
                                 createdAt = System.currentTimeMillis(),
                                 durationMs = durationMs,

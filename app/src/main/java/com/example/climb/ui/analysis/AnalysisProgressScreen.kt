@@ -32,16 +32,12 @@ import com.example.climb.analysis.PoseAnalysisWorker
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 
-/**
- * Real phases only — this deliberately doesn't show "Calculating movement"/"Detecting key
- * moments"/"Generating feedback" steps from the fuller spec, since this pass doesn't compute
- * metrics/events/tips yet. Showing a phase that never actually runs would be a fake progress
- * bar wearing an honest one's clothes.
- */
 private val PHASES = listOf(
     AnalysisStatus.PREPARING to "Preparing video",
     AnalysisStatus.EXTRACTING_FRAMES to "Reading frames",
     AnalysisStatus.ESTIMATING_POSE to "Tracking body position",
+    AnalysisStatus.CALCULATING_METRICS to "Calculating movement",
+    AnalysisStatus.GENERATING_TIPS to "Generating feedback",
     AnalysisStatus.SAVING to "Saving results",
 )
 
