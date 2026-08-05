@@ -18,9 +18,9 @@ interface ClimbDao {
     @Delete
     suspend fun delete(climb: ClimbEntity)
 
-    @Query("SELECT * FROM climbs ORDER BY createdAt DESC")
-    fun observeAll(): Flow<List<ClimbEntity>>
+    @Query("SELECT * FROM climbs WHERE userId = :userId ORDER BY createdAt DESC")
+    fun observeAll(userId: String): Flow<List<ClimbEntity>>
 
-    @Query("SELECT * FROM climbs WHERE id = :id")
-    fun observeById(id: Long): Flow<ClimbEntity?>
+    @Query("SELECT * FROM climbs WHERE id = :id AND userId = :userId")
+    fun observeById(id: Long, userId: String): Flow<ClimbEntity?>
 }

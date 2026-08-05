@@ -36,8 +36,8 @@ import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 
 @Composable
-fun ProgressScreen(repository: ClimbRepository, modifier: Modifier = Modifier) {
-    val climbs by repository.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+fun ProgressScreen(repository: ClimbRepository, currentUid: String, modifier: Modifier = Modifier) {
+    val climbs by repository.observeAll(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
     val now = remember { System.currentTimeMillis() }
 
     val headline = remember(climbs) { headlineStats(climbs) }

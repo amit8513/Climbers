@@ -80,10 +80,11 @@ private fun formatClimbDate(createdAt: Long, now: Long): String {
 @Composable
 fun HomeScreen(
     repository: ClimbRepository,
+    currentUid: String,
     onClimbClick: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val climbs by repository.observeAll().collectAsStateWithLifecycle(initialValue = emptyList())
+    val climbs by repository.observeAll(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
     val now = remember { System.currentTimeMillis() }
 
     Box(modifier = modifier.fillMaxSize().wallTexture()) {

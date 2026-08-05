@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "climbs")
 data class ClimbEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val userId: String,
     val videoPath: String,
     val createdAt: Long,
     val durationMs: Long,

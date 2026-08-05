@@ -41,6 +41,7 @@ fun TagScreen(
     videoPath: String,
     durationMs: Long,
     repository: ClimbRepository,
+    currentUid: String,
     onSaved: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -108,6 +109,7 @@ fun TagScreen(
                 scope.launch {
                     repository.save(
                         ClimbEntity(
+                            userId = currentUid,
                             videoPath = videoPath,
                             createdAt = System.currentTimeMillis(),
                             durationMs = durationMs,

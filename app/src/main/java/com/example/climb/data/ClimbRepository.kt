@@ -4,9 +4,9 @@ import kotlinx.coroutines.flow.Flow
 import java.io.File
 
 class ClimbRepository(private val dao: ClimbDao) {
-    fun observeAll(): Flow<List<ClimbEntity>> = dao.observeAll()
+    fun observeAll(userId: String): Flow<List<ClimbEntity>> = dao.observeAll(userId)
 
-    fun observeById(id: Long): Flow<ClimbEntity?> = dao.observeById(id)
+    fun observeById(id: Long, userId: String): Flow<ClimbEntity?> = dao.observeById(id, userId)
 
     suspend fun save(climb: ClimbEntity): Long = dao.insert(climb)
 

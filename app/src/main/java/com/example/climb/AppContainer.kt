@@ -28,4 +28,6 @@ class AppContainer(context: Context) {
             mkdirs()
         }
     }
+
+    fun moviesDirFor(uid: String): File = File(moviesDir, uid).apply { mkdirs() }
 }

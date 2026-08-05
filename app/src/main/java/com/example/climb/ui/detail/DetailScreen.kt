@@ -62,9 +62,10 @@ private val detailDateFormatter = SimpleDateFormat("MMM d, h:mm a", Locale.US)
 fun DetailScreen(
     climbId: Long,
     repository: ClimbRepository,
+    currentUid: String,
     onDeleted: () -> Unit,
 ) {
-    val climb by repository.observeById(climbId).collectAsStateWithLifecycle(initialValue = null)
+    val climb by repository.observeById(climbId, currentUid).collectAsStateWithLifecycle(initialValue = null)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 

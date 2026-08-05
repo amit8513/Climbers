@@ -20,6 +20,8 @@ object ClimbPalette {
     val textMuted = Color(0xFF6B6252)
     val chalk = Color(0xFFF1EBDC)
     val chalkText = Color(0xFF16130F)
+    /** Dark stone surface used where a chalk-white mark needs to read on top of it. */
+    val rockFace = Color(0xFF241F18)
     val sent = Color(0xFF7EA86B)
     val fell = Color(0xFFB5654F)
     val project = Color(0xFF8F8560)

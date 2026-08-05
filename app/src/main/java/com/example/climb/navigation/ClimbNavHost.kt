@@ -120,12 +120,13 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
             composable(Routes.HOME) {
                 HomeScreen(
                     repository = container.climbRepository,
+                    currentUid = currentUid,
                     onClimbClick = { id -> navController.navigate(Routes.detail(id)) },
                 )
             }
 
             composable(Routes.PROGRESS) {
-                ProgressScreen(repository = container.climbRepository)
+                ProgressScreen(repository = container.climbRepository, currentUid = currentUid)
             }
 
             composable(Routes.FRIENDS) {
@@ -139,7 +140,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
 
             composable(Routes.RECORD) {
                 RecordScreen(
-                    moviesDir = container.moviesDir,
+                    moviesDir = container.moviesDirFor(currentUid),
                     onRecorded = { path, duration ->
                         navController.navigate(Routes.tag(path, duration)) {
                             popUpTo(Routes.RECORD) { inclusive = true }
@@ -161,6 +162,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     videoPath = videoPath,
                     durationMs = durationMs,
                     repository = container.climbRepository,
+                    currentUid = currentUid,
                     onSaved = { navController.popBackStack(Routes.HOME, false) },
                 )
             }
@@ -173,6 +175,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                 DetailScreen(
                     climbId = climbId,
                     repository = container.climbRepository,
+                    currentUid = currentUid,
                     onDeleted = { navController.popBackStack(Routes.HOME, false) },
                 )
             }
