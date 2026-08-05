@@ -5,6 +5,7 @@ import com.example.climb.analysis.ClimbEventType
 import com.example.climb.analysis.formatTimestampMs
 import com.example.climb.analysis.metrics.AnalysisComputation
 import com.example.climb.analysis.metrics.ClimbMetrics
+import com.example.climb.analysis.metrics.Side
 import kotlin.math.roundToInt
 
 interface CoachingRuleEngine {
@@ -33,6 +34,7 @@ class DeterministicCoachingRuleEngine : CoachingRuleEngine {
         val improvements = listOfNotNull(
             longCruxPauseTip(events, metrics),
             repeatedLockoffsTip(metrics),
+            legEngagementTip(computation),
             repeatedFootAdjustmentsTip(metrics, events),
             excessivePauseRatioTip(metrics),
         ).sortedBy { it.priority }.take(3)
@@ -79,6 +81,38 @@ class DeterministicCoachingRuleEngine : CoachingRuleEngine {
             confidence = 0.7f,
             priority = 1,
             evidence = "${"%.1f".format(seconds)}s of sustained lock-off (${(ratio * 100).roundToInt()}% of climb time)",
+            source = CoachingSource.DETERMINISTIC,
+        )
+    }
+
+    private fun overlaps(aStart: Long, aEnd: Long, bStart: Long, bEnd: Long) = aStart <= bEnd && bStart <= aEnd
+
+    /**
+     * Flags a leg that stayed extended/unweighted (see [com.example.climb.analysis.metrics.detectDisengagedLeg])
+     * at the same time the arms were holding a bent-arm lock-off — real evidence that a leg
+     * wasn't sharing the load, not proof a flag or heel hook would have helped. Pose landmarks
+     * can't confirm hold contact, so this is always worded as "worth checking," never a defect.
+     */
+    private fun legEngagementTip(computation: AnalysisComputation): CoachingTip? {
+        val segment = computation.disengagedLegs
+            .filter { seg -> computation.lockoffs.any { lo -> overlaps(seg.startMs, seg.endMs, lo.startMs, lo.endMs) } }
+            .maxByOrNull { it.durationMs }
+            ?: return null
+        val side = if (segment.side == Side.LEFT) "left" else "right"
+        val seconds = segment.durationMs / 1000f
+        return CoachingTip(
+            id = "leg_engagement_${segment.side}",
+            category = "Footwork",
+            title = "Look for a foothold for your $side leg",
+            explanation = "Around ${formatTimestampMs(segment.startMs)}, your $side leg stayed extended and unweighted for " +
+                "${"%.1f".format(seconds)}s while your arms were holding a bent-arm position. If that leg wasn't a " +
+                "deliberate flag for balance, engaging it — a heel hook, toe hook, or just a foot placement — could " +
+                "take some of that load off your arms.",
+            drill = "On a similar move, pause before committing and scan for a foothold, heel, or toe placement for the free leg.",
+            timestampMs = segment.startMs,
+            confidence = 0.35f,
+            priority = 1,
+            evidence = "${"%.1f".format(seconds)}s of extended $side leg overlapping a lock-off near ${formatTimestampMs(segment.startMs)}",
             source = CoachingSource.DETERMINISTIC,
         )
     }
