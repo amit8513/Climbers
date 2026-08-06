@@ -52,4 +52,30 @@ data class MetricsConfiguration(
     /** The asymmetry must hold for at least this long to count — a brief pass-through between
      * holds isn't a dangling leg. */
     val minDisengagedLegDurationMs: Long = 1_200L,
+
+    /** A settled foot at or above this fraction of body height above the hip line counts as a
+     * high-step candidate — e.g. 0.05 means the foot sits at least 5% of body height above the hips. */
+    val highStepHipRatio: Float = 0.05f,
+
+    /** A frame-to-frame hip-velocity increase at or above this (body-heights/sec, per frame step)
+     * is flagged as a possible stability loss — a sudden jerk rather than a smooth acceleration. */
+    val stabilityLossVelocityJumpThreshold: Float = 0.8f,
+    /** How long hip velocity must stay below [stillVelocityThreshold] after a stability-loss
+     * event to count as having recovered control. */
+    val recoveryStableDurationMs: Long = 800L,
+
+    /** A downward-only hip velocity at or above this (body-heights/sec) is flagged as a possible
+     * fall — well above [dynamicMoveVelocityThreshold] since a controlled dynamic move also
+     * produces fast movement, just not usually this fast and this specifically downward. */
+    val fallVelocityThreshold: Float = 1.8f,
+
+    /** The final pause must end within this many ms of the estimated climb end, and last at
+     * least [finishStabilizationMinDurationMs], to count as a controlled finish rather than an
+     * arbitrary late pause. */
+    val finishStabilizationMaxGapFromEndMs: Long = 1_500L,
+    val finishStabilizationMinDurationMs: Long = 800L,
+
+    /** A hand-velocity peak within this many ms before a fall candidate is treated as the reach
+     * that may have led to it. */
+    val missedReachWindowMs: Long = 1_500L,
 )

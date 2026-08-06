@@ -20,6 +20,11 @@ data class ClimbMetrics(
     val reliableFramePercentage: Float,
     val climbStartMs: Long,
     val climbEndMs: Long,
+    val highStepCount: Int,
+    val possibleStabilityLossCount: Int,
+    val possibleFallCandidateCount: Int,
+    val hasFinishStabilization: Boolean,
+    val possibleMissedReachCount: Int,
 )
 
 /** Metrics plus the raw detection results they were built from — [com.example.climb.analysis.buildEvents]
@@ -31,18 +36,30 @@ data class AnalysisComputation(
     val footAdjustments: List<FootAdjustmentEvent>,
     val footSlips: List<Long>,
     val disengagedLegs: List<DisengagedLegSegment>,
+    val highSteps: List<HighStepEvent>,
+    val stabilityLossEvents: List<StabilityLossEvent>,
+    val recoveries: List<RecoveryEvent>,
+    val fallCandidates: List<FallCandidateEvent>,
+    val finishStabilization: FinishStabilizationEvent?,
+    val missedReachCandidates: List<MissedReachCandidateEvent>,
 )
 
 fun computeAnalysis(frames: List<PoseFrame>, config: MetricsConfiguration = MetricsConfiguration()): AnalysisComputation {
     if (frames.size < 2) {
         val ts = frames.firstOrNull()?.timestampMs ?: 0L
         return AnalysisComputation(
-            metrics = ClimbMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0f, 0, 0f, ts, ts),
+            metrics = ClimbMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0f, 0, 0f, ts, ts, 0, 0, 0, false, 0),
             pauses = emptyList(),
             lockoffs = emptyList(),
             footAdjustments = emptyList(),
             footSlips = emptyList(),
             disengagedLegs = emptyList(),
+            highSteps = emptyList(),
+            stabilityLossEvents = emptyList(),
+            recoveries = emptyList(),
+            fallCandidates = emptyList(),
+            finishStabilization = null,
+            missedReachCandidates = emptyList(),
         )
     }
 
@@ -66,6 +83,13 @@ fun computeAnalysis(frames: List<PoseFrame>, config: MetricsConfiguration = Metr
     val footSlips = detectPossibleFootSlips(frames, config)
     val disengagedLegs = detectDisengagedLeg(frames, config)
 
+    val highSteps = detectHighSteps(frames, config)
+    val stabilityLossEvents = detectStabilityLoss(velocities, config)
+    val recoveries = detectRecoveries(velocities, stabilityLossEvents, config)
+    val fallCandidates = detectFallCandidates(frames, config)
+    val finishStabilization = detectFinishStabilization(pauses, climbEndMs, config)
+    val missedReachCandidates = detectMissedReachCandidates(frames, fallCandidates, config)
+
     val metrics = ClimbMetrics(
         totalDurationMs = totalDurationMs,
         activeMovementMs = activeMovementMs,
@@ -84,7 +108,25 @@ fun computeAnalysis(frames: List<PoseFrame>, config: MetricsConfiguration = Metr
         reliableFramePercentage = reliableFramePercentage,
         climbStartMs = climbStartMs,
         climbEndMs = climbEndMs,
+        highStepCount = highSteps.size,
+        possibleStabilityLossCount = stabilityLossEvents.size,
+        possibleFallCandidateCount = fallCandidates.size,
+        hasFinishStabilization = finishStabilization != null,
+        possibleMissedReachCount = missedReachCandidates.size,
     )
 
-    return AnalysisComputation(metrics, pauses, lockoffs, footAdjustments, footSlips, disengagedLegs)
+    return AnalysisComputation(
+        metrics = metrics,
+        pauses = pauses,
+        lockoffs = lockoffs,
+        footAdjustments = footAdjustments,
+        footSlips = footSlips,
+        disengagedLegs = disengagedLegs,
+        highSteps = highSteps,
+        stabilityLossEvents = stabilityLossEvents,
+        recoveries = recoveries,
+        fallCandidates = fallCandidates,
+        finishStabilization = finishStabilization,
+        missedReachCandidates = missedReachCandidates,
+    )
 }

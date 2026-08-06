@@ -5,6 +5,7 @@ import com.example.climb.analysis.metrics.MetricsConfiguration
 import com.example.climb.analysis.metrics.Side
 import com.example.climb.analysis.metrics.TimedVelocity
 import com.example.climb.analysis.metrics.computeHipVelocities
+import com.example.climb.analysis.metrics.detectLargeDynamicMoves
 import com.example.climb.analysis.metrics.hipCenter
 import com.example.climb.analysis.metrics.smoothVelocities
 import com.example.climb.pose.PoseFrame
@@ -54,22 +55,6 @@ private fun lowConfidenceRanges(frames: List<PoseFrame>, config: MetricsConfigur
     }
     flush()
     return ranges
-}
-
-private fun largeDynamicMoves(velocities: List<TimedVelocity>, config: MetricsConfiguration): List<Long> {
-    val peaks = mutableListOf<Long>()
-    var lastPeakMs = Long.MIN_VALUE
-    for (i in velocities.indices) {
-        val v = velocities[i]
-        if (v.normalizedVelocity < config.dynamicMoveVelocityThreshold) continue
-        val isLocalMax = (i == 0 || velocities[i - 1].normalizedVelocity <= v.normalizedVelocity) &&
-            (i == velocities.lastIndex || velocities[i + 1].normalizedVelocity <= v.normalizedVelocity)
-        if (isLocalMax && v.timestampMs - lastPeakMs > 500L) {
-            peaks += v.timestampMs
-            lastPeakMs = v.timestampMs
-        }
-    }
-    return peaks
 }
 
 /** Counts hip vertical-direction reversals in a sliding window — a lot of back-and-forth in a
@@ -247,7 +232,7 @@ fun buildEvents(frames: List<PoseFrame>, computation: AnalysisComputation, confi
     }
 
     val velocities = smoothVelocities(computeHipVelocities(frames))
-    largeDynamicMoves(velocities, config).forEachIndexed { index, timestamp ->
+    detectLargeDynamicMoves(velocities, config).forEachIndexed { index, timestamp ->
         events += ClimbEvent(
             id = "dynamic_move_$index",
             type = ClimbEventType.LARGE_DYNAMIC_MOVE,
@@ -286,6 +271,86 @@ fun buildEvents(frames: List<PoseFrame>, computation: AnalysisComputation, confi
             severity = 1,
             userVisibleTitle = "Efficient sequence",
             userVisibleDescription = "Smooth, continuous movement between ${formatTimestampMs(start)} and ${formatTimestampMs(end)}.",
+        )
+    }
+
+    computation.highSteps.forEachIndexed { index, highStep ->
+        val side = if (highStep.side == Side.LEFT) "left" else "right"
+        events += ClimbEvent(
+            id = "high_step_${highStep.side}_$index",
+            type = ClimbEventType.HIGH_STEP,
+            startTimestampMs = highStep.timestampMs,
+            endTimestampMs = highStep.timestampMs,
+            peakTimestampMs = highStep.timestampMs,
+            confidence = 0.55f,
+            severity = 1,
+            metricValues = mapOf("hipRelativeHeight" to highStep.hipRelativeHeight),
+            userVisibleTitle = "${side.replaceFirstChar { it.uppercase() }} high step",
+            userVisibleDescription = "Your $side foot settled at or above hip height around ${formatTimestampMs(highStep.timestampMs)}.",
+        )
+    }
+
+    val missedReachFallTimestamps = computation.missedReachCandidates.map { it.fallTimestampMs }.toSet()
+    computation.fallCandidates.filter { it.timestampMs !in missedReachFallTimestamps }.forEachIndexed { index, fall ->
+        events += ClimbEvent(
+            id = "fall_candidate_$index",
+            type = ClimbEventType.POSSIBLE_FALL,
+            startTimestampMs = fall.timestampMs,
+            endTimestampMs = fall.timestampMs,
+            peakTimestampMs = fall.timestampMs,
+            confidence = 0.35f,
+            severity = 3,
+            userVisibleTitle = "Possible fall",
+            userVisibleDescription = "A large, fast downward movement around ${formatTimestampMs(fall.timestampMs)} — pose tracking can't confirm whether this was a fall or an unusually hard controlled drop.",
+        )
+    }
+
+    computation.missedReachCandidates.forEachIndexed { index, reach ->
+        val side = if (reach.side == Side.LEFT) "left" else "right"
+        events += ClimbEvent(
+            id = "missed_reach_${reach.side}_$index",
+            type = ClimbEventType.POSSIBLE_MISSED_REACH,
+            startTimestampMs = reach.reachTimestampMs,
+            endTimestampMs = reach.fallTimestampMs,
+            peakTimestampMs = reach.fallTimestampMs,
+            confidence = 0.3f,
+            severity = 3,
+            userVisibleTitle = "Possible missed reach",
+            userVisibleDescription = "Your $side hand moved quickly around ${formatTimestampMs(reach.reachTimestampMs)}, followed by a large downward movement around ${formatTimestampMs(reach.fallTimestampMs)} — pose tracking can't confirm whether a hold was targeted or touched.",
+        )
+    }
+
+    val recoveryByLossTimestamp = computation.recoveries.associateBy { it.stabilityLossTimestampMs }
+    computation.stabilityLossEvents.forEachIndexed { index, loss ->
+        val recovery = recoveryByLossTimestamp[loss.timestampMs]
+        events += ClimbEvent(
+            id = "stability_loss_$index",
+            type = ClimbEventType.POSSIBLE_STABILITY_LOSS,
+            startTimestampMs = loss.timestampMs,
+            endTimestampMs = recovery?.recoveredAtMs ?: loss.timestampMs,
+            peakTimestampMs = loss.timestampMs,
+            confidence = 0.4f,
+            severity = 2,
+            userVisibleTitle = "Possible stability loss",
+            userVisibleDescription = if (recovery != null) {
+                "A sudden jerk in body position around ${formatTimestampMs(loss.timestampMs)}, followed by ${"%.1f".format(recovery.recoveryDurationMs / 1000f)}s to settle back under control."
+            } else {
+                "A sudden jerk in body position around ${formatTimestampMs(loss.timestampMs)} — no confirmed recovery to a stable position afterward in this analysis."
+            },
+        )
+    }
+
+    computation.finishStabilization?.let { finish ->
+        events += ClimbEvent(
+            id = "finish_stabilization",
+            type = ClimbEventType.FINISH_STABILIZATION,
+            startTimestampMs = finish.startMs,
+            endTimestampMs = finish.endMs,
+            peakTimestampMs = finish.startMs,
+            confidence = 0.6f,
+            severity = 2,
+            userVisibleTitle = "Finish stabilization",
+            userVisibleDescription = "Held a controlled, still position from ${formatTimestampMs(finish.startMs)} to ${formatTimestampMs(finish.endMs)} at the end of the climb.",
         )
     }
 

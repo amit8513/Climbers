@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,6 +49,8 @@ import com.example.climb.analysis.ClimbEvent
 import com.example.climb.analysis.ClimbEventType
 import com.example.climb.analysis.formatTimestampMs
 import com.example.climb.analysis.metrics.ClimbMetrics
+import com.example.climb.analysis.scoring.CategoryScore
+import com.example.climb.analysis.toCategoryScores
 import com.example.climb.analysis.toClimbEvents
 import com.example.climb.analysis.toClimbMetrics
 import com.example.climb.analysis.toCoachingTips
@@ -102,6 +105,7 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
     val metrics = remember(analysis.metricsJson) { analysis.metricsJson.toClimbMetrics() }
     val events = remember(analysis.eventsJson) { analysis.eventsJson.toClimbEvents() }
     val tips = remember(analysis.tipsJson) { analysis.tipsJson.toCoachingTips() }
+    val categoryScores = remember(analysis.categoryScoresJson) { analysis.categoryScoresJson.toCategoryScores() }
     val context = LocalContext.current
 
     val exoPlayer = remember(currentAttempt.videoPath) {
@@ -207,6 +211,13 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
             Spacer(Modifier.height(16.dp))
         }
 
+        if (categoryScores.isNotEmpty()) {
+            SectionCard(title = "Performance") {
+                PerformanceScores(overallScore = analysis.overallScore, overallConfidence = analysis.overallConfidence, categoryScores = categoryScores)
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
         if (tips.isNotEmpty()) {
             SectionCard(title = "Coaching tips") {
                 tips.forEachIndexed { index, tip ->
@@ -254,6 +265,46 @@ private fun ConfidenceBadge(confidence: Float?) {
         fontWeight = FontWeight.Medium,
         modifier = Modifier.padding(top = 8.dp),
     )
+}
+
+@Composable
+private fun PerformanceScores(overallScore: Int?, overallConfidence: Float?, categoryScores: List<CategoryScore>) {
+    Column {
+        if (overallScore != null) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(text = overallScore.toString(), color = ClimbPalette.chalk, fontWeight = FontWeight.Black, fontSize = 34.sp, fontFamily = FontFamily.Monospace)
+                Text(text = "/100 overall", color = ClimbPalette.textMuted, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
+            }
+            if (overallConfidence != null) {
+                Text(text = "${(overallConfidence * 100).toInt()}% overall confidence", color = ClimbPalette.textMuted, fontSize = 11.sp)
+            }
+            Spacer(Modifier.height(14.dp))
+        }
+        categoryScores.forEachIndexed { index, categoryScore ->
+            if (index > 0) Spacer(Modifier.height(12.dp))
+            CategoryScoreRow(categoryScore)
+        }
+    }
+}
+
+@Composable
+private fun CategoryScoreRow(categoryScore: CategoryScore) {
+    val confidenceColor = when {
+        categoryScore.confidence >= 0.7f -> ClimbPalette.sent
+        categoryScore.confidence >= 0.4f -> ClimbPalette.project
+        else -> ClimbPalette.fell
+    }
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Text(text = categoryScore.category.displayName, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(text = "${categoryScore.score}", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp, fontFamily = FontFamily.Monospace)
+                Text(text = "${(categoryScore.confidence * 100).toInt()}% conf.", color = confidenceColor, fontSize = 10.sp)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(text = categoryScore.explanation, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
+    }
 }
 
 @Composable
@@ -373,6 +424,8 @@ private fun TimelineEventRow(event: ClimbEvent, onSeek: (Long) -> Unit) {
     }
 }
 
+@Composable
+@ReadOnlyComposable
 private fun eventColor(event: ClimbEvent): Color = when (event.type) {
     ClimbEventType.LONG_PAUSE -> ClimbPalette.fell
     ClimbEventType.SUSTAINED_LOCKOFF -> ClimbPalette.project
@@ -384,4 +437,10 @@ private fun eventColor(event: ClimbEvent): Color = when (event.type) {
     ClimbEventType.EXCESSIVE_BODY_REPOSITIONING -> ClimbPalette.fell
     ClimbEventType.LARGE_DYNAMIC_MOVE -> ClimbPalette.chalk
     ClimbEventType.CLIMB_START, ClimbEventType.CLIMB_END -> ClimbPalette.textMuted
+    ClimbEventType.HIGH_STEP -> ClimbPalette.sent
+    ClimbEventType.POSSIBLE_STABILITY_LOSS -> ClimbPalette.fell
+    ClimbEventType.RECOVERY -> ClimbPalette.sent
+    ClimbEventType.POSSIBLE_FALL -> ClimbPalette.fell
+    ClimbEventType.FINISH_STABILIZATION -> ClimbPalette.sent
+    ClimbEventType.POSSIBLE_MISSED_REACH -> ClimbPalette.fell
 }

@@ -6,13 +6,16 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.example.climb.analysis.metrics.MetricsConfiguration
 import com.example.climb.analysis.metrics.computeAnalysis
+import com.example.climb.analysis.scoring.scorePerformance
 import com.example.climb.coaching.DeterministicCoachingRuleEngine
 import com.example.climb.pose.PoseAnalysisConfiguration
 import com.example.climb.pose.PoseAnalysisPhase
 import com.example.climb.pose.PoseAnalysisResult
 import com.example.climb.pose.PoseEstimator
 import com.example.climb.pose.VideoSource
+import com.example.climb.pose.smoothPoseSequence
 import kotlinx.coroutines.runBlocking
 
 /**
@@ -50,23 +53,33 @@ class PoseAnalysisWorker(
 
         return when (result) {
             is PoseAnalysisResult.Success -> {
+                // Smoothed once here so every downstream stage (metrics, events, scoring, the
+                // persisted skeleton overlay) sees the same denoised sequence rather than each
+                // recomputing it — see PoseSmoother's One Euro filter for why a fixed low-pass
+                // wouldn't do.
+                val smoothedFrames = smoothPoseSequence(result.frames)
+
                 setProgress(progressData(analysisId, AnalysisStatus.CALCULATING_METRICS, 0f))
-                val computation = computeAnalysis(result.frames)
+                val computation = computeAnalysis(smoothedFrames)
 
                 setProgress(progressData(analysisId, AnalysisStatus.GENERATING_TIPS, 0f))
-                val events = buildEvents(result.frames, computation)
+                val events = buildEvents(smoothedFrames, computation)
                 val tips = DeterministicCoachingRuleEngine().generateTips(computation, events)
+                val phases = detectPhases(smoothedFrames, computation, events, MetricsConfiguration())
+                val performanceResult = scorePerformance(smoothedFrames, computation)
 
                 setProgress(progressData(analysisId, AnalysisStatus.SAVING, 1f))
                 analysisRepository.completeWithFrames(
                     analysis = analysis,
-                    frames = result.frames,
+                    frames = smoothedFrames,
                     videoDurationMs = result.videoDurationMs,
                     videoWidth = result.videoWidth,
                     videoHeight = result.videoHeight,
                     metrics = computation.metrics,
                     events = events,
                     tips = tips,
+                    phases = phases,
+                    performanceResult = performanceResult,
                 )
                 Result.success(workDataOf(KEY_ANALYSIS_ID to analysisId))
             }

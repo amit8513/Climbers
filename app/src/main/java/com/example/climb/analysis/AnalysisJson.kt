@@ -1,6 +1,8 @@
 package com.example.climb.analysis
 
 import com.example.climb.analysis.metrics.ClimbMetrics
+import com.example.climb.analysis.scoring.CategoryScore
+import com.example.climb.analysis.scoring.PerformanceCategory
 import com.example.climb.coaching.CoachingSource
 import com.example.climb.coaching.CoachingTip
 import org.json.JSONArray
@@ -25,6 +27,11 @@ fun ClimbMetrics.toJson(): String = JSONObject().apply {
     put("reliableFramePercentage", reliableFramePercentage.toDouble())
     put("climbStartMs", climbStartMs)
     put("climbEndMs", climbEndMs)
+    put("highStepCount", highStepCount)
+    put("possibleStabilityLossCount", possibleStabilityLossCount)
+    put("possibleFallCandidateCount", possibleFallCandidateCount)
+    put("hasFinishStabilization", hasFinishStabilization)
+    put("possibleMissedReachCount", possibleMissedReachCount)
 }.toString()
 
 fun String.toClimbMetrics(): ClimbMetrics? {
@@ -48,6 +55,11 @@ fun String.toClimbMetrics(): ClimbMetrics? {
         reliableFramePercentage = o.getDouble("reliableFramePercentage").toFloat(),
         climbStartMs = o.getLong("climbStartMs"),
         climbEndMs = o.getLong("climbEndMs"),
+        highStepCount = o.optInt("highStepCount", 0),
+        possibleStabilityLossCount = o.optInt("possibleStabilityLossCount", 0),
+        possibleFallCandidateCount = o.optInt("possibleFallCandidateCount", 0),
+        hasFinishStabilization = o.optBoolean("hasFinishStabilization", false),
+        possibleMissedReachCount = o.optInt("possibleMissedReachCount", 0),
     )
 }
 
@@ -112,6 +124,79 @@ fun List<CoachingTip>.toJson(): String {
         )
     }
     return array.toString()
+}
+
+@JvmName("climbPhasesToJson")
+fun List<ClimbPhase>.toJson(): String {
+    val array = JSONArray()
+    for (phase in this) {
+        array.put(
+            JSONObject().apply {
+                put("type", phase.type.name)
+                put("startMs", phase.startMs)
+                put("endMs", phase.endMs)
+                put("confidence", phase.confidence.toDouble())
+                put("supportingSignals", phase.supportingSignals)
+            },
+        )
+    }
+    return array.toString()
+}
+
+fun String.toClimbPhases(): List<ClimbPhase> {
+    if (isBlank()) return emptyList()
+    val array = JSONArray(this)
+    return (0 until array.length()).mapNotNull { i ->
+        val o = array.getJSONObject(i)
+        val type = runCatching { ClimbPhaseType.valueOf(o.getString("type")) }.getOrNull() ?: return@mapNotNull null
+        ClimbPhase(
+            type = type,
+            startMs = o.getLong("startMs"),
+            endMs = o.getLong("endMs"),
+            confidence = o.getDouble("confidence").toFloat(),
+            supportingSignals = o.getString("supportingSignals"),
+        )
+    }
+}
+
+@JvmName("categoryScoresToJson")
+fun List<CategoryScore>.toJson(): String {
+    val array = JSONArray()
+    for (categoryScore in this) {
+        array.put(
+            JSONObject().apply {
+                put("category", categoryScore.category.name)
+                put("score", categoryScore.score)
+                put("confidence", categoryScore.confidence.toDouble())
+                put("contributingMetrics", JSONArray(categoryScore.contributingMetrics))
+                put("positiveFactors", JSONArray(categoryScore.positiveFactors))
+                put("negativeFactors", JSONArray(categoryScore.negativeFactors))
+                put("unavailableFactors", JSONArray(categoryScore.unavailableFactors))
+                put("explanation", categoryScore.explanation)
+            },
+        )
+    }
+    return array.toString()
+}
+
+fun String.toCategoryScores(): List<CategoryScore> {
+    if (isBlank()) return emptyList()
+    val array = JSONArray(this)
+    return (0 until array.length()).mapNotNull { i ->
+        val o = array.getJSONObject(i)
+        val category = runCatching { PerformanceCategory.valueOf(o.getString("category")) }.getOrNull() ?: return@mapNotNull null
+        fun stringList(key: String) = o.getJSONArray(key).let { arr -> (0 until arr.length()).map { arr.getString(it) } }
+        CategoryScore(
+            category = category,
+            score = o.getInt("score"),
+            confidence = o.getDouble("confidence").toFloat(),
+            contributingMetrics = stringList("contributingMetrics"),
+            positiveFactors = stringList("positiveFactors"),
+            negativeFactors = stringList("negativeFactors"),
+            unavailableFactors = stringList("unavailableFactors"),
+            explanation = o.getString("explanation"),
+        )
+    }
 }
 
 fun String.toCoachingTips(): List<CoachingTip> {

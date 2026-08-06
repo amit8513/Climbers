@@ -12,7 +12,7 @@ import com.example.climb.analysis.ClimbAttemptEntity
 
 @Database(
     entities = [ClimbEntity::class, ClimbAttemptEntity::class, ClimbAnalysisEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class ClimbDatabase : RoomDatabase() {
@@ -107,10 +107,22 @@ abstract class ClimbDatabase : RoomDatabase() {
             }
         }
 
+        // Additive: phase timeline + six-category performance scoring columns, added alongside
+        // the evidence-based performance report rework.
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE climb_analyses ADD COLUMN phasesJson TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE climb_analyses ADD COLUMN categoryScoresJson TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE climb_analyses ADD COLUMN overallScore INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climb_analyses ADD COLUMN overallConfidence REAL DEFAULT NULL")
+                db.execSQL("ALTER TABLE climb_analyses ADD COLUMN scoringConfigVersion INTEGER DEFAULT NULL")
+            }
+        }
+
         fun getInstance(context: Context): ClimbDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context, ClimbDatabase::class.java, "climb.db")
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                     .also { instance = it }
             }

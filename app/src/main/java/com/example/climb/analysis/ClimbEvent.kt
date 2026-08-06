@@ -12,6 +12,12 @@ enum class ClimbEventType {
     LARGE_DYNAMIC_MOVE,
     CLIMB_START,
     CLIMB_END,
+    HIGH_STEP,
+    POSSIBLE_STABILITY_LOSS,
+    RECOVERY,
+    POSSIBLE_FALL,
+    FINISH_STABILIZATION,
+    POSSIBLE_MISSED_REACH,
 }
 
 data class ClimbEvent(

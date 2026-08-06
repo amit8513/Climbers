@@ -27,5 +27,10 @@ data class ClimbAnalysisEntity(
     val metricsJson: String = "",
     val eventsJson: String = "",
     val tipsJson: String = "",
+    val phasesJson: String = "",
+    val categoryScoresJson: String = "",
+    val overallScore: Int? = null,
+    val overallConfidence: Float? = null,
+    val scoringConfigVersion: Int? = null,
     val failureReason: String?,
 )

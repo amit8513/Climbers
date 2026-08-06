@@ -1,6 +1,7 @@
 package com.example.climb.analysis
 
 import com.example.climb.analysis.metrics.ClimbMetrics
+import com.example.climb.analysis.scoring.PerformanceResult
 import com.example.climb.coaching.CoachingTip
 import com.example.climb.pose.PoseFrame
 import kotlinx.coroutines.flow.Flow
@@ -8,7 +9,7 @@ import kotlinx.coroutines.flow.Flow
 /** Bumped whenever the pose model or the metrics/event algorithms change meaningfully, so old
  * stored analyses can be told apart from ones produced by a newer pipeline. */
 const val CURRENT_MODEL_VERSION = "pose_landmarker_lite_v1"
-const val CURRENT_ALGORITHM_VERSION = 3
+const val CURRENT_ALGORITHM_VERSION = 4
 
 class AnalysisRepository(private val dao: AnalysisDao) {
     suspend fun createAttempt(attempt: ClimbAttemptEntity): Long = dao.insertAttempt(attempt)
@@ -62,6 +63,8 @@ class AnalysisRepository(private val dao: AnalysisDao) {
         metrics: ClimbMetrics,
         events: List<ClimbEvent>,
         tips: List<CoachingTip>,
+        phases: List<ClimbPhase>,
+        performanceResult: PerformanceResult,
     ) {
         dao.updateAnalysis(
             analysis.copy(
@@ -76,6 +79,11 @@ class AnalysisRepository(private val dao: AnalysisDao) {
                 metricsJson = metrics.toJson(),
                 eventsJson = events.toJson(),
                 tipsJson = tips.toJson(),
+                phasesJson = phases.toJson(),
+                categoryScoresJson = performanceResult.categoryScores.toJson(),
+                overallScore = performanceResult.overallScore,
+                overallConfidence = performanceResult.overallConfidence,
+                scoringConfigVersion = performanceResult.scoringConfig.version,
             ),
         )
     }
