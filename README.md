@@ -1,7 +1,7 @@
 
 # Climbers
 
-**Climb** is an application designed to help climbers record, review, track, and analyze their climbing progress.
+**Climbers** is an application designed to help climbers record, review, track, and analyze their climbing progress.
 
 The goal is to create a complete training companion that allows users to manage climbing videos, monitor improvement over time, connect with friends, and receive useful performance insights.
 
