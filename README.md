@@ -44,11 +44,10 @@ Add face recognition and support for external cameras.
 
 ## Screenshots
 
-<p align="center">
-  <img width="100" alt="Climb application screenshot 1" src="https://github.com/user-attachments/assets/906bcf15-dc6d-47e2-b488-aa03aa506af4" />
-  <img width="100" alt="Climb application screenshot 2" src="https://github.com/user-attachments/assets/b6c2e463-b66e-4407-bd48-a3f7cccdd891" />
-  <img width="100" alt="Climb application screenshot 3" src="https://github.com/user-attachments/assets/d3372c04-b034-4fbb-8210-ee20cbc7c01c" />
-</p>
+<img width="100" alt="Climb application screenshot 1" src="https://github.com/user-attachments/assets/906bcf15-dc6d-47e2-b488-aa03aa506af4" />
+<img width="100" alt="Climb application screenshot 2" src="https://github.com/user-attachments/assets/b6c2e463-b66e-4407-bd48-a3f7cccdd891" />
+<img width="100" alt="Climb application screenshot 3" src="https://github.com/user-attachments/assets/d3372c04-b034-4fbb-8210-ee20cbc7c01c" />
+
 
 ### August 5, 2026
 
