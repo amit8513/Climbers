@@ -52,6 +52,7 @@ import com.example.climb.analysis.ClimbAttemptEntity
 import com.example.climb.analysis.Visibility
 import com.example.climb.data.ClimbRepository
 import com.example.climb.playback.ColorIsolationEffect
+import com.example.climb.playback.exportWithColorIsolation
 import com.example.climb.sharing.ClimbSyncWorker
 import com.example.climb.ui.components.HoldBadge
 import com.example.climb.ui.components.OutcomePill
@@ -110,6 +111,8 @@ fun DetailScreen(
     var hueOffsetPosition by remember { mutableFloatStateOf(initialHueOffset) }
     var appliedHueOffset by remember { mutableFloatStateOf(initialHueOffset) }
     var isSavingVisibility by remember { mutableStateOf(false) }
+    var isExportingVideo by remember { mutableStateOf(false) }
+    var exportError by remember { mutableStateOf<String?>(null) }
 
     // Effects must be set before prepare() — ExoPlayer decides whether to route through the GL
     // effects pipeline at prepare time, so setting them afterwards (e.g. only from the
@@ -227,6 +230,73 @@ fun DetailScreen(
                     scope.launch { repository.update(currentClimb.copy(hueToleranceDegrees = hueTolerancePosition)) }
                 },
             )
+            Spacer(Modifier.height(14.dp))
+            if (isExportingVideo) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.height(14.dp).width(14.dp), strokeWidth = 2.dp, color = ClimbPalette.chalk)
+                    Text(text = "Rendering edited video…", color = ClimbPalette.textSecondary, fontSize = 11.sp)
+                }
+            } else {
+                Text(
+                    text = "Save edited video",
+                    color = ClimbPalette.chalk,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.clickable {
+                        isExportingVideo = true
+                        exportError = null
+                        val outputPath = File(
+                            File(currentClimb.videoPath).parentFile,
+                            "climb_${currentClimb.id}_edited_${System.currentTimeMillis()}.mp4",
+                        ).absolutePath
+                        scope.launch {
+                            runCatching {
+                                exportWithColorIsolation(
+                                    context = context,
+                                    inputPath = currentClimb.videoPath,
+                                    outputPath = outputPath,
+                                    routeColor = currentClimb.routeColor,
+                                    hueOffsetDegrees = hueOffsetPosition,
+                                    hueToleranceDegrees = hueTolerancePosition,
+                                )
+                            }.onSuccess {
+                                val oldPath = currentClimb.videoPath
+                                // The tuning is now baked into the new file's pixels, so it's
+                                // reset to defaults — reopening plays the app's normal (default)
+                                // color-isolation live on top, same as any other climb.
+                                repository.update(
+                                    currentClimb.copy(
+                                        videoPath = outputPath,
+                                        hueOffsetDegrees = null,
+                                        hueToleranceDegrees = null,
+                                    ),
+                                )
+                                File(oldPath).delete()
+                                hueOffsetPosition = 0f
+                                appliedHueOffset = 0f
+                                hueTolerancePosition = ColorIsolationEffect.DEFAULT_HUE_TOLERANCE_DEGREES
+                                appliedHueTolerance = ColorIsolationEffect.DEFAULT_HUE_TOLERANCE_DEGREES
+                                if (currentClimb.visibility != Visibility.PRIVATE) {
+                                    ClimbSyncWorker.enqueue(WorkManager.getInstance(context), currentUid, currentUsername, currentClimb.id)
+                                }
+                            }.onFailure { error ->
+                                exportError = error.message ?: "Couldn't save the edited video"
+                            }
+                            isExportingVideo = false
+                        }
+                    },
+                )
+                Text(
+                    text = "Bakes the current color effect into the video file — this is what gets shared when you set this climb to Friends only or Public.",
+                    color = ClimbPalette.textMuted,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                exportError?.let { message ->
+                    Text(text = message, color = ClimbPalette.fell, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
         }
 
         Spacer(Modifier.height(16.dp))
