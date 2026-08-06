@@ -1,5 +1,5 @@
 
-# Climb
+# Climbers
 
 **Climb** is an application designed to help climbers record, review, track, and analyze their climbing progress.
 
