@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -56,6 +58,7 @@ import com.example.climb.ui.components.OutcomePill
 import com.example.climb.ui.components.SectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
@@ -106,6 +109,7 @@ fun DetailScreen(
     var appliedHueTolerance by remember { mutableFloatStateOf(initialHueTolerance) }
     var hueOffsetPosition by remember { mutableFloatStateOf(initialHueOffset) }
     var appliedHueOffset by remember { mutableFloatStateOf(initialHueOffset) }
+    var isSavingVisibility by remember { mutableStateOf(false) }
 
     // Effects must be set before prepare() — ExoPlayer decides whether to route through the GL
     // effects pipeline at prepare time, so setting them afterwards (e.g. only from the
@@ -262,13 +266,31 @@ fun DetailScreen(
                     VisibilityChip(
                         label = option.displayName(),
                         selected = currentClimb.visibility == option,
+                        enabled = !isSavingVisibility,
                         onClick = {
-                            scope.launch {
-                                repository.update(currentClimb.copy(visibility = option))
-                                ClimbSyncWorker.enqueue(WorkManager.getInstance(context), currentUid, currentUsername, currentClimb.id)
+                            if (!isSavingVisibility) {
+                                isSavingVisibility = true
+                                scope.launch {
+                                    repository.update(currentClimb.copy(visibility = option))
+                                    val workManager = WorkManager.getInstance(context)
+                                    ClimbSyncWorker.enqueue(workManager, currentUid, currentUsername, currentClimb.id)
+                                    // Wait for the sync worker to actually finish — this is exactly the
+                                    // window where switching to a different Firebase account mid-sync
+                                    // caused writes to fail; the loader tells you when it's safe.
+                                    workManager.getWorkInfosForUniqueWorkFlow(ClimbSyncWorker.uniqueWorkName(currentUid, currentClimb.id))
+                                        .first { infos -> infos.isNotEmpty() && infos.all { it.state.isFinished } }
+                                    isSavingVisibility = false
+                                }
                             }
                         },
                     )
+                }
+            }
+            if (isSavingVisibility) {
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.height(14.dp).width(14.dp), strokeWidth = 2.dp, color = ClimbPalette.chalk)
+                    Text(text = "Saving and syncing — don't switch accounts yet", color = ClimbPalette.textSecondary, fontSize = 11.sp)
                 }
             }
         }
@@ -366,17 +388,17 @@ private fun PoseAnalysisStatusRow(
 }
 
 @Composable
-private fun VisibilityChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun VisibilityChip(label: String, selected: Boolean, enabled: Boolean = true, onClick: () -> Unit) {
     Text(
         text = label,
-        color = if (selected) ClimbPalette.chalkText else ClimbPalette.textSecondary,
+        color = (if (selected) ClimbPalette.chalkText else ClimbPalette.textSecondary).copy(alpha = if (enabled) 1f else 0.4f),
         fontSize = 12.sp,
         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .background(if (selected) ClimbPalette.chalk else ClimbPalette.surfaceRaised)
-            .border(1.dp, if (selected) ClimbPalette.chalk else ClimbPalette.border, RoundedCornerShape(50))
-            .clickable(onClick = onClick)
+            .background((if (selected) ClimbPalette.chalk else ClimbPalette.surfaceRaised).copy(alpha = if (enabled) 1f else 0.4f))
+            .border(1.dp, (if (selected) ClimbPalette.chalk else ClimbPalette.border).copy(alpha = if (enabled) 1f else 0.4f), RoundedCornerShape(50))
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
     )
 }
