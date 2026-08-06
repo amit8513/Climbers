@@ -13,6 +13,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -22,7 +28,9 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.climb.ui.theme.ClimbPalette
@@ -60,17 +68,19 @@ fun ClimbBottomBar(
                     .navigationBarsPadding(),
             ) {
                 // Two equal-width halves around a fixed-width center gap, rather than weighting
-                // each tab equally — that keeps the notch centered regardless of how the tabs
-                // are distributed either side of it.
+                // each tab equally — that keeps the notch (and the FAB floating above it)
+                // centered regardless of how the tabs are distributed either side of it.
                 Row(modifier = Modifier.weight(1f)) {
                     NavTab(
-                        label = "Home",
+                        icon = Icons.Filled.Home,
+                        contentDescription = "Home",
                         selected = selectedRoute == ROUTE_HOME,
                         onClick = onHomeClick,
                         modifier = Modifier.weight(1f),
                     )
                     NavTab(
-                        label = "Progress",
+                        icon = Icons.Filled.QueryStats,
+                        contentDescription = "Progress",
                         selected = selectedRoute == ROUTE_PROGRESS,
                         onClick = onProgressClick,
                         modifier = Modifier.weight(1f),
@@ -79,13 +89,15 @@ fun ClimbBottomBar(
                 Spacer(Modifier.width(72.dp))
                 Row(modifier = Modifier.weight(1f)) {
                     NavTab(
-                        label = "Ranks",
+                        icon = Icons.Filled.EmojiEvents,
+                        contentDescription = "Leaderboard",
                         selected = selectedRoute == ROUTE_LEADERBOARD,
                         onClick = onLeaderboardClick,
                         modifier = Modifier.weight(1f),
                     )
                     NavTab(
-                        label = "Friends",
+                        icon = Icons.Filled.Group,
+                        contentDescription = "Friends",
                         selected = selectedRoute == ROUTE_FRIENDS,
                         onClick = onFriendsClick,
                         modifier = Modifier.weight(1f),
@@ -104,18 +116,19 @@ fun ClimbBottomBar(
 }
 
 @Composable
-private fun NavTab(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun NavTab(icon: ImageVector, contentDescription: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .height(48.dp)
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            color = if (selected) ClimbPalette.textPrimary else ClimbPalette.textMuted,
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            fontSize = 12.sp,
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = if (selected) ClimbPalette.textPrimary else ClimbPalette.textMuted,
+            modifier = Modifier.size(if (selected) 26.dp else 22.dp),
         )
     }
 }
@@ -136,7 +149,8 @@ private fun RecordFab(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 .size(56.dp)
                 .clip(CircleShape)
                 .background(ClimbPalette.chalk)
-                .clickable(onClick = onClick),
+                .clickable(onClick = onClick)
+                .semantics { contentDescription = "Record a climb" },
             contentAlignment = Alignment.Center,
         ) {
             Text(text = "+", color = ClimbPalette.chalkText, fontSize = 26.sp)

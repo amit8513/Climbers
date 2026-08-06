@@ -144,7 +144,6 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     repository = container.climbRepository,
                     currentUid = currentUid,
                     onClimbClick = { id -> navController.navigate(Routes.detail(id)) },
-                    onAnalyzeClick = { navController.navigate(Routes.VIDEO_SOURCE) },
                 )
             }
 

@@ -82,7 +82,6 @@ fun HomeScreen(
     repository: ClimbRepository,
     currentUid: String,
     onClimbClick: (Long) -> Unit,
-    onAnalyzeClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val climbs by repository.observeAll(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -102,21 +101,12 @@ fun HomeScreen(
                     fontSize = 22.sp,
                     letterSpacing = 1.sp,
                 )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Analyze",
-                        color = ClimbPalette.chalk,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable(onClick = onAnalyzeClick),
-                    )
-                    Text(
-                        text = headerDateFormatter.format(Date(now)),
-                        color = ClimbPalette.textMuted,
-                        fontSize = 12.sp,
-                        fontFamily = FontFamily.Monospace,
-                    )
-                }
+                Text(
+                    text = headerDateFormatter.format(Date(now)),
+                    color = ClimbPalette.textMuted,
+                    fontSize = 12.sp,
+                    fontFamily = FontFamily.Monospace,
+                )
             }
 
             Spacer(Modifier.height(18.dp))
