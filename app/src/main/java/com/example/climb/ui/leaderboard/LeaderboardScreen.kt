@@ -55,6 +55,7 @@ private sealed interface LeaderboardUiState {
 fun LeaderboardScreen(
     currentUid: String,
     leaderboardRepository: LeaderboardRepository,
+    onOpenFriendClimbs: (LeaderboardEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -65,7 +66,13 @@ fun LeaderboardScreen(
     var selectedEntry by remember { mutableStateOf<LeaderboardEntry?>(null) }
 
     selectedEntry?.let { entry ->
-        LeaderboardProfileScreen(entry = entry, category = category, onBack = { selectedEntry = null }, modifier = modifier)
+        LeaderboardProfileScreen(
+            entry = entry,
+            category = category,
+            onBack = { selectedEntry = null },
+            onOpenFriendClimbs = { onOpenFriendClimbs(entry) },
+            modifier = modifier,
+        )
         return
     }
 
@@ -112,7 +119,14 @@ fun LeaderboardScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    LeaderboardContent(state.result, category, currentUid, state.lastUpdatedAt, onOpenEntry = { selectedEntry = it })
+                    LeaderboardContent(
+                        state.result,
+                        category,
+                        currentUid,
+                        state.lastUpdatedAt,
+                        onOpenEntry = { selectedEntry = it },
+                        onOpenVideos = onOpenFriendClimbs,
+                    )
                 }
             }
         }
@@ -141,6 +155,7 @@ private fun LeaderboardContent(
     currentUid: String,
     lastUpdatedAt: Long?,
     onOpenEntry: (LeaderboardEntry) -> Unit,
+    onOpenVideos: (LeaderboardEntry) -> Unit,
 ) {
     val currentUserEligible = result.currentUserEntry?.isEligible == true
     val hasNothingToShow = result.entries.isEmpty() && result.unrankedFriends.isEmpty() && !currentUserEligible
@@ -173,7 +188,7 @@ private fun LeaderboardContent(
             }
 
             items(rowEntries, key = { it.userId }) { entry ->
-                LeaderboardRow(entry = entry, category = category, onClick = { onOpenEntry(entry) }, onOpenVideos = { onOpenEntry(entry) })
+                LeaderboardRow(entry = entry, category = category, onClick = { onOpenEntry(entry) }, onOpenVideos = { onOpenVideos(entry) })
             }
         }
 

@@ -184,6 +184,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                 LeaderboardScreen(
                     currentUid = currentUid,
                     leaderboardRepository = container.leaderboardRepositoryFor(currentUid, profile.username),
+                    onOpenFriendClimbs = { entry -> navController.navigate(Routes.friendClimbs(entry.userId, entry.displayName)) },
                 )
             }
 

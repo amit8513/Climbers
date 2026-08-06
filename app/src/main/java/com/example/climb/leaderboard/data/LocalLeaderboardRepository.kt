@@ -3,6 +3,7 @@ package com.example.climb.leaderboard.data
 import com.example.climb.analysis.Visibility
 import com.example.climb.data.ClimbOutcome
 import com.example.climb.data.ClimbRepository
+import com.example.climb.data.social.Friend
 import com.example.climb.data.social.SocialRepository
 import com.example.climb.leaderboard.model.ClimbAttempt
 import com.example.climb.leaderboard.model.LeaderboardCategory
@@ -15,22 +16,23 @@ import com.example.climb.leaderboard.model.VGrade
 import com.example.climb.leaderboard.privacy.LeaderboardPrivacyFilter
 import com.example.climb.leaderboard.scoring.calculateEntry
 import com.example.climb.leaderboard.scoring.rankEntries
+import com.example.climb.sharing.FriendClimbsRepository
+import com.example.climb.sharing.SharedClimb
 import kotlinx.coroutines.flow.first
 import java.time.ZoneId
 
 /**
  * The only [LeaderboardRepository] implementation. Compares the signed-in user only against
- * their real accepted friends ([SocialRepository]) — no mock/demo roster. There is, however, no
- * backend yet that syncs a friend's climb data to where this device can read it (Firebase only
- * stores the friend graph, not climbs/sessions/videos — see LEADERBOARD.md), so every real friend
- * currently has zero visible activity from this device's point of view and shows up under
- * [LeaderboardResult.unrankedFriends] rather than in the ranked competition. The signed-in user's
- * own row is real, computed from their actual local climbs, through the exact same scoring
- * pipeline a real friend's data would go through once sync exists.
+ * their real accepted friends ([SocialRepository]), scored from their real synced climbs
+ * ([FriendClimbsRepository] — [com.example.climb.sharing.ClimbSyncRepository] is what puts that
+ * data there in the first place). A friend who hasn't shared any Friends-only/Public climbs for
+ * a period still has nothing to rank on and shows up under [LeaderboardResult.unrankedFriends]
+ * instead of in the ranked competition — that's real "no data," not a stand-in for missing sync.
  */
 class LocalLeaderboardRepository(
     private val climbRepository: ClimbRepository,
     private val socialRepository: SocialRepository,
+    private val friendClimbsRepository: FriendClimbsRepository,
     private val currentUid: String,
     private val currentDisplayName: String,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
@@ -72,16 +74,14 @@ class LocalLeaderboardRepository(
         val friends = socialRepository.observeFriends(currentUid).first()
 
         val currentUserRaw = currentUserEntry(period)
-        val friendEntries = friends.map { friend ->
-            calculateEntry(friend.uid, friend.username, null, emptyList(), emptyList(), zoneId).let { raw ->
-                LeaderboardPrivacyFilter.filterForViewer(raw, viewerUserId, defaultFriendPrivacy, areFriends = true, totalOwnedVideoCount = 0) ?: raw
-            }
-        }
+        val friendEntries = friends.map { friendEntry(it, period, viewerUserId) }
         val (eligibleFriends, unrankedFriends) = friendEntries.partition { it.isEligible }
         val rankable = eligibleFriends + (if (currentUserRaw.isEligible) listOf(currentUserRaw) else emptyList())
 
         val previousCurrentUserRaw = currentUserEntry(previousPeriod)
-        val previousRankable = (if (previousCurrentUserRaw.isEligible) listOf(previousCurrentUserRaw) else emptyList())
+        val previousFriendEntries = friends.map { friendEntry(it, previousPeriod, viewerUserId) }
+        val previousRankable = previousFriendEntries.filter { it.isEligible } +
+            (if (previousCurrentUserRaw.isEligible) listOf(previousCurrentUserRaw) else emptyList())
         val previousRanks = rankEntries(previousRankable, category, emptyMap()).associate { it.userId to it.rank }
 
         val ranked = rankEntries(rankable, category, previousRanks)
@@ -101,6 +101,33 @@ class LocalLeaderboardRepository(
         val attempts = realUserAttempts(period)
         return calculateEntry(currentUid, currentDisplayName, null, attempts, emptyList(), zoneId, isCurrentUser = true)
     }
+
+    private suspend fun friendEntry(friend: Friend, period: LeaderboardPeriod, viewerUserId: String): LeaderboardEntry {
+        val attempts = friendAttempts(friend.uid, period)
+        val raw = calculateEntry(friend.uid, friend.username, null, attempts, emptyList(), zoneId)
+        val videoCount = attempts.count { it.videoId != null }
+        return LeaderboardPrivacyFilter.filterForViewer(raw, viewerUserId, defaultFriendPrivacy, areFriends = true, totalOwnedVideoCount = videoCount) ?: raw
+    }
+
+    /** The friend's climbs already passed `firestore.rules`' visibility check just to be
+     * readable at all — this only maps what came back into the scoring engine's input shape. */
+    private suspend fun friendAttempts(friendUid: String, period: LeaderboardPeriod): List<ClimbAttempt> =
+        friendClimbsRepository.observeSharedClimbs(friendUid).first()
+            .filter { it.createdAt in period.startAt until period.endAt }
+            .map { it.toClimbAttempt() }
+
+    private fun SharedClimb.toClimbAttempt(): ClimbAttempt = ClimbAttempt(
+        id = id,
+        userId = ownerUid,
+        problemId = id,
+        sessionId = "${id}_session",
+        attemptedAt = createdAt,
+        vGrade = vGrade?.let { VGrade(it) },
+        attemptNumber = 1,
+        completed = outcome == ClimbOutcome.SENT,
+        isFlash = false,
+        videoId = videoStoragePath,
+    )
 
     /**
      * Best-effort mapping from the real local climb log into the scoring engine's input shape.

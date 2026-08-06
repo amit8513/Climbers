@@ -6,9 +6,9 @@ current implementation.
 
 ## What's real vs. what's still missing
 
-There is currently no backend that syncs friends' climb data across devices — Firebase (used by
-the friends feature) only stores usernames and the accepted-friend graph, nothing about climbs,
-sessions, or videos. Building that sync is a separate, larger project.
+Friends' climbs now sync to Firestore/Storage when marked Friends-only or Public
+(`com.example.climb.sharing` — `ClimbSyncRepository`/`ClimbSyncWorker` on the write side,
+`FriendClimbsRepository` on the read side), so the leaderboard reads real data, not a mock roster.
 
 So, today (`leaderboard/data/LocalLeaderboardRepository.kt`):
 
@@ -16,27 +16,27 @@ So, today (`leaderboard/data/LocalLeaderboardRepository.kt`):
   unit-tested logic in `com.example.climb.leaderboard.scoring`/`period`/`privacy`.
 - **Only your real accepted friends appear** (`SocialRepository.observeFriends`) — there is no
   mock/demo roster.
-- **Your own row is real** — computed from your actual logged climbs (`ClimbRepository`), run
-  through the same scoring pipeline a friend's data would use once sync exists.
-- Because this device can't read a friend's climbs from anywhere, every real friend currently has
-  zero visible activity and shows up under "Friends without data yet" instead of in the ranked
-  list — this is expected, not a bug, until real cross-device climb sync is built. Once a friend's
-  attempts/sessions are readable here, they'll rank normally with no code changes needed beyond
-  wiring in that data source.
-- Because `ClimbEntity` (the current climb log) has no attempt history or shared problem identity
-  yet, each logged climb maps to its own one-attempt "problem." Real attempt/problem tracking
-  would make your own Consistency/lock-off-style metrics much more meaningful.
+- **Every entry's climbs are real** — yours from `ClimbRepository` (local), a friend's from
+  `FriendClimbsRepository` (their Friends-only/Public synced climbs), both mapped into the same
+  `ClimbAttempt` shape and run through the identical scoring pipeline.
+- A friend who hasn't shared anything (or shared nothing in the selected period) has nothing to
+  rank on and shows up under "Friends without data yet" — that's genuinely no data, not a
+  stand-in for missing sync.
+- Because `ClimbEntity`/`SharedClimb` have no attempt history or shared problem identity yet,
+  each logged/shared climb maps to its own one-attempt "problem." Real attempt/problem tracking
+  would make Consistency/lock-off-style metrics much more meaningful for everyone.
 - Per-friend leaderboard privacy settings (`LeaderboardPrivacySettings`) aren't stored anywhere
-  yet either — `LocalLeaderboardRepository` applies a reasonable default (participating, stats
-  visible to friends, friends-only video) to every accepted friend until real settings exist.
+  yet — `LocalLeaderboardRepository` applies a reasonable default (participating, stats visible to
+  friends, friends-only video) to every accepted friend. In practice this is mostly redundant with
+  `firestore.rules`, which already restricted what `FriendClimbsRepository` could read in the
+  first place.
 
-**What must move server-side once real cross-friend sync exists:** the climb-data sync itself
-(so a friend's attempts/sessions/videos are readable from anywhere but their own device),
-authoritative scoring (currently computed on-device from local data only), privacy enforcement
-(currently done in `LeaderboardPrivacyFilter`, called from the "trusted" local repository layer
-instead of a real server), real per-friend `LeaderboardPrivacySettings` storage, and persisted
-weekly period rows with real `Active → Calculating → Complete` status transitions (currently just
-computed on demand from calendar time).
+**What must move server-side for this to be production-grade:** authoritative scoring (currently
+computed on-device by whoever's viewing, from data already filtered by Firestore rules — a
+malicious client could still lie about its own computation, though not about what it can read),
+real per-friend `LeaderboardPrivacySettings` storage, and persisted weekly period rows with real
+`Active → Calculating → Complete` status transitions (currently just computed on demand from
+calendar time).
 
 ## The five categories
 

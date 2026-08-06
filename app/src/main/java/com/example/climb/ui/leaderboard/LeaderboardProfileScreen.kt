@@ -33,7 +33,13 @@ import com.example.climb.ui.theme.wallTexture
  * or a count), so there's nothing further to hide here in the UI.
  */
 @Composable
-fun LeaderboardProfileScreen(entry: LeaderboardEntry, category: LeaderboardCategory, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun LeaderboardProfileScreen(
+    entry: LeaderboardEntry,
+    category: LeaderboardCategory,
+    onBack: () -> Unit,
+    onOpenFriendClimbs: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Box(modifier = modifier.fillMaxSize().wallTexture()) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Text(
@@ -68,9 +74,11 @@ fun LeaderboardProfileScreen(entry: LeaderboardEntry, category: LeaderboardCateg
             SectionCard(title = "Shared videos") {
                 when {
                     entry.hasViewableVideo -> Text(
-                        text = "${entry.sharedVideoCount} viewable shared video${if (entry.sharedVideoCount == 1) "" else "s"} this week.",
-                        color = ClimbPalette.textSecondary,
+                        text = "${entry.sharedVideoCount} viewable shared video${if (entry.sharedVideoCount == 1) "" else "s"} this week — tap to view →",
+                        color = ClimbPalette.chalk,
+                        fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
+                        modifier = Modifier.clickable(onClick = onOpenFriendClimbs),
                     )
                     entry.hasPrivateVideo -> Text(text = "🔒 This climber's videos are private.", color = ClimbPalette.textMuted, fontSize = 13.sp)
                     else -> Text(text = "No shared videos this week.", color = ClimbPalette.textMuted, fontSize = 13.sp)

@@ -226,30 +226,6 @@ fun DetailScreen(
         }
 
         Spacer(Modifier.height(16.dp))
-        SectionCard(title = "Sharing", modifier = Modifier.padding(horizontal = 16.dp)) {
-            Text(
-                text = "Who can see this climb's video and details.",
-                color = ClimbPalette.textSecondary,
-                fontSize = 12.sp,
-            )
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SUPPORTED_VISIBILITIES.forEach { option ->
-                    VisibilityChip(
-                        label = option.displayName(),
-                        selected = currentClimb.visibility == option,
-                        onClick = {
-                            scope.launch {
-                                repository.update(currentClimb.copy(visibility = option))
-                                ClimbSyncWorker.enqueue(WorkManager.getInstance(context), currentUid, currentUsername, currentClimb.id)
-                            }
-                        },
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
         PoseAnalysisSection(
             climbId = currentClimb.id,
             videoPath = currentClimb.videoPath,
@@ -270,6 +246,30 @@ fun DetailScreen(
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                 )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        SectionCard(title = "Sharing", modifier = Modifier.padding(horizontal = 16.dp)) {
+            Text(
+                text = "Who can see this climb's video and details.",
+                color = ClimbPalette.textSecondary,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SUPPORTED_VISIBILITIES.forEach { option ->
+                    VisibilityChip(
+                        label = option.displayName(),
+                        selected = currentClimb.visibility == option,
+                        onClick = {
+                            scope.launch {
+                                repository.update(currentClimb.copy(visibility = option))
+                                ClimbSyncWorker.enqueue(WorkManager.getInstance(context), currentUid, currentUsername, currentClimb.id)
+                            }
+                        },
+                    )
+                }
             }
         }
 

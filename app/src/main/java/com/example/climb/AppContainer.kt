@@ -62,5 +62,5 @@ class AppContainer(context: Context) {
     /** Keyed by uid so the in-memory cache inside [LocalLeaderboardRepository] survives
      * navigating away from the leaderboard and back, rather than refetching every time. */
     fun leaderboardRepositoryFor(uid: String, displayName: String): LeaderboardRepository =
-        leaderboardRepositories.getOrPut(uid) { LocalLeaderboardRepository(climbRepository, socialRepository, uid, displayName) }
+        leaderboardRepositories.getOrPut(uid) { LocalLeaderboardRepository(climbRepository, socialRepository, friendClimbsRepository, uid, displayName) }
 }
