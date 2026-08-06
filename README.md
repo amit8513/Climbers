@@ -75,7 +75,7 @@ Add face recognition and support for external cameras.
 <img width="100" alt="Friends" src="https://github.com/user-attachments/assets/9f850984-8be4-414b-a71c-9ae0a5b767ec" />
 <img width="100" alt="UI Theme" src="https://github.com/user-attachments/assets/5f8e2472-761e-41a1-bdea-bf62376cd39a" />
 <img width="100" alt="CoauchTips" src="https://github.com/user-attachments/assets/b9a56d4a-2cf2-4b4d-8a93-41582a507067" />
-<img width="100" height="1386" alt="Aanlysis" src="https://github.com/user-attachments/assets/4316601c-b453-44ac-8e7d-817cc0299e7f" />
+<img width="100" alt="Aanlysis" src="https://github.com/user-attachments/assets/4316601c-b453-44ac-8e7d-817cc0299e7f" />
 
 ---
 
