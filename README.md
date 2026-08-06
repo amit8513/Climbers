@@ -65,13 +65,13 @@ Add face recognition and support for external cameras.
 * Significantly improved the video-analysis system.
 * Improved the overall user interface and visual design.
 * Added the ability to save videos locally to the device.
-<img width="180" alt="Friend Climbes" src="https://github.com/user-attachments/assets/fb63d60a-d9bf-4448-b98e-3c251e8dcfeb" />
-<img width="180" alt="Friend Climb UI" src="https://github.com/user-attachments/assets/8d75d42c-2c0a-46dc-9f1d-ea7d1bf026a8" />
-<img width="180" alt="HOME" src="https://github.com/user-attachments/assets/8b5b7308-13ed-4d01-9a46-5e3c862e83ad" />
-<img width="180" alt="Progress" src="https://github.com/user-attachments/assets/3c70efcf-22c9-4357-a8b3-67cccfce9e24" />
-<img width="180" alt="Leaderboard" src="https://github.com/user-attachments/assets/0d53d43c-132a-49fc-97dd-92461200bfa6" />
-<img width="180" alt="Friends" src="https://github.com/user-attachments/assets/9f850984-8be4-414b-a71c-9ae0a5b767ec" />
-<img width="180" alt="UI Theme" src="https://github.com/user-attachments/assets/5f8e2472-761e-41a1-bdea-bf62376cd39a" />
+<img width="90" alt="Friend Climbes" src="https://github.com/user-attachments/assets/fb63d60a-d9bf-4448-b98e-3c251e8dcfeb" />
+<img width="90" alt="Friend Climb UI" src="https://github.com/user-attachments/assets/8d75d42c-2c0a-46dc-9f1d-ea7d1bf026a8" />
+<img width="90" alt="HOME" src="https://github.com/user-attachments/assets/8b5b7308-13ed-4d01-9a46-5e3c862e83ad" />
+<img width="90" alt="Progress" src="https://github.com/user-attachments/assets/3c70efcf-22c9-4357-a8b3-67cccfce9e24" />
+<img width="90" alt="Leaderboard" src="https://github.com/user-attachments/assets/0d53d43c-132a-49fc-97dd-92461200bfa6" />
+<img width="90" alt="Friends" src="https://github.com/user-attachments/assets/9f850984-8be4-414b-a71c-9ae0a5b767ec" />
+<img width="90" alt="UI Theme" src="https://github.com/user-attachments/assets/5f8e2472-761e-41a1-bdea-bf62376cd39a" />
 ---
 
 ## Current Features
