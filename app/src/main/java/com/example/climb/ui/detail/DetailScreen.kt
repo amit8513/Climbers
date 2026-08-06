@@ -54,6 +54,7 @@ import com.example.climb.data.ClimbRepository
 import com.example.climb.playback.ColorIsolationEffect
 import com.example.climb.playback.exportWithColorIsolation
 import com.example.climb.sharing.ClimbSyncWorker
+import com.example.climb.util.saveVideoToGallery
 import com.example.climb.ui.components.HoldBadge
 import com.example.climb.ui.components.OutcomePill
 import com.example.climb.ui.components.SectionCard
@@ -113,6 +114,9 @@ fun DetailScreen(
     var isSavingVisibility by remember { mutableStateOf(false) }
     var isExportingVideo by remember { mutableStateOf(false) }
     var exportError by remember { mutableStateOf<String?>(null) }
+    var isSavingToGallery by remember { mutableStateOf(false) }
+    var galleryError by remember { mutableStateOf<String?>(null) }
+    var gallerySavedMessage by remember { mutableStateOf<String?>(null) }
 
     // Effects must be set before prepare() — ExoPlayer decides whether to route through the GL
     // effects pipeline at prepare time, so setting them afterwards (e.g. only from the
@@ -295,6 +299,61 @@ fun DetailScreen(
                 )
                 exportError?.let { message ->
                     Text(text = message, color = ClimbPalette.fell, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+            if (isSavingToGallery) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CircularProgressIndicator(modifier = Modifier.height(14.dp).width(14.dp), strokeWidth = 2.dp, color = ClimbPalette.chalk)
+                    Text(text = "Saving to your device…", color = ClimbPalette.textSecondary, fontSize = 11.sp)
+                }
+            } else {
+                Text(
+                    text = "Save to device",
+                    color = ClimbPalette.chalk,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.clickable {
+                        if (!isExportingVideo) {
+                            isSavingToGallery = true
+                            galleryError = null
+                            gallerySavedMessage = null
+                            val tempFile = File(context.cacheDir, "climb_${currentClimb.id}_gallery_${System.currentTimeMillis()}.mp4")
+                            scope.launch {
+                                runCatching {
+                                    exportWithColorIsolation(
+                                        context = context,
+                                        inputPath = currentClimb.videoPath,
+                                        outputPath = tempFile.absolutePath,
+                                        routeColor = currentClimb.routeColor,
+                                        hueOffsetDegrees = hueOffsetPosition,
+                                        hueToleranceDegrees = hueTolerancePosition,
+                                    )
+                                    saveVideoToGallery(context, tempFile, "Climb_${currentClimb.id}_${System.currentTimeMillis()}.mp4")
+                                }.onSuccess {
+                                    gallerySavedMessage = "Saved to your device's Movies folder"
+                                }.onFailure { error ->
+                                    galleryError = error.message ?: "Couldn't save the video to your device"
+                                }
+                                tempFile.delete()
+                                isSavingToGallery = false
+                            }
+                        }
+                    },
+                )
+                Text(
+                    text = "Renders the current color effect into a copy saved to this device's Movies folder — separate from sharing.",
+                    color = ClimbPalette.textMuted,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                galleryError?.let { message ->
+                    Text(text = message, color = ClimbPalette.fell, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+                }
+                gallerySavedMessage?.let { message ->
+                    Text(text = message, color = ClimbPalette.sent, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                 }
             }
         }
