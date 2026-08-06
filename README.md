@@ -67,15 +67,16 @@ Add face recognition and support for external cameras.
 
 ## Screenshots
 
-<img width="100" alt="Friend Climbes" src="https://github.com/user-attachments/assets/fb63d60a-d9bf-4448-b98e-3c251e8dcfeb" />
-<img width="100" alt="Friend Climb UI" src="https://github.com/user-attachments/assets/8d75d42c-2c0a-46dc-9f1d-ea7d1bf026a8" />
-<img width="100" alt="HOME" src="https://github.com/user-attachments/assets/8b5b7308-13ed-4d01-9a46-5e3c862e83ad" />
-<img width="100" alt="Progress" src="https://github.com/user-attachments/assets/3c70efcf-22c9-4357-a8b3-67cccfce9e24" />
-<img width="100" alt="Leaderboard" src="https://github.com/user-attachments/assets/0d53d43c-132a-49fc-97dd-92461200bfa6" />
-<img width="100" alt="Friends" src="https://github.com/user-attachments/assets/9f850984-8be4-414b-a71c-9ae0a5b767ec" />
-<img width="100" alt="UI Theme" src="https://github.com/user-attachments/assets/5f8e2472-761e-41a1-bdea-bf62376cd39a" />
-<img width="100" alt="CoauchTips" src="https://github.com/user-attachments/assets/b9a56d4a-2cf2-4b4d-8a93-41582a507067" />
-<img width="100" alt="Aanlysis" src="https://github.com/user-attachments/assets/4316601c-b453-44ac-8e7d-817cc0299e7f" />
+<img width="90" alt="HOME" src="https://github.com/user-attachments/assets/8b5b7308-13ed-4d01-9a46-5e3c862e83ad" />
+<img width="90" alt="Climb" src="https://github.com/user-attachments/assets/29023154-8f45-49ec-9922-2b34b140705e" />
+<img width="90" alt="CoauchTips" src="https://github.com/user-attachments/assets/b9a56d4a-2cf2-4b4d-8a93-41582a507067" />
+<img width="90" alt="Aanlysis" src="https://github.com/user-attachments/assets/4316601c-b453-44ac-8e7d-817cc0299e7f" />
+<img width="90" alt="Progress" src="https://github.com/user-attachments/assets/3c70efcf-22c9-4357-a8b3-67cccfce9e24" />
+<img width="90" alt="Leaderboard" src="https://github.com/user-attachments/assets/0d53d43c-132a-49fc-97dd-92461200bfa6" />
+<img width="90" alt="Friends" src="https://github.com/user-attachments/assets/9f850984-8be4-414b-a71c-9ae0a5b767ec" />
+<img width="90" alt="Friend Climbes" src="https://github.com/user-attachments/assets/fb63d60a-d9bf-4448-b98e-3c251e8dcfeb" />
+<img width="90" alt="Friend Climb UI" src="https://github.com/user-attachments/assets/8d75d42c-2c0a-46dc-9f1d-ea7d1bf026a8" />
+<img width="90" alt="UI Theme" src="https://github.com/user-attachments/assets/5f8e2472-761e-41a1-bdea-bf62376cd39a" />
 
 ---
 
