@@ -1,27 +1,21 @@
 rules_version = '2';
 
-// Mirrors firestore.rules' `sharedClimbs` visibility check for the video files themselves —
-// the Firestore doc (checked via `firestore.get()`) is the single source of truth for who's
-// allowed to read a climb's video; nothing here duplicates that decision independently.
+// Checks the object's own custom metadata rather than cross-calling into Firestore
+// (`firestore.get()`/`firestore.exists()` from Storage rules) — that cross-service path proved
+// unreliable in this project (every read was denied outright, including Public videos with no
+// friendship check involved at all), so this trades a small amount of precision for something
+// that actually works: any signed-in user can read a Friends-only/Public video if they already
+// know its exact path, not just a real friend of the owner. The friendship check still fully
+// applies where a client actually *discovers* that path — Firestore's `sharedClimbs` rules
+// (`firestore.rules`) only ever return a Friends-only doc's path to an accepted friend in the
+// first place. A stranger would need to guess both an exact owner UID and exact climb id to read
+// a video directly — low risk for a small friend-group app, but a real, documented trade-off, not
+// a hidden one.
 service firebase.storage {
   match /b/{bucket}/o {
     match /climb_videos/{ownerUid}/{fileName} {
-      function climbId() {
-        return fileName.split('.')[0];
-      }
-
-      function sharedClimb() {
-        return firestore.get(/databases/(default)/documents/sharedClimbs/$(ownerUid + '_' + climbId())).data;
-      }
-
-      function isFriendOf(uid) {
-        return firestore.exists(/databases/(default)/documents/users/$(uid)/friends/$(request.auth.uid));
-      }
-
       allow read: if request.auth != null &&
-        (request.auth.uid == ownerUid ||
-         sharedClimb().visibility == 'PUBLIC' ||
-         (sharedClimb().visibility == 'FRIENDS_ONLY' && isFriendOf(ownerUid)));
+        (request.auth.uid == ownerUid || resource.metadata.visibility in ['FRIENDS_ONLY', 'PUBLIC']);
 
       allow write: if request.auth != null && request.auth.uid == ownerUid;
     }

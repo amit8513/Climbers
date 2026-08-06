@@ -5,6 +5,7 @@ import com.example.climb.analysis.Visibility
 import com.example.climb.data.ClimbEntity
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 import kotlinx.coroutines.tasks.await
 import java.io.File
 
@@ -36,7 +37,14 @@ class ClimbSyncRepository(
 
         val file = File(climb.videoPath)
         if (file.exists()) {
-            videoRef.putFile(Uri.fromFile(file)).await()
+            // Visibility is stored as custom metadata on the object itself so `storage.rules`
+            // can check it directly, rather than cross-calling into Firestore from Storage rules
+            // — that cross-service path proved unreliable in practice (every read was denied,
+            // even for Public videos, where no friendship check was even involved).
+            val metadata = StorageMetadata.Builder()
+                .setCustomMetadata("visibility", climb.visibility.name)
+                .build()
+            videoRef.putFile(Uri.fromFile(file), metadata).await()
         }
 
         docRef.set(

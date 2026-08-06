@@ -121,7 +121,7 @@ fun AnalysisProgressScreen(
                         completedSteps = completedPhases,
                         active = currentStatus != null && currentStatus != AnalysisStatus.COMPLETE,
                         modifier = Modifier
-                            .width(96.dp)
+                            .width(112.dp)
                             .height(PHASE_COLUMN_HEIGHT),
                     )
                 }

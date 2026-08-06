@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.lerp
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -70,21 +71,27 @@ fun ClimbingProgressIndicator(
         val lower = climberHeight.toInt().coerceIn(0, stepCount - 1)
         val upper = (lower + 1).coerceAtMost(stepCount - 1)
         val t = (climberHeight - lower).coerceIn(0f, 1f)
-        val anchor = Offset(
-            x = holds[lower].x + (holds[upper].x - holds[lower].x) * t,
-            y = holds[lower].y + (holds[upper].y - holds[lower].y) * t,
-        )
+        val handHold = lerp(holds[lower], holds[upper], t)
 
-        drawClimber(anchor = anchor, reach = reach)
+        // The heel hooks whichever hold sits one below the hands. On the very first hold there
+        // is nothing below to hook, so the leg just hangs.
+        val heelHold = if (lower >= 1) {
+            lerp(holds[lower - 1], holds[(upper - 1).coerceAtLeast(0)], t)
+        } else {
+            null
+        }
+
+        drawClimber(handHold = handHold, heelHold = heelHold, reach = reach)
     }
 }
 
 private fun holdCenter(index: Int, stepCount: Int, width: Float, height: Float): Offset {
     val fraction = (index + 0.5f) / stepCount
-    // Alternate sides so the route zigzags like a real problem instead of a straight ladder.
+    // Alternate sides so the route zigzags like a real problem instead of a straight ladder,
+    // but keep the offset small enough that the climber can span two holds believably.
     val side = if (index % 2 == 0) -1f else 1f
     return Offset(
-        x = width / 2f + side * width * 0.2f,
+        x = width / 2f + side * width * 0.14f,
         y = height * (1f - fraction),
     )
 }
@@ -122,36 +129,56 @@ private fun DrawScope.drawHold(center: Offset, reached: Boolean, isCurrent: Bool
 }
 
 /**
- * Stick figure hanging off [anchor], which is the hold its leading hand is on. [reach] drives a
- * 0..1 cycle where the free hand stretches for the next hold and the hips shift with it.
+ * Stick figure matched on [handHold] with both hands, heel-hooking [heelHold] one hold below.
+ * [reach] drives a 0..1 cycle that bobs the body as it pulls in against the hook — both hands
+ * are committed, so the motion comes from the core rather than a free arm waving.
  */
-private fun DrawScope.drawClimber(anchor: Offset, reach: Float) {
+private fun DrawScope.drawClimber(handHold: Offset, heelHold: Offset?, reach: Float) {
     val stroke = 1.6.dp.toPx()
     val color = ClimbPalette.textPrimary
+    fun px(dp: Float) = dp.dp.toPx()
 
-    // The body hangs below and slightly right of the leading hand.
-    val body = Offset(anchor.x + 7.dp.toPx(), anchor.y + 15.dp.toPx())
-    val shoulder = Offset(body.x, body.y - 5.dp.toPx())
-    val hip = Offset(body.x, body.y + 8.dp.toPx())
-    val headCenter = Offset(body.x, body.y - 11.dp.toPx())
+    // Matched hands either side of the hold's centre.
+    val leftHand = Offset(handHold.x - px(7f), handHold.y + px(1f))
+    val rightHand = Offset(handHold.x + px(7f), handHold.y + px(1f))
 
-    drawCircle(color = color, radius = 3.6.dp.toPx(), center = headCenter, style = Stroke(width = stroke))
+    // Pulling in against the hook lifts the body slightly. The shoulder hangs far enough below
+    // the hold that the arms read as two lines and the head clears the hold itself.
+    val pull = reach * px(3f)
+    val shoulder = Offset(handHold.x, handHold.y + px(21f) - pull)
+    val hip = Offset(handHold.x + px(1f), shoulder.y + px(14f))
+    val headCenter = Offset(handHold.x, shoulder.y - px(5.5f))
+
+    drawLine(color, shoulder, leftHand, strokeWidth = stroke, cap = StrokeCap.Round)
+    drawLine(color, shoulder, rightHand, strokeWidth = stroke, cap = StrokeCap.Round)
     drawLine(color, shoulder, hip, strokeWidth = stroke, cap = StrokeCap.Round)
 
-    // Leading arm stays on the hold; the free arm reaches up and back down.
-    drawLine(color, shoulder, anchor, strokeWidth = stroke, cap = StrokeCap.Round)
-    val freeHand = Offset(
-        x = body.x + 11.dp.toPx(),
-        y = body.y - (6.dp.toPx() + reach * 9.dp.toPx()),
-    )
-    drawLine(color, shoulder, freeHand, strokeWidth = stroke, cap = StrokeCap.Round)
+    if (heelHold != null) {
+        // Knee bows out toward the hooked hold so the bent leg reads as a hook rather than a
+        // straight stand-up.
+        val outward = if (heelHold.x < hip.x) -1f else 1f
+        val knee = Offset(
+            x = (hip.x + heelHold.x) / 2f + outward * px(8f),
+            y = (hip.y + heelHold.y) / 2f + px(2f),
+        )
+        drawLine(color, hip, knee, strokeWidth = stroke, cap = StrokeCap.Round)
+        drawLine(color, knee, heelHold, strokeWidth = stroke, cap = StrokeCap.Round)
+        // Toe kicks back up over the hold — the detail that makes it a heel hook.
+        val toe = Offset(heelHold.x + outward * px(5f), heelHold.y - px(6f))
+        drawLine(color, heelHold, toe, strokeWidth = stroke, cap = StrokeCap.Round)
+    }
 
-    // Legs push off, the trailing one swinging a little with the reach.
-    val leadFoot = Offset(body.x - 7.dp.toPx(), hip.y + 10.dp.toPx())
-    val trailFoot = Offset(
-        x = body.x + 8.dp.toPx() - reach * 2.dp.toPx(),
-        y = hip.y + 8.dp.toPx() + reach * 2.dp.toPx(),
+    // Trailing leg hangs off the wall, swinging a little with the pull.
+    val trailingSide = if (heelHold != null && heelHold.x < hip.x) 1f else -1f
+    val trailingKnee = Offset(hip.x + trailingSide * px(7f), hip.y + px(9f))
+    val trailingFoot = Offset(
+        x = trailingKnee.x + trailingSide * px(3f) + reach * px(2f),
+        y = trailingKnee.y + px(9f),
     )
-    drawLine(color, hip, leadFoot, strokeWidth = stroke, cap = StrokeCap.Round)
-    drawLine(color, hip, trailFoot, strokeWidth = stroke, cap = StrokeCap.Round)
+    drawLine(color, hip, trailingKnee, strokeWidth = stroke, cap = StrokeCap.Round)
+    drawLine(color, trailingKnee, trailingFoot, strokeWidth = stroke, cap = StrokeCap.Round)
+
+    // Head goes on last and filled, so the arm and torso lines converging behind it are hidden
+    // rather than crossing through an outlined circle and reading as a scribble.
+    drawCircle(color = color, radius = px(3.4f), center = headCenter)
 }
