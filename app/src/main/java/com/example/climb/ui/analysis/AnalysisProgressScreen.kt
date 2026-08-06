@@ -1,5 +1,7 @@
 package com.example.climb.ui.analysis
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,10 +11,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.ui.draw.clip
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -98,18 +103,28 @@ fun AnalysisProgressScreen(
                     Text("Back")
                 }
             } else {
-                PHASES.forEach { (status, label) ->
-                    PhaseRow(label = label, state = phaseState(status, currentStatus))
-                    Spacer(Modifier.height(14.dp))
-                }
-
-                Spacer(Modifier.height(8.dp))
-                LinearProgressIndicator(
-                    progress = { fraction },
+                val completedPhases = completedPhaseCount(currentStatus)
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    color = ClimbPalette.chalk,
-                    trackColor = ClimbPalette.border,
-                )
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        PHASES.forEach { (status, label) ->
+                            PhaseBlock(label = label, state = phaseState(status, currentStatus))
+                        }
+                    }
+                    ClimbingProgressIndicator(
+                        stepCount = PHASES.size,
+                        completedSteps = completedPhases,
+                        active = currentStatus != null && currentStatus != AnalysisStatus.COMPLETE,
+                        modifier = Modifier
+                            .width(96.dp)
+                            .height(PHASE_COLUMN_HEIGHT),
+                    )
+                }
 
                 Spacer(Modifier.height(24.dp))
                 OutlinedButton(
@@ -141,18 +156,54 @@ private fun phaseState(status: AnalysisStatus, current: AnalysisStatus?): PhaseS
     }
 }
 
+/** Number of phases fully behind us — drives how high the climber has got. */
+private fun completedPhaseCount(current: AnalysisStatus?): Int = when {
+    current == null -> 0
+    current == AnalysisStatus.COMPLETE -> PHASES.size
+    else -> PHASES.indexOfFirst { it.first == current }.coerceAtLeast(0)
+}
+
 @Composable
-private fun PhaseRow(label: String, state: PhaseState) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        when (state) {
-            PhaseState.ACTIVE -> CircularProgressIndicator(modifier = Modifier.height(16.dp), strokeWidth = 2.dp, color = ClimbPalette.chalk)
-            PhaseState.DONE -> Text("✓", color = ClimbPalette.sent, fontWeight = FontWeight.Bold)
-            PhaseState.UPCOMING -> Box(modifier = Modifier.height(16.dp))
+private fun PhaseBlock(label: String, state: PhaseState) {
+    val shape = RoundedCornerShape(8.dp)
+    val borderColor = when (state) {
+        PhaseState.DONE -> ClimbPalette.sent.copy(alpha = 0.5f)
+        PhaseState.ACTIVE -> ClimbPalette.chalk.copy(alpha = 0.7f)
+        PhaseState.UPCOMING -> ClimbPalette.border
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(PHASE_BLOCK_HEIGHT)
+            .clip(shape)
+            .background(if (state == PhaseState.UPCOMING) Color.Transparent else ClimbPalette.surface)
+            .border(1.dp, borderColor, shape)
+            .padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(modifier = Modifier.width(16.dp), contentAlignment = Alignment.Center) {
+            when (state) {
+                PhaseState.ACTIVE -> CircularProgressIndicator(
+                    modifier = Modifier.size(13.dp),
+                    strokeWidth = 2.dp,
+                    color = ClimbPalette.chalk,
+                )
+                PhaseState.DONE -> Text("✓", color = ClimbPalette.sent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                PhaseState.UPCOMING -> Box(modifier = Modifier.size(13.dp))
+            }
         }
         Text(
             text = label,
             color = if (state == PhaseState.UPCOMING) ClimbPalette.textMuted else ClimbPalette.textPrimary,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
+            fontWeight = if (state == PhaseState.ACTIVE) FontWeight.Bold else FontWeight.Normal,
         )
     }
 }
+
+private val PHASE_BLOCK_HEIGHT = 38.dp
+
+// Six blocks plus the 10.dp gaps between them — the climbing wall matches this so the holds
+// line up with the blocks they represent.
+private val PHASE_COLUMN_HEIGHT = PHASE_BLOCK_HEIGHT * 6 + 10.dp * 5

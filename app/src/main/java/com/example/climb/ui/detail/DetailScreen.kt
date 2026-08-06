@@ -2,6 +2,7 @@ package com.example.climb.ui.detail
 
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -42,11 +43,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.work.WorkManager
 import com.example.climb.analysis.AnalysisRepository
 import com.example.climb.analysis.AnalysisStatus
 import com.example.climb.analysis.ClimbAttemptEntity
+import com.example.climb.analysis.Visibility
 import com.example.climb.data.ClimbRepository
 import com.example.climb.playback.ColorIsolationEffect
+import com.example.climb.sharing.ClimbSyncWorker
 import com.example.climb.ui.components.HoldBadge
 import com.example.climb.ui.components.OutcomePill
 import com.example.climb.ui.components.SectionCard
@@ -61,11 +65,23 @@ import kotlin.math.roundToInt
 
 private val detailDateFormatter = SimpleDateFormat("MMM d, h:mm a", Locale.US)
 
+/** Only these are wired up for cloud sync today — [Visibility.SELECTED_FRIENDS] isn't offered
+ * here yet since there's no picker/rules support for it on the main climb log. */
+private val SUPPORTED_VISIBILITIES = listOf(Visibility.PRIVATE, Visibility.FRIENDS_ONLY, Visibility.PUBLIC)
+
+private fun Visibility.displayName(): String = when (this) {
+    Visibility.PRIVATE -> "Private"
+    Visibility.FRIENDS_ONLY -> "Friends only"
+    Visibility.SELECTED_FRIENDS -> "Selected friends"
+    Visibility.PUBLIC -> "Public"
+}
+
 @Composable
 fun DetailScreen(
     climbId: Long,
     repository: ClimbRepository,
     currentUid: String,
+    currentUsername: String,
     analysisRepository: AnalysisRepository,
     onDeleted: () -> Unit,
     onStartAnalysis: (videoPath: String, durationMs: Long, sourceClimbId: Long) -> Unit,
@@ -210,6 +226,30 @@ fun DetailScreen(
         }
 
         Spacer(Modifier.height(16.dp))
+        SectionCard(title = "Sharing", modifier = Modifier.padding(horizontal = 16.dp)) {
+            Text(
+                text = "Who can see this climb's video and details.",
+                color = ClimbPalette.textSecondary,
+                fontSize = 12.sp,
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SUPPORTED_VISIBILITIES.forEach { option ->
+                    VisibilityChip(
+                        label = option.displayName(),
+                        selected = currentClimb.visibility == option,
+                        onClick = {
+                            scope.launch {
+                                repository.update(currentClimb.copy(visibility = option))
+                                ClimbSyncWorker.enqueue(WorkManager.getInstance(context), currentUid, currentUsername, currentClimb.id)
+                            }
+                        },
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
         PoseAnalysisSection(
             climbId = currentClimb.id,
             videoPath = currentClimb.videoPath,
@@ -245,6 +285,7 @@ fun DetailScreen(
                     .clickable {
                         scope.launch {
                             repository.delete(currentClimb)
+                            ClimbSyncWorker.enqueue(WorkManager.getInstance(context), currentUid, currentUsername, currentClimb.id)
                             onDeleted()
                         }
                     }
@@ -322,6 +363,22 @@ private fun PoseAnalysisStatusRow(
             modifier = Modifier.clickable { onViewProgress(attempt.id) },
         )
     }
+}
+
+@Composable
+private fun VisibilityChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = if (selected) ClimbPalette.chalkText else ClimbPalette.textSecondary,
+        fontSize = 12.sp,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) ClimbPalette.chalk else ClimbPalette.surfaceRaised)
+            .border(1.dp, if (selected) ClimbPalette.chalk else ClimbPalette.border, RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    )
 }
 
 @Composable

@@ -12,7 +12,7 @@ import com.example.climb.analysis.ClimbAttemptEntity
 
 @Database(
     entities = [ClimbEntity::class, ClimbAttemptEntity::class, ClimbAnalysisEntity::class],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class ClimbDatabase : RoomDatabase() {
@@ -99,10 +99,18 @@ abstract class ClimbDatabase : RoomDatabase() {
             }
         }
 
+        // Additive: sharing visibility per climb, defaulting to private — sharing is opt-in,
+        // never on by default for existing rows.
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE climbs ADD COLUMN visibility TEXT NOT NULL DEFAULT 'PRIVATE'")
+            }
+        }
+
         fun getInstance(context: Context): ClimbDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context, ClimbDatabase::class.java, "climb.db")
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { instance = it }
             }

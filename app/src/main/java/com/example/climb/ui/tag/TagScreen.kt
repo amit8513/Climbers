@@ -29,12 +29,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.work.WorkManager
+import com.example.climb.analysis.Visibility
 import com.example.climb.data.ClimbEntity
 import com.example.climb.data.ClimbOutcome
 import com.example.climb.data.ClimbRepository
 import com.example.climb.data.RouteColor
+import com.example.climb.sharing.ClimbSyncWorker
 import kotlinx.coroutines.launch
+
+/** Only these are wired up for cloud sync today — [Visibility.SELECTED_FRIENDS] isn't offered
+ * here yet since there's no picker/rules support for it on the main climb log. */
+private val SUPPORTED_VISIBILITIES = listOf(Visibility.PRIVATE, Visibility.FRIENDS_ONLY, Visibility.PUBLIC)
+
+private fun Visibility.displayName(): String = when (this) {
+    Visibility.PRIVATE -> "Private"
+    Visibility.FRIENDS_ONLY -> "Friends only"
+    Visibility.SELECTED_FRIENDS -> "Selected friends"
+    Visibility.PUBLIC -> "Public"
+}
 
 @Composable
 fun TagScreen(
@@ -42,14 +57,17 @@ fun TagScreen(
     durationMs: Long,
     repository: ClimbRepository,
     currentUid: String,
+    currentUsername: String,
     onSaved: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     var vGrade by remember { mutableStateOf<Int?>(null) }
     var routeColor by remember { mutableStateOf<RouteColor?>(null) }
     var outcome by remember { mutableStateOf(ClimbOutcome.SENT) }
     var notes by remember { mutableStateOf("") }
+    var visibility by remember { mutableStateOf(Visibility.PRIVATE) }
     var saving by remember { mutableStateOf(false) }
 
     Column(
@@ -101,13 +119,24 @@ fun TagScreen(
             minLines = 3,
         )
 
+        Text("Who can see this")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SUPPORTED_VISIBILITIES.forEach { option ->
+                FilterChip(
+                    selected = visibility == option,
+                    onClick = { visibility = option },
+                    label = { Text(option.displayName()) },
+                )
+            }
+        }
+
         Button(
             enabled = routeColor != null && !saving,
             onClick = {
                 val color = routeColor ?: return@Button
                 saving = true
                 scope.launch {
-                    repository.save(
+                    val climbId = repository.save(
                         ClimbEntity(
                             userId = currentUid,
                             videoPath = videoPath,
@@ -117,8 +146,10 @@ fun TagScreen(
                             routeColor = color,
                             outcome = outcome,
                             notes = notes,
+                            visibility = visibility,
                         ),
                     )
+                    ClimbSyncWorker.enqueue(WorkManager.getInstance(context), currentUid, currentUsername, climbId)
                     onSaved()
                 }
             },

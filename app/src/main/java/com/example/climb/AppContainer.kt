@@ -11,8 +11,11 @@ import com.example.climb.leaderboard.data.LeaderboardRepository
 import com.example.climb.leaderboard.data.LocalLeaderboardRepository
 import com.example.climb.pose.MediaPipePoseEstimator
 import com.example.climb.pose.PoseEstimator
+import com.example.climb.sharing.ClimbSyncRepository
+import com.example.climb.sharing.FriendClimbsRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import java.io.File
 
 class AppContainer(context: Context) {
@@ -35,6 +38,16 @@ class AppContainer(context: Context) {
     val socialRepository: SocialRepository by lazy {
         SocialRepository(FirebaseFirestore.getInstance())
     }
+
+    val climbSyncRepository: ClimbSyncRepository by lazy {
+        ClimbSyncRepository(FirebaseFirestore.getInstance(), FirebaseStorage.getInstance())
+    }
+
+    val friendClimbsRepository: FriendClimbsRepository by lazy {
+        FriendClimbsRepository(FirebaseFirestore.getInstance())
+    }
+
+    val firebaseStorage: FirebaseStorage by lazy { FirebaseStorage.getInstance() }
 
     val moviesDir: File by lazy {
         (context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir).apply {

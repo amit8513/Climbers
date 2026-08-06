@@ -31,6 +31,7 @@ import com.example.climb.ui.theme.NotchedBarShape
 private const val ROUTE_HOME = "home"
 private const val ROUTE_PROGRESS = "progress"
 private const val ROUTE_FRIENDS = "friends"
+private const val ROUTE_LEADERBOARD = "leaderboard"
 
 @Composable
 fun ClimbBottomBar(
@@ -38,6 +39,7 @@ fun ClimbBottomBar(
     onHomeClick: () -> Unit,
     onProgressClick: () -> Unit,
     onFriendsClick: () -> Unit,
+    onLeaderboardClick: () -> Unit,
     onRecordClick: () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
@@ -58,8 +60,8 @@ fun ClimbBottomBar(
                     .navigationBarsPadding(),
             ) {
                 // Two equal-width halves around a fixed-width center gap, rather than weighting
-                // each tab equally — that keeps the notch centered regardless of how many tabs
-                // sit on either side (2 left, 1 right, here).
+                // each tab equally — that keeps the notch centered regardless of how the tabs
+                // are distributed either side of it.
                 Row(modifier = Modifier.weight(1f)) {
                     NavTab(
                         label = "Home",
@@ -76,6 +78,12 @@ fun ClimbBottomBar(
                 }
                 Spacer(Modifier.width(72.dp))
                 Row(modifier = Modifier.weight(1f)) {
+                    NavTab(
+                        label = "Ranks",
+                        selected = selectedRoute == ROUTE_LEADERBOARD,
+                        onClick = onLeaderboardClick,
+                        modifier = Modifier.weight(1f),
+                    )
                     NavTab(
                         label = "Friends",
                         selected = selectedRoute == ROUTE_FRIENDS,

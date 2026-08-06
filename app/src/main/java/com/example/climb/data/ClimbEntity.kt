@@ -2,6 +2,7 @@ package com.example.climb.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.example.climb.analysis.Visibility
 
 @Entity(tableName = "climbs")
 data class ClimbEntity(
@@ -18,4 +19,8 @@ data class ClimbEntity(
      * effect's own defaults" rather than duplicating those defaults here. */
     val hueOffsetDegrees: Float? = null,
     val hueToleranceDegrees: Float? = null,
+    /** Whether friends/anyone can see this climb's video and details. Defaults to private —
+     * sharing is opt-in per climb, never on by default. Only PRIVATE/FRIENDS_ONLY/PUBLIC are
+     * wired up for cloud sync today; SELECTED_FRIENDS is a documented follow-up. */
+    val visibility: Visibility = Visibility.PRIVATE,
 )

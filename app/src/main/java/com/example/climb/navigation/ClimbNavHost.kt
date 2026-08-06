@@ -27,6 +27,7 @@ import com.example.climb.ui.analysis.VideoSourceScreen
 import com.example.climb.ui.auth.AuthScreen
 import com.example.climb.ui.auth.ProfileSetupScreen
 import com.example.climb.ui.detail.DetailScreen
+import com.example.climb.ui.friends.FriendClimbsScreen
 import com.example.climb.ui.friends.FriendsScreen
 import com.example.climb.ui.home.HomeScreen
 import com.example.climb.ui.leaderboard.LeaderboardScreen
@@ -51,6 +52,7 @@ private object Routes {
     const val CLIMB_DETAILS_INPUT = "climb_details_input/{videoPath}/{durationMs}/{sourceClimbId}"
     const val ANALYSIS_PROGRESS = "analysis_progress/{attemptId}"
     const val ANALYSIS_RESULT = "analysis_result/{analysisId}"
+    const val FRIEND_CLIMBS = "friend_climbs/{friendUid}/{friendUsername}"
 
     fun tag(videoPath: String, durationMs: Long) = "tag/${Uri.encode(videoPath)}/$durationMs"
     fun detail(climbId: Long) = "detail/$climbId"
@@ -58,7 +60,11 @@ private object Routes {
         "climb_details_input/${Uri.encode(videoPath)}/$durationMs/$sourceClimbId"
     fun analysisProgress(attemptId: Long) = "analysis_progress/$attemptId"
     fun analysisResult(analysisId: Long) = "analysis_result/$analysisId"
+    fun friendClimbs(friendUid: String, friendUsername: String) = "friend_climbs/$friendUid/${Uri.encode(friendUsername)}"
 }
+
+/** Destinations that are bottom-bar tabs, and so keep the bar visible. */
+private val TAB_ROUTES = setOf(Routes.HOME, Routes.PROGRESS, Routes.LEADERBOARD, Routes.FRIENDS)
 
 private sealed interface ProfileLoadState {
     object Loading : ProfileLoadState
@@ -116,12 +122,13 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
     Scaffold(
         containerColor = ClimbPalette.bg,
         bottomBar = {
-            if (currentRoute == Routes.HOME || currentRoute == Routes.PROGRESS || currentRoute == Routes.FRIENDS) {
+            if (currentRoute in TAB_ROUTES) {
                 ClimbBottomBar(
                     selectedRoute = currentRoute,
                     onHomeClick = { navigateToTab(navController, Routes.HOME) },
                     onProgressClick = { navigateToTab(navController, Routes.PROGRESS) },
                     onFriendsClick = { navigateToTab(navController, Routes.FRIENDS) },
+                    onLeaderboardClick = { navigateToTab(navController, Routes.LEADERBOARD) },
                     onRecordClick = { navController.navigate(Routes.RECORD) },
                 )
             }
@@ -151,7 +158,25 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     currentUsername = profile.username,
                     socialRepository = container.socialRepository,
                     authRepository = container.authRepository,
-                    onLeaderboardClick = { navController.navigate(Routes.LEADERBOARD) },
+                    onFriendClick = { friend -> navController.navigate(Routes.friendClimbs(friend.uid, friend.username)) },
+                )
+            }
+
+            composable(
+                route = Routes.FRIEND_CLIMBS,
+                arguments = listOf(
+                    navArgument("friendUid") { type = NavType.StringType },
+                    navArgument("friendUsername") { type = NavType.StringType },
+                ),
+            ) { backStackEntry ->
+                val friendUid = backStackEntry.arguments?.getString("friendUid").orEmpty()
+                val friendUsername = Uri.decode(backStackEntry.arguments?.getString("friendUsername").orEmpty())
+                FriendClimbsScreen(
+                    friendUsername = friendUsername,
+                    friendUid = friendUid,
+                    friendClimbsRepository = container.friendClimbsRepository,
+                    firebaseStorage = container.firebaseStorage,
+                    onBack = { navController.popBackStack() },
                 )
             }
 
@@ -187,6 +212,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     durationMs = durationMs,
                     repository = container.climbRepository,
                     currentUid = currentUid,
+                    currentUsername = profile.username,
                     onSaved = { navController.popBackStack(Routes.HOME, false) },
                 )
             }
@@ -200,6 +226,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     climbId = climbId,
                     repository = container.climbRepository,
                     currentUid = currentUid,
+                    currentUsername = profile.username,
                     analysisRepository = container.analysisRepository,
                     onDeleted = { navController.popBackStack(Routes.HOME, false) },
                     onStartAnalysis = { path, duration, sourceClimbId ->

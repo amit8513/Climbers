@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.data.social.AuthRepository
+import com.example.climb.data.social.Friend
 import com.example.climb.data.social.FriendRequest
 import com.example.climb.data.social.SocialRepository
 import com.example.climb.ui.components.SectionCard
@@ -47,7 +48,7 @@ fun FriendsScreen(
     currentUsername: String,
     socialRepository: SocialRepository,
     authRepository: AuthRepository,
-    onLeaderboardClick: () -> Unit,
+    onFriendClick: (Friend) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -100,26 +101,6 @@ fun FriendsScreen(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.clickable { authRepository.signOut() },
                 )
-            }
-
-            Spacer(Modifier.height(14.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(ClimbPalette.surface)
-                    .border(1.dp, ClimbPalette.border, RoundedCornerShape(14.dp))
-                    .clickable(onClick = onLeaderboardClick)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text(text = "Leaderboard", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                    Text(text = "See how you stack up this week", color = ClimbPalette.textSecondary, fontSize = 11.sp)
-                }
-                Text(text = "→", color = ClimbPalette.chalk, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
 
             Spacer(Modifier.height(18.dp))
@@ -195,12 +176,17 @@ fun FriendsScreen(
                     EmptyHint("No friends yet — search a username above.")
                 } else {
                     friends.forEach { friend ->
-                        Text(
-                            text = friend.username,
-                            color = ClimbPalette.textPrimary,
-                            fontSize = 14.sp,
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onFriendClick(friend) }
+                                .padding(vertical = 8.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(text = friend.username, color = ClimbPalette.textPrimary, fontSize = 14.sp)
+                            Text(text = "View climbs →", color = ClimbPalette.textMuted, fontSize = 12.sp)
+                        }
                     }
                 }
             }
