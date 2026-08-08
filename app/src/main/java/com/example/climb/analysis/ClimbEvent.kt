@@ -18,6 +18,7 @@ enum class ClimbEventType {
     POSSIBLE_FALL,
     FINISH_STABILIZATION,
     POSSIBLE_MISSED_REACH,
+    LEG_DRIVE_CANDIDATE,
 }
 
 data class ClimbEvent(

@@ -36,12 +36,34 @@ class DeterministicCoachingRuleEngine : CoachingRuleEngine {
             repeatedLockoffsTip(metrics),
             legEngagementTip(computation),
             repeatedFootAdjustmentsTip(metrics, events),
+            footStabilityTip(metrics),
             excessivePauseRatioTip(metrics),
         ).sortedBy { it.priority }.take(3)
 
         val positive = positiveObservationTip(metrics, events)
 
         return listOfNotNull(positive) + improvements
+    }
+
+    /** Foot-index jitter while a foot was ostensibly settled — never claimed as "sloppy
+     * footwork" outright, since pose landmarks alone can't rule out the hold itself being small
+     * or textured; worded as something worth checking against the video. */
+    private fun footStabilityTip(metrics: ClimbMetrics): CoachingTip? {
+        if (metrics.footStabilityScore <= 0 || metrics.footStabilityScore >= 45) return null
+        return CoachingTip(
+            id = "foot_stability",
+            category = "Footwork",
+            title = "Watch for foot micro-adjustments after placing",
+            explanation = "Your feet showed noticeable movement even after settling on a placement (foot stability " +
+                "${metrics.footStabilityScore}/100). Worth checking the video for whether that's the hold itself or " +
+                "the foot readjusting after contact.",
+            drill = "Climb an easy problem focusing on placing each foot once and keeping it completely still until the next move.",
+            timestampMs = null,
+            confidence = 0.4f,
+            priority = 2,
+            evidence = "Foot stability score ${metrics.footStabilityScore}/100 across settled foot placements",
+            source = CoachingSource.DETERMINISTIC,
+        )
     }
 
     private fun longCruxPauseTip(events: List<ClimbEvent>, metrics: ClimbMetrics): CoachingTip? {
@@ -158,6 +180,7 @@ class DeterministicCoachingRuleEngine : CoachingRuleEngine {
      * measured signal behind it. */
     private fun positiveObservationTip(metrics: ClimbMetrics, events: List<ClimbEvent>): CoachingTip? {
         val efficient = events.firstOrNull { it.type == ClimbEventType.EFFICIENT_SEQUENCE }
+        val legDrive = events.firstOrNull { it.type == ClimbEventType.LEG_DRIVE_CANDIDATE }
         return when {
             efficient != null -> CoachingTip(
                 id = "positive_efficient_sequence",
@@ -170,6 +193,19 @@ class DeterministicCoachingRuleEngine : CoachingRuleEngine {
                 confidence = efficient.confidence,
                 priority = 0,
                 evidence = "Efficient sequence ${formatTimestampMs(efficient.startTimestampMs)}-${formatTimestampMs(efficient.endTimestampMs)}",
+                source = CoachingSource.DETERMINISTIC,
+            )
+            legDrive != null -> CoachingTip(
+                id = "positive_leg_drive",
+                category = "Positive",
+                title = "Used your legs to power a dynamic move",
+                explanation = "Around ${formatTimestampMs(legDrive.endTimestampMs)}, your knee straightened quickly right " +
+                    "before a fast movement — a sign of pushing off a foothold rather than pulling with your arms alone.",
+                drill = null,
+                timestampMs = legDrive.startTimestampMs,
+                confidence = legDrive.confidence,
+                priority = 0,
+                evidence = legDrive.userVisibleDescription,
                 source = CoachingSource.DETERMINISTIC,
             )
             metrics.straightArmPercentage >= 60f -> CoachingTip(

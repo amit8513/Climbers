@@ -25,6 +25,11 @@ data class ClimbMetrics(
     val possibleFallCandidateCount: Int,
     val hasFinishStabilization: Boolean,
     val possibleMissedReachCount: Int,
+    val legDriveCandidateCount: Int = 0,
+    val kneeRangeOfMotionDegrees: Float = 0f,
+    val footStabilityScore: Int = 0,
+    val totalFootTravelNormalized: Float = 0f,
+    val footWeightAsymmetry: Float = 0f,
 )
 
 /** Metrics plus the raw detection results they were built from — [com.example.climb.analysis.buildEvents]
@@ -42,6 +47,7 @@ data class AnalysisComputation(
     val fallCandidates: List<FallCandidateEvent>,
     val finishStabilization: FinishStabilizationEvent?,
     val missedReachCandidates: List<MissedReachCandidateEvent>,
+    val legDriveCandidates: List<LegDriveCandidateEvent> = emptyList(),
 )
 
 fun computeAnalysis(frames: List<PoseFrame>, config: MetricsConfiguration = MetricsConfiguration()): AnalysisComputation {
@@ -90,6 +96,9 @@ fun computeAnalysis(frames: List<PoseFrame>, config: MetricsConfiguration = Metr
     val finishStabilization = detectFinishStabilization(pauses, climbEndMs, config)
     val missedReachCandidates = detectMissedReachCandidates(frames, fallCandidates, config)
 
+    val dynamicMoveTimestamps = detectLargeDynamicMoves(velocities, config)
+    val legDriveCandidates = detectLegDriveCandidates(frames, dynamicMoveTimestamps, config)
+
     val metrics = ClimbMetrics(
         totalDurationMs = totalDurationMs,
         activeMovementMs = activeMovementMs,
@@ -113,6 +122,11 @@ fun computeAnalysis(frames: List<PoseFrame>, config: MetricsConfiguration = Metr
         possibleFallCandidateCount = fallCandidates.size,
         hasFinishStabilization = finishStabilization != null,
         possibleMissedReachCount = missedReachCandidates.size,
+        legDriveCandidateCount = legDriveCandidates.size,
+        kneeRangeOfMotionDegrees = kneeRangeOfMotionDegrees(frames),
+        footStabilityScore = footStabilityScore(frames, config),
+        totalFootTravelNormalized = totalFootTravelNormalized(frames),
+        footWeightAsymmetry = footWeightAsymmetry(frames),
     )
 
     return AnalysisComputation(
@@ -128,5 +142,6 @@ fun computeAnalysis(frames: List<PoseFrame>, config: MetricsConfiguration = Metr
         fallCandidates = fallCandidates,
         finishStabilization = finishStabilization,
         missedReachCandidates = missedReachCandidates,
+        legDriveCandidates = legDriveCandidates,
     )
 }

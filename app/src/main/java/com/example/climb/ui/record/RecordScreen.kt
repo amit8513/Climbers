@@ -28,7 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -46,6 +48,7 @@ private fun hasPermission(context: android.content.Context, permission: String):
 fun RecordScreen(
     moviesDir: File,
     onRecorded: (videoPath: String, durationMs: Long) -> Unit,
+    countdownSeconds: Int = 0,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -83,6 +86,30 @@ fun RecordScreen(
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var pendingFile by remember { mutableStateOf<File?>(null) }
     var startTimeMs by remember { mutableStateOf(0L) }
+    // Gives the climber time to set the phone down and get to the wall before the shot that's
+    // actually analyzed starts, instead of recording beginning the instant they tap the button
+    // (which otherwise eats into the attempt with setup time, or gets a climb cut off partway
+    // through once they're finally in position).
+    var countdownRemaining by remember { mutableStateOf(0) }
+
+    fun beginRecording() {
+        val file = File(moviesDir, "climb_${System.currentTimeMillis()}.mp4")
+        pendingFile = file
+        startTimeMs = System.currentTimeMillis()
+        elapsedSeconds = 0
+        statusMessage = null
+        isRecording = true
+        controller.startRecording(file) { success ->
+            isRecording = false
+            val recordedFile = pendingFile
+            if (success && recordedFile != null) {
+                val duration = System.currentTimeMillis() - startTimeMs
+                onRecorded(recordedFile.absolutePath, duration)
+            } else {
+                statusMessage = "Recording failed — try again"
+            }
+        }
+    }
 
     val pickVideoLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia(),
@@ -110,6 +137,14 @@ fun RecordScreen(
                 delay(1000)
                 elapsedSeconds++
             }
+        }
+    }
+
+    LaunchedEffect(countdownRemaining) {
+        if (countdownRemaining > 0) {
+            delay(1000)
+            countdownRemaining--
+            if (countdownRemaining == 0) beginRecording()
         }
     }
 
@@ -142,25 +177,14 @@ fun RecordScreen(
                 Text(text = "Importing video...", color = MaterialTheme.colorScheme.onBackground)
             }
             Button(
-                enabled = !isImporting,
+                enabled = !isImporting && countdownRemaining == 0,
                 modifier = Modifier.fillMaxWidth(0.6f),
                 onClick = {
                     if (!isRecording) {
-                        val file = File(moviesDir, "climb_${System.currentTimeMillis()}.mp4")
-                        pendingFile = file
-                        startTimeMs = System.currentTimeMillis()
-                        elapsedSeconds = 0
-                        statusMessage = null
-                        isRecording = true
-                        controller.startRecording(file) { success ->
-                            isRecording = false
-                            val recordedFile = pendingFile
-                            if (success && recordedFile != null) {
-                                val duration = System.currentTimeMillis() - startTimeMs
-                                onRecorded(recordedFile.absolutePath, duration)
-                            } else {
-                                statusMessage = "Recording failed — try again"
-                            }
+                        if (countdownSeconds > 0) {
+                            countdownRemaining = countdownSeconds
+                        } else {
+                            beginRecording()
                         }
                     } else {
                         controller.stopRecording()
@@ -170,7 +194,7 @@ fun RecordScreen(
                 Text(if (isRecording) "Stop" else "Record")
             }
             OutlinedButton(
-                enabled = !isRecording && !isImporting,
+                enabled = !isRecording && !isImporting && countdownRemaining == 0,
                 modifier = Modifier
                     .fillMaxWidth(0.6f)
                     .padding(top = 8.dp),
@@ -182,6 +206,24 @@ fun RecordScreen(
             ) {
                 Text("Choose from gallery")
             }
+        }
+
+        if (countdownRemaining > 0) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = "$countdownRemaining",
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontSize = 96.sp,
+                    fontWeight = FontWeight.Black,
+                )
+            }
+            Text(
+                text = "Get to the wall — recording starts in $countdownRemaining…",
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 48.dp),
+            )
         }
     }
 }

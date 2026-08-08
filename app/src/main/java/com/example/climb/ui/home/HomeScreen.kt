@@ -14,13 +14,19 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,17 +36,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.data.ClimbEntity
 import com.example.climb.data.ClimbOutcome
 import com.example.climb.data.ClimbRepository
+import com.example.climb.data.social.UserProfile
 import com.example.climb.ui.components.HoldBadge
 import com.example.climb.ui.components.OutcomePill
+import com.example.climb.ui.leaderboard.InitialsAvatar
+import com.example.climb.ui.progress.averageSentGrade
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 import com.example.climb.util.daysBetween
@@ -51,7 +63,6 @@ import java.util.Locale
 
 private val timeFormatter = SimpleDateFormat("h:mm a", Locale.US)
 private val dateFormatter = SimpleDateFormat("MMM d", Locale.US)
-private val headerDateFormatter = SimpleDateFormat("MMM d", Locale.US)
 
 private fun sendsThisWeek(climbs: List<ClimbEntity>, now: Long): Int =
     climbs.count { it.outcome == ClimbOutcome.SENT && daysBetween(now, it.createdAt) in 0..6 }
@@ -81,32 +92,38 @@ private fun formatClimbDate(createdAt: Long, now: Long): String {
 fun HomeScreen(
     repository: ClimbRepository,
     currentUid: String,
+    profile: UserProfile,
     onClimbClick: (Long) -> Unit,
+    onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val climbs by repository.observeAll(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
     val now = remember { System.currentTimeMillis() }
+    val averageGrade = remember(climbs) { averageSentGrade(climbs) }
 
     Box(modifier = modifier.fillMaxSize().wallTexture()) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "CLIMB",
-                    color = ClimbPalette.textPrimary,
-                    fontWeight = FontWeight.Black,
-                    fontSize = 22.sp,
-                    letterSpacing = 1.sp,
-                )
-                Text(
-                    text = headerDateFormatter.format(Date(now)),
-                    color = ClimbPalette.textMuted,
-                    fontSize = 12.sp,
-                    fontFamily = FontFamily.Monospace,
-                )
+                ProfileAvatarWithGrade(profile = profile, averageGrade = averageGrade, size = 52.dp)
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "CLIMBERS",
+                        color = ClimbPalette.textPrimary,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 22.sp,
+                        letterSpacing = 1.sp,
+                    )
+                }
+                IconButton(onClick = onSettingsClick, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = "Settings",
+                        tint = ClimbPalette.textSecondary,
+                    )
+                }
             }
 
             Spacer(Modifier.height(18.dp))
@@ -161,6 +178,45 @@ fun HomeScreen(
         }
     }
 }
+
+/** The profile picture with a small "V{n}" badge for the average grade sent, overlapping its
+ * bottom-right corner — badge is omitted entirely (not shown as "V0" or "—") when there aren't
+ * any sends to average yet, since a fabricated grade would be worse than no badge. */
+@Composable
+private fun ProfileAvatarWithGrade(profile: UserProfile, averageGrade: Double?, size: Dp, modifier: Modifier = Modifier) {
+    val accent = ClimbPalette.chalk
+    val ringWidth = 1.5.dp
+    Box(modifier = modifier.size(size)) {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .border(ringWidth, accent, CircleShape)
+                .padding(ringWidth),
+        ) {
+            InitialsAvatar(name = profile.username, size = size - ringWidth * 2, photoUrl = profile.photoUrl)
+        }
+        if (averageGrade != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = size * 0.11f, y = size * 0.11f)
+                    .clip(RoundedCornerShape(50))
+                    .background(accent)
+                    .semantics { contentDescription = "Average grade sent: V${averageGrade.roundToNearestInt()}" }
+                    .padding(horizontal = size * 0.11f, vertical = size * 0.03f),
+            ) {
+                Text(
+                    text = "V${averageGrade.roundToNearestInt()}",
+                    color = ClimbPalette.chalkText,
+                    fontWeight = FontWeight.Black,
+                    fontSize = (size.value * 0.24f).sp,
+                )
+            }
+        }
+    }
+}
+
+private fun Double.roundToNearestInt(): Int = Math.round(this).toInt()
 
 @Composable
 private fun StatsStrip(sends: Int, streak: Int, modifier: Modifier = Modifier) {

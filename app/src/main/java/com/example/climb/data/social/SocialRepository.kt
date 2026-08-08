@@ -1,8 +1,11 @@
 package com.example.climb.data.social
 
+import android.net.Uri
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -17,9 +20,26 @@ private const val USERNAMES = "usernames"
 private const val FRIEND_REQUESTS = "friendRequests"
 private const val FRIENDS = "friends"
 
-class SocialRepository(private val firestore: FirebaseFirestore) {
+private fun profilePicturePath(uid: String) = "profile_pictures/$uid/photo.jpg"
 
-    suspend fun createProfile(uid: String, username: String): Result<Unit> = runCatching {
+class SocialRepository(
+    private val firestore: FirebaseFirestore,
+    private val storage: FirebaseStorage,
+) {
+
+    /** Uploads straight from the picked content:// [imageUri] — Firebase Storage's `putFile`
+     * reads through [android.content.ContentResolver] internally, so no local copy is needed
+     * first (unlike the video-import path, which already has a local file to work from). */
+    suspend fun uploadProfilePhoto(uid: String, imageUri: Uri, contentType: String?): Result<String> = runCatching {
+        val ref = storage.reference.child(profilePicturePath(uid))
+        val metadata = StorageMetadata.Builder().apply {
+            if (contentType != null) setContentType(contentType)
+        }.build()
+        ref.putFile(imageUri, metadata).await()
+        ref.downloadUrl.await().toString()
+    }
+
+    suspend fun createProfile(uid: String, username: String, photoUrl: String? = null): Result<Unit> = runCatching {
         val usernameLower = username.lowercase(Locale.US)
         val usernameRef = firestore.collection(USERNAMES).document(usernameLower)
         val userRef = firestore.collection(USERS).document(uid)
@@ -31,11 +51,39 @@ class SocialRepository(private val firestore: FirebaseFirestore) {
                 mapOf(
                     "username" to username,
                     "usernameLower" to usernameLower,
+                    "photoUrl" to photoUrl,
                     "createdAt" to System.currentTimeMillis(),
                 ),
             )
         }.await()
     }
+
+    /** Releases the old username reservation and reserves the new one in the same transaction,
+     * so a failed/aborted change can never leave both reserved (locking the user out of their
+     * own old name) or the new one unreserved (letting someone else grab it mid-change). */
+    suspend fun updateUsername(uid: String, oldUsername: String, newUsername: String): Result<Unit> = runCatching {
+        val oldUsernameLower = oldUsername.lowercase(Locale.US)
+        val newUsernameLower = newUsername.lowercase(Locale.US)
+        if (oldUsernameLower == newUsernameLower) {
+            firestore.collection(USERS).document(uid).update("username", newUsername).await()
+            return@runCatching
+        }
+        val oldUsernameRef = firestore.collection(USERNAMES).document(oldUsernameLower)
+        val newUsernameRef = firestore.collection(USERNAMES).document(newUsernameLower)
+        val userRef = firestore.collection(USERS).document(uid)
+        firestore.runTransaction { transaction ->
+            if (transaction.get(newUsernameRef).exists()) throw UsernameTakenException()
+            transaction.delete(oldUsernameRef)
+            transaction.set(newUsernameRef, mapOf("uid" to uid))
+            transaction.update(userRef, mapOf("username" to newUsername, "usernameLower" to newUsernameLower))
+        }.await()
+    }
+
+    suspend fun updateProfilePhoto(uid: String, photoUrl: String?): Result<Unit> = runCatching {
+        firestore.collection(USERS).document(uid).update("photoUrl", photoUrl).await()
+    }
+
+    suspend fun getProfile(uid: String): UserProfile? = firestore.collection(USERS).document(uid).get().await().toUserProfile(uid)
 
     fun observeProfile(uid: String): Flow<UserProfile?> = callbackFlow {
         val registration = firestore.collection(USERS).document(uid)
@@ -142,7 +190,7 @@ class SocialRepository(private val firestore: FirebaseFirestore) {
 private fun DocumentSnapshot.toUserProfile(uid: String): UserProfile? {
     if (!exists()) return null
     val username = getString("username") ?: return null
-    return UserProfile(uid = uid, username = username)
+    return UserProfile(uid = uid, username = username, photoUrl = getString("photoUrl"))
 }
 
 private fun DocumentSnapshot.toFriend(): Friend? {

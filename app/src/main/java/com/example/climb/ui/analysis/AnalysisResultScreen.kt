@@ -14,12 +14,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -34,11 +34,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -47,8 +51,26 @@ import com.example.climb.analysis.AnalysisRepository
 import com.example.climb.analysis.ClimbAnalysisEntity
 import com.example.climb.analysis.ClimbEvent
 import com.example.climb.analysis.ClimbEventType
+import com.example.climb.analysis.BetaOpportunity
+import com.example.climb.analysis.ComparisonLine
+import com.example.climb.analysis.FOOT_LEG_LANDMARKS
+import com.example.climb.analysis.ImprovementItem
+import com.example.climb.analysis.NextSessionFocusItem
+import com.example.climb.analysis.QualityIndicator
+import com.example.climb.analysis.SessionOverview
+import com.example.climb.analysis.StrengthItem
+import com.example.climb.analysis.TechnicalObservation
+import com.example.climb.analysis.buildAttemptComparison
+import com.example.climb.analysis.buildBetaOpportunities
+import com.example.climb.analysis.buildImprovements
+import com.example.climb.analysis.buildNextSessionFocus
+import com.example.climb.analysis.buildQualityIndicators
+import com.example.climb.analysis.buildSessionOverview
+import com.example.climb.analysis.buildStrengths
+import com.example.climb.analysis.buildTechnicalPerformanceReport
 import com.example.climb.analysis.formatTimestampMs
 import com.example.climb.analysis.metrics.ClimbMetrics
+import com.example.climb.analysis.relatedLandmarksFor
 import com.example.climb.analysis.scoring.CategoryScore
 import com.example.climb.analysis.toCategoryScores
 import com.example.climb.analysis.toClimbEvents
@@ -56,6 +78,7 @@ import com.example.climb.analysis.toClimbMetrics
 import com.example.climb.analysis.toCoachingTips
 import com.example.climb.analysis.toPoseFrames
 import com.example.climb.coaching.CoachingTip
+import com.example.climb.pose.PoseLandmarkType
 import com.example.climb.ui.components.SectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
@@ -64,9 +87,17 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val dateFormatter = SimpleDateFormat("MMM d, yyyy", Locale.US)
 private val PLAYBACK_SPEEDS = listOf(0.25f, 0.5f, 1f, 1.5f)
+
+private sealed interface AttemptComparisonState {
+    object Loading : AttemptComparisonState
+    object NoRouteName : AttemptComparisonState
+    object NoPreviousAttempt : AttemptComparisonState
+    data class Found(val lines: List<ComparisonLine>) : AttemptComparisonState
+}
 
 private fun formatSeconds(ms: Long): String = "${"%.1f".format(ms / 1000f)}s"
 
@@ -106,6 +137,29 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
     val events = remember(analysis.eventsJson) { analysis.eventsJson.toClimbEvents() }
     val tips = remember(analysis.tipsJson) { analysis.tipsJson.toCoachingTips() }
     val categoryScores = remember(analysis.categoryScoresJson) { analysis.categoryScoresJson.toCategoryScores() }
+    val strengths = remember(metrics, events) { metrics?.let { buildStrengths(it, events) } ?: emptyList() }
+    val improvements = remember(metrics, events) { metrics?.let { buildImprovements(it, events) } ?: emptyList() }
+    val betaOpportunities = remember(events) { buildBetaOpportunities(events) }
+    val sessionOverview = remember(metrics, strengths, improvements) { metrics?.let { buildSessionOverview(it, strengths, improvements) } }
+    val nextSessionFocus = remember(metrics, improvements) { metrics?.let { buildNextSessionFocus(improvements, it) } ?: emptyList() }
+    var comparisonState by remember { mutableStateOf<AttemptComparisonState>(AttemptComparisonState.Loading) }
+    LaunchedEffect(currentAttempt.id, metrics) {
+        val currentMetrics = metrics
+        val routeName = currentAttempt.routeName?.takeIf { it.isNotBlank() }
+        comparisonState = when {
+            currentMetrics == null -> AttemptComparisonState.Loading
+            routeName == null -> AttemptComparisonState.NoRouteName
+            else -> {
+                val previousAnalysis = analysisRepository.getPreviousCompletedAnalysisForRoute(currentAttempt)
+                val previousMetrics = previousAnalysis?.metricsJson?.toClimbMetrics()
+                if (previousAnalysis == null || previousMetrics == null) {
+                    AttemptComparisonState.NoPreviousAttempt
+                } else {
+                    AttemptComparisonState.Found(buildAttemptComparison(previousMetrics, previousAnalysis.overallScore, currentMetrics, analysis.overallScore))
+                }
+            }
+        }
+    }
     val context = LocalContext.current
 
     val exoPlayer = remember(currentAttempt.videoPath) {
@@ -124,8 +178,19 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
         }
     }
 
-    var skeletonVisible by remember { mutableStateOf(true) }
+    var overlayMode by remember { mutableStateOf(OverlayMode.SKELETON) }
     var playbackSpeed by remember { mutableStateOf(1f) }
+    var highlightedLandmarks by remember { mutableStateOf<Set<PoseLandmarkType>>(emptySet()) }
+    LaunchedEffect(highlightedLandmarks) {
+        if (highlightedLandmarks.isNotEmpty()) {
+            delay(2_500)
+            highlightedLandmarks = emptySet()
+        }
+    }
+    val onSeekAndHighlight: (Long, Set<PoseLandmarkType>) -> Unit = { ms, landmarks ->
+        exoPlayer.seekTo(ms)
+        highlightedLandmarks = landmarks
+    }
 
     val nearestFrame = remember(frames, currentPositionMs) {
         frames.minByOrNull { kotlin.math.abs(it.timestampMs - currentPositionMs) }
@@ -174,16 +239,34 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
                 factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer } },
                 modifier = Modifier.fillMaxSize(),
             )
-            if (skeletonVisible) {
-                SkeletonOverlay(frame = nearestFrame, modifier = Modifier.fillMaxSize())
+            when (overlayMode) {
+                OverlayMode.NONE -> Unit
+                OverlayMode.SKELETON -> SkeletonOverlay(
+                    frame = nearestFrame,
+                    modifier = Modifier.fillMaxSize(),
+                    highlightedLandmarks = highlightedLandmarks,
+                )
+                OverlayMode.BODY_PART_TRACKING -> BodyPartTrackingOverlay(
+                    frames = frames,
+                    currentPositionMs = currentPositionMs,
+                    modifier = Modifier.fillMaxSize(),
+                    highlightedLandmarks = highlightedLandmarks,
+                )
             }
         }
 
         Spacer(Modifier.height(12.dp))
 
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            Text("Skeleton overlay", color = ClimbPalette.textPrimary, fontSize = 13.sp)
-            Switch(checked = skeletonVisible, onCheckedChange = { skeletonVisible = it })
+        Text("Overlay", color = ClimbPalette.textMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
+        Spacer(Modifier.height(6.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OverlayModeChip(mode = OverlayMode.NONE, label = "None", selected = overlayMode, onSelect = { overlayMode = it })
+            OverlayModeChip(mode = OverlayMode.SKELETON, label = "Skeleton", selected = overlayMode, onSelect = { overlayMode = it })
+            OverlayModeChip(mode = OverlayMode.BODY_PART_TRACKING, label = "Body tracking", selected = overlayMode, onSelect = { overlayMode = it })
+        }
+        if (overlayMode == OverlayMode.BODY_PART_TRACKING) {
+            Spacer(Modifier.height(8.dp))
+            BodyPartTrackingLegend()
         }
 
         Spacer(Modifier.height(8.dp))
@@ -204,9 +287,16 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
 
         Spacer(Modifier.height(20.dp))
 
+        sessionOverview?.let { overview ->
+            SectionCard(title = "Session overview") {
+                SessionOverviewCard(overview)
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
         if (metrics != null) {
-            SectionCard(title = "Summary") {
-                MetricsGrid(metrics)
+            SectionCard(title = "Compared to your last attempt on this route") {
+                ComparisonCardContent(comparisonState, currentAttempt.routeName)
             }
             Spacer(Modifier.height(16.dp))
         }
@@ -218,24 +308,111 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
             Spacer(Modifier.height(16.dp))
         }
 
-        if (tips.isNotEmpty()) {
-            SectionCard(title = "Coaching tips") {
-                tips.forEachIndexed { index, tip ->
-                    if (index > 0) Spacer(Modifier.height(14.dp))
-                    CoachingTipRow(tip = tip, onJumpToMoment = { ms -> exoPlayer.seekTo(ms) })
+        if (metrics != null) {
+            CollapsibleSectionCard(title = "Summary") {
+                MetricsGrid(metrics)
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
+        if (metrics != null && categoryScores.isNotEmpty()) {
+            val qualityIndicators = remember(metrics, events, categoryScores) { buildQualityIndicators(metrics, events, categoryScores) }
+            if (qualityIndicators.isNotEmpty()) {
+                CollapsibleSectionCard(title = "Session quality", badge = "${qualityIndicators.size}") {
+                    QualityIndicatorList(qualityIndicators)
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+
+        if (metrics != null) {
+            val technicalObservations = remember(metrics) { buildTechnicalPerformanceReport(metrics) }
+            CollapsibleSectionCard(title = "Technical performance", badge = "${technicalObservations.size}") {
+                Column {
+                    technicalObservations.forEachIndexed { index, observation ->
+                        if (index > 0) Spacer(Modifier.height(12.dp))
+                        TechnicalObservationRow(observation)
+                    }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
+        }
+
+        if (metrics != null) {
+            if (strengths.isNotEmpty()) {
+                CollapsibleSectionCard(title = "Strengths demonstrated", badge = "${strengths.size}") {
+                    Column {
+                        strengths.forEachIndexed { index, item ->
+                            if (index > 0) Spacer(Modifier.height(14.dp))
+                            StrengthRow(item = item, onSeek = onSeekAndHighlight)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
+            if (improvements.isNotEmpty()) {
+                CollapsibleSectionCard(title = "Areas needing work", badge = "${improvements.size}") {
+                    Column {
+                        improvements.forEachIndexed { index, item ->
+                            if (index > 0) Spacer(Modifier.height(14.dp))
+                            ImprovementRow(item = item, onSeek = onSeekAndHighlight)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
+            if (betaOpportunities.isNotEmpty()) {
+                CollapsibleSectionCard(title = "Beta optimization opportunities", badge = "${betaOpportunities.size}") {
+                    Column {
+                        betaOpportunities.forEachIndexed { index, item ->
+                            if (index > 0) Spacer(Modifier.height(14.dp))
+                            BetaOpportunityRow(item = item, onSeek = onSeekAndHighlight)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+        }
+
+        if (nextSessionFocus.isNotEmpty()) {
+            CollapsibleSectionCard(title = "Focus points for next session", badge = "${nextSessionFocus.size}") {
+                Column {
+                    nextSessionFocus.forEachIndexed { index, item ->
+                        if (index > 0) Spacer(Modifier.height(14.dp))
+                        NextSessionFocusRow(index = index + 1, item = item)
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
+        if (tips.isNotEmpty()) {
+            CollapsibleSectionCard(title = "Coaching tips", badge = "${tips.size}") {
+                Column {
+                    tips.forEachIndexed { index, tip ->
+                        if (index > 0) Spacer(Modifier.height(14.dp))
+                        CoachingTipRow(
+                            tip = tip,
+                            onJumpToMoment = { ms -> onSeekAndHighlight(ms, if (tip.category == "Footwork") FOOT_LEG_LANDMARKS else emptySet()) },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
         }
 
         if (events.isNotEmpty()) {
-            SectionCard(title = "Timeline") {
-                events.forEachIndexed { index, event ->
-                    if (index > 0) Spacer(Modifier.height(10.dp))
-                    TimelineEventRow(event = event, onSeek = { ms -> exoPlayer.seekTo(ms) })
+            CollapsibleSectionCard(title = "Timeline", badge = "${events.size}") {
+                Column {
+                    events.forEachIndexed { index, event ->
+                        if (index > 0) Spacer(Modifier.height(10.dp))
+                        TimelineEventRow(event = event, onSeek = onSeekAndHighlight)
+                    }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
         }
 
         if (currentAttempt.notes.isNotBlank()) {
@@ -247,6 +424,88 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
 
         Spacer(Modifier.height(24.dp))
     }
+}
+
+@Composable
+private fun BodyPartTrackingLegend() {
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        LegendDot(color = ClimbPalette.gold, label = "Left hand")
+        LegendDot(color = ClimbPalette.silver, label = "Right hand")
+        LegendDot(color = ClimbPalette.sent, label = "Left foot")
+        LegendDot(color = ClimbPalette.fell, label = "Right foot")
+    }
+}
+
+@Composable
+private fun LegendDot(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(color))
+        Spacer(Modifier.width(4.dp))
+        Text(text = label, color = ClimbPalette.textMuted, fontSize = 10.sp)
+    }
+}
+
+/**
+ * Collapsed by default so the full report reads as a scannable list of section headers rather
+ * than a wall of text — tapping a header expands just that section, independent of the others.
+ * Mirrors [SectionCard]'s chrome (border/background/corner radius) without touching that shared
+ * component, since [SectionCard] is also used by screens that don't want this behavior.
+ */
+@Composable
+private fun CollapsibleSectionCard(title: String, badge: String? = null, content: @Composable () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(ClimbPalette.surface)
+            .border(1.dp, ClimbPalette.border, RoundedCornerShape(12.dp)),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .semantics { contentDescription = if (expanded) "Collapse $title" else "Expand $title" },
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = title.uppercase(), color = ClimbPalette.textMuted, fontSize = 11.sp, letterSpacing = 1.sp)
+                if (badge != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(ClimbPalette.surfaceRaised)
+                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                    ) {
+                        Text(text = badge, color = ClimbPalette.textMuted, fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+            Text(
+                text = if (expanded) "−" else "+",
+                color = ClimbPalette.chalk,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+            )
+        }
+        if (expanded) {
+            Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverlayModeChip(mode: OverlayMode, label: String, selected: OverlayMode, onSelect: (OverlayMode) -> Unit) {
+    FilterChip(
+        selected = selected == mode,
+        onClick = { onSelect(mode) },
+        label = { Text(label) },
+    )
 }
 
 @Composable
@@ -269,20 +528,115 @@ private fun ConfidenceBadge(confidence: Float?) {
 
 @Composable
 private fun PerformanceScores(overallScore: Int?, overallConfidence: Float?, categoryScores: List<CategoryScore>) {
+    var showFullscreenRadar by remember { mutableStateOf(false) }
+    var showScoreHelp by remember { mutableStateOf(false) }
+
     Column {
         if (overallScore != null) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(text = overallScore.toString(), color = ClimbPalette.chalk, fontWeight = FontWeight.Black, fontSize = 34.sp, fontFamily = FontFamily.Monospace)
                 Text(text = "/100 overall", color = ClimbPalette.textMuted, fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp, bottom = 6.dp))
             }
-            if (overallConfidence != null) {
-                Text(text = "${(overallConfidence * 100).toInt()}% overall confidence", color = ClimbPalette.textMuted, fontSize = 11.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (overallConfidence != null) {
+                    Text(text = "${(overallConfidence * 100).toInt()}% overall confidence", color = ClimbPalette.textMuted, fontSize = 11.sp)
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    text = "What do these scores mean? ⓘ",
+                    color = ClimbPalette.chalk,
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .clickable { showScoreHelp = !showScoreHelp }
+                        .semantics { contentDescription = "Explain how these scores are calculated and their limitations" },
+                )
             }
-            Spacer(Modifier.height(14.dp))
+            if (showScoreHelp) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "Every score is calculated from pose tracking only — body position and movement, not grip, hold type, or wall angle. " +
+                        "Confidence reflects how much reliable tracking data supported that score, not how good the climbing was. " +
+                        "Treat this as a rough, evidence-linked estimate, not an objective rating.",
+                    color = ClimbPalette.textSecondary,
+                    fontSize = 11.sp,
+                    lineHeight = 15.sp,
+                )
+            }
         }
+
+        if (categoryScores.size >= 3) {
+            Spacer(Modifier.height(8.dp))
+            PerformanceRadarChart(
+                categoryScores = categoryScores,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1.1f)
+                    .clickable { showFullscreenRadar = true }
+                    .semantics { contentDescription = "Performance radar chart across six categories. Tap to view fullscreen." },
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = "Tap chart to view fullscreen",
+                color = ClimbPalette.textMuted,
+                fontSize = 11.sp,
+                modifier = Modifier.clickable { showFullscreenRadar = true },
+            )
+        }
+
+        Spacer(Modifier.height(14.dp))
         categoryScores.forEachIndexed { index, categoryScore ->
             if (index > 0) Spacer(Modifier.height(12.dp))
             CategoryScoreRow(categoryScore)
+        }
+    }
+
+    if (showFullscreenRadar) {
+        FullscreenRadarDialog(overallScore = overallScore, categoryScores = categoryScores, onDismiss = { showFullscreenRadar = false })
+    }
+}
+
+@Composable
+private fun FullscreenRadarDialog(overallScore: Int?, categoryScores: List<CategoryScore>, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(modifier = Modifier.fillMaxSize().background(ClimbPalette.bg)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Text(
+                        text = "Close",
+                        color = ClimbPalette.textSecondary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .clickable(onClick = onDismiss)
+                            .semantics { contentDescription = "Close fullscreen performance chart" },
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                PerformanceRadarChart(
+                    categoryScores = categoryScores,
+                    overallScore = overallScore,
+                    labelTextSizeSp = 14f,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .semantics { contentDescription = "Fullscreen performance radar chart across six categories" },
+                )
+                Spacer(Modifier.height(16.dp))
+                categoryScores.forEach { categoryScore ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(text = categoryScore.category.displayName, color = ClimbPalette.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text(text = "${categoryScore.score}", color = ClimbPalette.chalk, fontSize = 14.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }
@@ -304,6 +658,179 @@ private fun CategoryScoreRow(categoryScore: CategoryScore) {
         }
         Spacer(Modifier.height(4.dp))
         Text(text = categoryScore.explanation, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
+    }
+}
+
+@Composable
+private fun QualityIndicatorList(indicators: List<QualityIndicator>) {
+    Column {
+        indicators.forEachIndexed { index, indicator ->
+            if (index > 0) Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(if (indicator.positive) ClimbPalette.sent else ClimbPalette.fell),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(text = indicator.label, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComparisonCardContent(state: AttemptComparisonState, routeName: String?) {
+    when (state) {
+        is AttemptComparisonState.Loading -> Text(
+            text = "Checking for a previous attempt on this route…",
+            color = ClimbPalette.textMuted,
+            fontSize = 12.sp,
+        )
+        is AttemptComparisonState.NoRouteName -> Text(
+            text = "This attempt has no route name set. Add one (and use the same name on future attempts) to compare them here.",
+            color = ClimbPalette.textSecondary,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        is AttemptComparisonState.NoPreviousAttempt -> Text(
+            text = "No earlier completed attempt found for \"${routeName.orEmpty()}\" yet. Log and analyze another attempt with this exact route name to see a comparison here.",
+            color = ClimbPalette.textSecondary,
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+        )
+        is AttemptComparisonState.Found -> if (state.lines.isEmpty()) {
+            Text(
+                text = "This attempt's metrics were nearly identical to your last attempt on \"${routeName.orEmpty()}\".",
+                color = ClimbPalette.textSecondary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+        } else {
+            ComparisonList(state.lines)
+        }
+    }
+}
+
+@Composable
+private fun ComparisonList(lines: List<ComparisonLine>) {
+    Column {
+        lines.forEachIndexed { index, line ->
+            if (index > 0) Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            when (line.improved) {
+                                true -> ClimbPalette.sent
+                                false -> ClimbPalette.fell
+                                null -> ClimbPalette.textMuted
+                            },
+                        ),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(text = line.label, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionOverviewCard(overview: SessionOverview) {
+    Column {
+        Text(text = overview.summary, color = ClimbPalette.textPrimary, fontSize = 14.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.height(8.dp))
+        Text(text = overview.attemptResult, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
+        overview.topStrength?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(text = "Top strength: $it", color = ClimbPalette.sent, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+        overview.topWeakness?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(text = "Highest-priority focus: $it", color = ClimbPalette.fell, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        }
+        overview.qualityWarning?.let {
+            Spacer(Modifier.height(8.dp))
+            Text(text = it, color = ClimbPalette.project, fontSize = 11.sp, lineHeight = 15.sp)
+        }
+    }
+}
+
+@Composable
+private fun NextSessionFocusRow(index: Int, item: NextSessionFocusItem) {
+    Column {
+        Text(text = "$index. ${item.title}", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Spacer(Modifier.height(4.dp))
+        Text(text = item.action, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(text = "Evidence: ${item.evidence}", color = ClimbPalette.textMuted, fontSize = 10.sp, lineHeight = 14.sp)
+        Spacer(Modifier.height(2.dp))
+        Text(text = "Success: ${item.successCriterion}", color = ClimbPalette.textMuted, fontSize = 10.sp, lineHeight = 14.sp)
+    }
+}
+
+@Composable
+private fun StrengthRow(item: StrengthItem, onSeek: (Long, Set<PoseLandmarkType>) -> Unit) {
+    val modifier = if (item.startTimestampMs != null) Modifier.clickable { onSeek(item.startTimestampMs, item.relatedLandmarks) } else Modifier
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Text(text = item.title, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            if (item.startTimestampMs != null) {
+                Text(text = formatTimestampMs(item.startTimestampMs), color = ClimbPalette.chalk, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(text = item.whyItMatters, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(text = "${(item.confidence * 100).toInt()}% confidence · ${item.evidence}", color = ClimbPalette.textMuted, fontSize = 10.sp, lineHeight = 14.sp)
+    }
+}
+
+@Composable
+private fun ImprovementRow(item: ImprovementItem, onSeek: (Long, Set<PoseLandmarkType>) -> Unit) {
+    val modifier = if (item.startTimestampMs != null) Modifier.clickable { onSeek(item.startTimestampMs, item.relatedLandmarks) } else Modifier
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Text(text = item.issue, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+            if (item.startTimestampMs != null) {
+                Text(text = formatTimestampMs(item.startTimestampMs), color = ClimbPalette.chalk, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(text = item.impact, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
+        Spacer(Modifier.height(3.dp))
+        Text(text = item.recommendation, color = ClimbPalette.textMuted, fontSize = 11.sp, lineHeight = 15.sp)
+    }
+}
+
+@Composable
+private fun BetaOpportunityRow(item: BetaOpportunity, onSeek: (Long, Set<PoseLandmarkType>) -> Unit) {
+    val modifier = if (item.timestampMs != null) Modifier.clickable { onSeek(item.timestampMs, item.relatedLandmarks) } else Modifier
+    Column(modifier = modifier) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            Text(text = item.observedIssue, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            if (item.timestampMs != null) {
+                Text(text = formatTimestampMs(item.timestampMs), color = ClimbPalette.chalk, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(text = item.suggestedAlternative, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
+        if (item.requiresRouteContext) {
+            Spacer(Modifier.height(3.dp))
+            Text(text = "Depends on hold/route context not available here", color = ClimbPalette.textMuted, fontSize = 10.sp)
+        }
+    }
+}
+
+@Composable
+private fun TechnicalObservationRow(observation: TechnicalObservation) {
+    Column {
+        Text(text = observation.section.uppercase(), color = ClimbPalette.textMuted, fontSize = 10.sp, letterSpacing = 0.5.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(3.dp))
+        Text(text = observation.observation, color = ClimbPalette.textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
     }
 }
 
@@ -335,6 +862,18 @@ private fun MetricsGrid(metrics: ClimbMetrics) {
                 MetricCell(label = "Extended-leg moments", value = metrics.possibleDisengagedLegSegments.toString(), modifier = Modifier.weight(1f))
                 Spacer(Modifier.weight(1f))
             }
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Lower body", color = ClimbPalette.textMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
+        Spacer(Modifier.height(10.dp))
+        MetricsRow(
+            "Knee range of motion" to "${metrics.kneeRangeOfMotionDegrees.roundToInt()}°",
+            "Foot stability" to if (metrics.footStabilityScore > 0) "${metrics.footStabilityScore}/100" else "—",
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            MetricCell(label = "Leg-drive moments", value = metrics.legDriveCandidateCount.toString(), modifier = Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
         }
     }
 }
@@ -396,12 +935,12 @@ private fun CoachingTipRow(tip: CoachingTip, onJumpToMoment: (Long) -> Unit) {
 }
 
 @Composable
-private fun TimelineEventRow(event: ClimbEvent, onSeek: (Long) -> Unit) {
+private fun TimelineEventRow(event: ClimbEvent, onSeek: (Long, Set<PoseLandmarkType>) -> Unit) {
     val color = eventColor(event)
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onSeek(event.startTimestampMs) },
+            .clickable { onSeek(event.startTimestampMs, relatedLandmarksFor(event.type)) },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -443,4 +982,5 @@ private fun eventColor(event: ClimbEvent): Color = when (event.type) {
     ClimbEventType.POSSIBLE_FALL -> ClimbPalette.fell
     ClimbEventType.FINISH_STABILIZATION -> ClimbPalette.sent
     ClimbEventType.POSSIBLE_MISSED_REACH -> ClimbPalette.fell
+    ClimbEventType.LEG_DRIVE_CANDIDATE -> ClimbPalette.sent
 }

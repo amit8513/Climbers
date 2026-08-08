@@ -9,10 +9,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.climb.analysis.AnalysisDao
 import com.example.climb.analysis.ClimbAnalysisEntity
 import com.example.climb.analysis.ClimbAttemptEntity
-
 @Database(
-    entities = [ClimbEntity::class, ClimbAttemptEntity::class, ClimbAnalysisEntity::class],
-    version = 7,
+    entities = [
+        ClimbEntity::class, ClimbAttemptEntity::class, ClimbAnalysisEntity::class,
+    ],
+    version = 10,
     exportSchema = true,
 )
 abstract class ClimbDatabase : RoomDatabase() {
@@ -119,10 +120,140 @@ abstract class ClimbDatabase : RoomDatabase() {
             }
         }
 
+        // Additive: the new Clubs/Organizations tables (entirely new, no existing table touched
+        // by their creation), plus nullable route-context columns on `climbs` and
+        // `climb_attempts` — every existing row gets NULL for all five, which is exactly the
+        // "no gym" state for a normal/outdoor climber, not a special case to migrate around.
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `organizations` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `organization_memberships` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `organizationId` INTEGER NOT NULL,
+                        `userId` TEXT NOT NULL,
+                        `role` TEXT NOT NULL,
+                        `joinedAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `venues` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `organizationId` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `address` TEXT,
+                        `createdAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `zones` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `venueId` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `routes` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `zoneId` INTEGER NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `vGrade` INTEGER,
+                        `createdAt` INTEGER NOT NULL,
+                        `retiredAt` INTEGER
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `route_versions` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `routeId` INTEGER NOT NULL,
+                        `setterUserId` TEXT NOT NULL,
+                        `versionNumber` INTEGER NOT NULL,
+                        `colorHex` INTEGER,
+                        `createdAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+
+                db.execSQL("ALTER TABLE climbs ADD COLUMN organizationId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climbs ADD COLUMN venueId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climbs ADD COLUMN zoneId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climbs ADD COLUMN routeId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climbs ADD COLUMN routeVersionId INTEGER DEFAULT NULL")
+
+                db.execSQL("ALTER TABLE climb_attempts ADD COLUMN organizationId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climb_attempts ADD COLUMN venueId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climb_attempts ADD COLUMN zoneId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climb_attempts ADD COLUMN routeId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climb_attempts ADD COLUMN routeVersionId INTEGER DEFAULT NULL")
+            }
+        }
+
+        // Additive: a club is no longer joined or created instantly — this just adds the two
+        // request/approval tables the new flow needs. No existing table is touched.
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `organization_join_requests` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `organizationId` INTEGER NOT NULL,
+                        `userId` TEXT NOT NULL,
+                        `status` TEXT NOT NULL,
+                        `requestedAt` INTEGER NOT NULL,
+                        `decidedAt` INTEGER
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `club_creation_requests` (
+                        `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `requesterUid` TEXT NOT NULL,
+                        `message` TEXT,
+                        `status` TEXT NOT NULL,
+                        `requestedAt` INTEGER NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        // The Clubs/Organizations tables (created by MIGRATION_7_8/8_9) moved to Firestore so
+        // club data is shared across phones instead of stuck on whichever device created it —
+        // see ClubRepository. Room simply stops tracking those tables here; nothing about them
+        // is dropped or touched, so any local rows just become inert leftovers, never read again.
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // No-op: only Room's tracked-entity set changed, not any table this app still uses.
+            }
+        }
+
         fun getInstance(context: Context): ClimbDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context, ClimbDatabase::class.java, "climb.db")
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(
+                        MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+                        MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
+                    )
                     .build()
                     .also { instance = it }
             }

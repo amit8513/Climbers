@@ -42,7 +42,7 @@ data class ScoringConfig(
     val powerWeight: Float = 0.16f,
     val flexibilityWeight: Float = 0.14f,
     val enduranceWeight: Float = 0.13f,
-    val version: Int = 1,
+    val version: Int = 2,
 )
 
 data class PerformanceResult(
@@ -125,20 +125,29 @@ private fun scoreTechnique(computation: AnalysisComputation, baseConfidence: Flo
         negatives += "$unrecoveredLossCount possible stability loss${if (unrecoveredLossCount == 1) "" else "es"} without a confirmed recovery"
     }
 
+    if (metrics.footStabilityScore > 0) {
+        if (metrics.footStabilityScore >= 70) {
+            positives += "Feet stayed steady once placed (${metrics.footStabilityScore}/100 foot stability)"
+        } else if (metrics.footStabilityScore < 40) {
+            negatives += "Noticeable foot jitter once placed (${metrics.footStabilityScore}/100 foot stability)"
+        }
+    }
+
     val footAdjustmentPenalty = (metrics.possibleFootAdjustments * 8).coerceAtMost(40)
     val slipPenalty = (metrics.possibleFootSlips * 10).coerceAtMost(30)
     val stabilityPenalty = (unrecoveredLossCount * 12).coerceAtMost(30)
-    val score = clampScore(60f + metrics.straightArmPercentage * 0.3f - footAdjustmentPenalty - slipPenalty - stabilityPenalty)
+    val footStabilityComponent = if (metrics.footStabilityScore > 0) (metrics.footStabilityScore - 70) * 0.15f else 0f
+    val score = clampScore(60f + metrics.straightArmPercentage * 0.3f + footStabilityComponent - footAdjustmentPenalty - slipPenalty - stabilityPenalty)
 
     return CategoryScore(
         category = PerformanceCategory.TECHNIQUE,
         score = score,
         confidence = baseConfidence,
-        contributingMetrics = listOf("straightArmPercentage", "possibleFootAdjustments", "possibleFootSlips", "possibleStabilityLossCount"),
+        contributingMetrics = listOf("straightArmPercentage", "possibleFootAdjustments", "possibleFootSlips", "possibleStabilityLossCount", "footStabilityScore"),
         positiveFactors = positives,
         negativeFactors = negatives,
         unavailableFactors = listOf("Grip quality and hold-specific technique aren't measurable from pose alone"),
-        explanation = "Based on straight-arm time, foot-placement commitment, and possible slips or stability losses measured from pose tracking.",
+        explanation = "Based on straight-arm time, foot-placement commitment and steadiness, and possible slips or stability losses measured from pose tracking.",
     )
 }
 
@@ -149,6 +158,9 @@ private fun scorePower(computation: AnalysisComputation, dynamicMoves: List<Long
 
     if (dynamicMoves.isNotEmpty()) positives += "${dynamicMoves.size} large dynamic move${if (dynamicMoves.size == 1) "" else "s"} detected"
     if (metrics.totalLockoffMs > 0) positives += "${"%.1f".format(metrics.totalLockoffMs / 1000f)}s of sustained bent-arm lock-off"
+    if (metrics.legDriveCandidateCount > 0) {
+        positives += "${metrics.legDriveCandidateCount} possible leg-drive contribution${if (metrics.legDriveCandidateCount == 1) "" else "s"} to a dynamic move (fast knee extension right beforehand)"
+    }
 
     // A dynamic move immediately followed by an unrecovered stability loss or a fall candidate
     // is a poorly controlled catch, not a demonstration of power — this is what keeps raw speed
@@ -163,18 +175,19 @@ private fun scorePower(computation: AnalysisComputation, dynamicMoves: List<Long
 
     val moveCountComponent = (dynamicMoves.size * 12).coerceAtMost(50)
     val lockoffComponent = (metrics.totalLockoffMs / 500L).toInt().coerceAtMost(20)
+    val legDriveComponent = (metrics.legDriveCandidateCount * 6).coerceAtMost(18)
     val catchPenalty = (poorCatchCount * 15).coerceAtMost(40)
-    val score = clampScore(40f + moveCountComponent + lockoffComponent - catchPenalty)
+    val score = clampScore(40f + moveCountComponent + lockoffComponent + legDriveComponent - catchPenalty)
 
     return CategoryScore(
         category = PerformanceCategory.POWER,
         score = score,
         confidence = baseConfidence,
-        contributingMetrics = listOf("largeDynamicMoveCount", "totalLockoffMs", "possibleStabilityLossCount", "possibleFallCandidateCount"),
+        contributingMetrics = listOf("largeDynamicMoveCount", "totalLockoffMs", "legDriveCandidateCount", "possibleStabilityLossCount", "possibleFallCandidateCount"),
         positiveFactors = positives,
         negativeFactors = negatives,
-        unavailableFactors = listOf("Actual force or muscular output isn't measurable from pose alone — this reflects movement speed and control, not strength"),
-        explanation = "Based on the number and control of large dynamic movements and sustained lock-off time measured from pose tracking. A fast move that ends in a possible loss of control counts against this score, not for it.",
+        unavailableFactors = listOf("Actual force or muscular output isn't measurable from pose alone — this reflects movement speed, leg-drive timing, and control, not strength"),
+        explanation = "Based on the number and control of large dynamic movements, sustained lock-off time, and knee-extension timing right before those moves (a leg-drive proxy), all measured from pose tracking. A fast move that ends in a possible loss of control counts against this score, not for it.",
     )
 }
 
@@ -227,6 +240,7 @@ private fun scoreEndurance(computation: AnalysisComputation, baseConfidence: Flo
 
 private fun scoreFlexibility(computation: AnalysisComputation, baseConfidence: Float): CategoryScore {
     val highSteps = computation.highSteps
+    val kneeRom = computation.metrics.kneeRangeOfMotionDegrees
     val positives = mutableListOf<String>()
     val negatives = mutableListOf<String>()
 
@@ -236,18 +250,22 @@ private fun scoreFlexibility(computation: AnalysisComputation, baseConfidence: F
     } else {
         negatives += "No high steps (feet placed at or above hip height) detected in this climb"
     }
+    if (kneeRom > 0f) {
+        positives += "Knees swept a ${kneeRom.roundToInt()}° range of motion during this climb"
+    }
 
-    val score = clampScore(45f + highSteps.size * 8f + maxRatio * 100f)
+    val kneeRomComponent = (kneeRom * 0.2f).coerceAtMost(20f)
+    val score = clampScore(40f + highSteps.size * 8f + maxRatio * 100f + kneeRomComponent)
 
     return CategoryScore(
         category = PerformanceCategory.OBSERVED_MOVEMENT_RANGE,
         score = score,
         confidence = baseConfidence,
-        contributingMetrics = listOf("highStepCount"),
+        contributingMetrics = listOf("highStepCount", "kneeRangeOfMotionDegrees"),
         positiveFactors = positives,
         negativeFactors = negatives,
         unavailableFactors = listOf("This reflects movement range actually used during this climb, not a medical flexibility assessment — a climber may have more range than any single route required"),
-        explanation = "Based on how high feet were placed relative to the hips during this climb, measured from pose tracking.",
+        explanation = "Based on how high feet were placed relative to the hips, and how much knee-angle range was used, during this climb, measured from pose tracking.",
     )
 }
 
@@ -275,15 +293,21 @@ private fun scoreBalance(computation: AnalysisComputation, baseConfidence: Float
         score -= (3 * count).coerceAtMost(9).toFloat()
     }
 
+    val footAsymmetry = computation.metrics.footWeightAsymmetry
+    if (footAsymmetry > 0.85f) {
+        negatives += "One foot accounted for almost all foot movement (${(footAsymmetry * 100).roundToInt()}% asymmetry) — this can be a normal one-foot-planted style, or a sign the other foot wasn't engaging"
+        score -= 5f
+    }
+
     return CategoryScore(
         category = PerformanceCategory.BALANCE,
         score = clampScore(score),
         confidence = baseConfidence,
-        contributingMetrics = listOf("possibleStabilityLossCount", "possibleDisengagedLegSegments"),
+        contributingMetrics = listOf("possibleStabilityLossCount", "possibleDisengagedLegSegments", "footWeightAsymmetry"),
         positiveFactors = positives,
         negativeFactors = negatives,
         unavailableFactors = listOf("True center-of-mass/wall-contact balance needs calibrated depth data this pipeline doesn't have — this is a 2D hip-center-stability proxy"),
-        explanation = "Based on how often hip-center movement showed a sudden loss of control, and whether control was recovered afterward, measured from pose tracking.",
+        explanation = "Based on how often hip-center movement showed a sudden loss of control, whether control was recovered afterward, and how evenly foot movement was distributed between the two feet, measured from pose tracking.",
     )
 }
 

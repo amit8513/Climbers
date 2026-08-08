@@ -32,6 +32,11 @@ fun ClimbMetrics.toJson(): String = JSONObject().apply {
     put("possibleFallCandidateCount", possibleFallCandidateCount)
     put("hasFinishStabilization", hasFinishStabilization)
     put("possibleMissedReachCount", possibleMissedReachCount)
+    put("legDriveCandidateCount", legDriveCandidateCount)
+    put("kneeRangeOfMotionDegrees", kneeRangeOfMotionDegrees.toDouble())
+    put("footStabilityScore", footStabilityScore)
+    put("totalFootTravelNormalized", totalFootTravelNormalized.toDouble())
+    put("footWeightAsymmetry", footWeightAsymmetry.toDouble())
 }.toString()
 
 fun String.toClimbMetrics(): ClimbMetrics? {
@@ -60,6 +65,11 @@ fun String.toClimbMetrics(): ClimbMetrics? {
         possibleFallCandidateCount = o.optInt("possibleFallCandidateCount", 0),
         hasFinishStabilization = o.optBoolean("hasFinishStabilization", false),
         possibleMissedReachCount = o.optInt("possibleMissedReachCount", 0),
+        legDriveCandidateCount = o.optInt("legDriveCandidateCount", 0),
+        kneeRangeOfMotionDegrees = o.optDouble("kneeRangeOfMotionDegrees", 0.0).toFloat(),
+        footStabilityScore = o.optInt("footStabilityScore", 0),
+        totalFootTravelNormalized = o.optDouble("totalFootTravelNormalized", 0.0).toFloat(),
+        footWeightAsymmetry = o.optDouble("footWeightAsymmetry", 0.0).toFloat(),
     )
 }
 

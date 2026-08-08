@@ -23,4 +23,11 @@ data class ClimbEntity(
      * sharing is opt-in per climb, never on by default. Only PRIVATE/FRIENDS_ONLY/PUBLIC are
      * wired up for cloud sync today; SELECTED_FRIENDS is a documented follow-up. */
     val visibility: Visibility = Visibility.PRIVATE,
+    /** Optional link to a real gym route (see `com.example.climb.clubs`) — null for every
+     * existing climb and for any normal/outdoor user who never selects a gym route. */
+    val organizationId: Long? = null,
+    val venueId: Long? = null,
+    val zoneId: Long? = null,
+    val routeId: Long? = null,
+    val routeVersionId: Long? = null,
 )

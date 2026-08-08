@@ -1,0 +1,376 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 10,
+    "identityHash": "3d0a403577f2b3e9d0794fccbdb7cb4d",
+    "entities": [
+      {
+        "tableName": "climbs",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `userId` TEXT NOT NULL, `videoPath` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `vGrade` INTEGER, `routeColor` TEXT NOT NULL, `outcome` TEXT NOT NULL, `notes` TEXT NOT NULL, `hueOffsetDegrees` REAL, `hueToleranceDegrees` REAL, `visibility` TEXT NOT NULL, `organizationId` INTEGER, `venueId` INTEGER, `zoneId` INTEGER, `routeId` INTEGER, `routeVersionId` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "videoPath",
+            "columnName": "videoPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vGrade",
+            "columnName": "vGrade",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "routeColor",
+            "columnName": "routeColor",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outcome",
+            "columnName": "outcome",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hueOffsetDegrees",
+            "columnName": "hueOffsetDegrees",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "hueToleranceDegrees",
+            "columnName": "hueToleranceDegrees",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "visibility",
+            "columnName": "visibility",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "organizationId",
+            "columnName": "organizationId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "venueId",
+            "columnName": "venueId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "zoneId",
+            "columnName": "zoneId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "routeId",
+            "columnName": "routeId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "routeVersionId",
+            "columnName": "routeVersionId",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "climb_attempts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `userId` TEXT NOT NULL, `sourceClimbId` INTEGER, `videoPath` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `durationMs` INTEGER NOT NULL, `vGrade` INTEGER, `wallType` TEXT NOT NULL, `attemptNumber` INTEGER NOT NULL, `completed` INTEGER NOT NULL, `flash` INTEGER NOT NULL, `routeName` TEXT, `gymName` TEXT, `notes` TEXT NOT NULL, `visibility` TEXT NOT NULL, `organizationId` INTEGER, `venueId` INTEGER, `zoneId` INTEGER, `routeId` INTEGER, `routeVersionId` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceClimbId",
+            "columnName": "sourceClimbId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "videoPath",
+            "columnName": "videoPath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "vGrade",
+            "columnName": "vGrade",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "wallType",
+            "columnName": "wallType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptNumber",
+            "columnName": "attemptNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completed",
+            "columnName": "completed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "flash",
+            "columnName": "flash",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "routeName",
+            "columnName": "routeName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "gymName",
+            "columnName": "gymName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "visibility",
+            "columnName": "visibility",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "organizationId",
+            "columnName": "organizationId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "venueId",
+            "columnName": "venueId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "zoneId",
+            "columnName": "zoneId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "routeId",
+            "columnName": "routeId",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "routeVersionId",
+            "columnName": "routeVersionId",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "climb_analyses",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `attemptId` INTEGER NOT NULL, `modelVersion` TEXT NOT NULL, `algorithmVersion` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `status` TEXT NOT NULL, `confidence` REAL, `climbStartMs` INTEGER, `climbEndMs` INTEGER, `videoDurationMs` INTEGER, `videoWidth` INTEGER, `videoHeight` INTEGER, `poseFramesJson` TEXT NOT NULL, `metricsJson` TEXT NOT NULL, `eventsJson` TEXT NOT NULL, `tipsJson` TEXT NOT NULL, `phasesJson` TEXT NOT NULL, `categoryScoresJson` TEXT NOT NULL, `overallScore` INTEGER, `overallConfidence` REAL, `scoringConfigVersion` INTEGER, `failureReason` TEXT)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attemptId",
+            "columnName": "attemptId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modelVersion",
+            "columnName": "modelVersion",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "algorithmVersion",
+            "columnName": "algorithmVersion",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "confidence",
+            "columnName": "confidence",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "climbStartMs",
+            "columnName": "climbStartMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "climbEndMs",
+            "columnName": "climbEndMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "videoDurationMs",
+            "columnName": "videoDurationMs",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "videoWidth",
+            "columnName": "videoWidth",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "videoHeight",
+            "columnName": "videoHeight",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "poseFramesJson",
+            "columnName": "poseFramesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metricsJson",
+            "columnName": "metricsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventsJson",
+            "columnName": "eventsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tipsJson",
+            "columnName": "tipsJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "phasesJson",
+            "columnName": "phasesJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "categoryScoresJson",
+            "columnName": "categoryScoresJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "overallScore",
+            "columnName": "overallScore",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "overallConfidence",
+            "columnName": "overallConfidence",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "scoringConfigVersion",
+            "columnName": "scoringConfigVersion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "failureReason",
+            "columnName": "failureReason",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3d0a403577f2b3e9d0794fccbdb7cb4d')"
+    ]
+  }
+}

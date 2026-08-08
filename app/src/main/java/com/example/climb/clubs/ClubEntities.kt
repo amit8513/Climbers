@@ -1,0 +1,133 @@
+package com.example.climb.clubs
+
+/**
+ * The Clubs/Organizations domain — stored in Firestore (see [ClubRepository]), not the local Room
+ * database, so a request/approval/route/update is visible across every phone, not just the one
+ * that created it. A [ClimbAttemptEntity][com.example.climb.analysis.ClimbAttemptEntity] or
+ * [ClimbEntity][com.example.climb.data.ClimbEntity] optionally references these by nullable Long
+ * id columns on the *local* `climbs`/`climb_attempts` tables — a normal user with zero memberships
+ * never has any row here and every one of those id columns stays null for them.
+ */
+data class OrganizationEntity(
+    val id: Long,
+    val name: String,
+    val createdAt: Long,
+)
+
+enum class OrganizationRole { MEMBER, STAFF, ADMIN }
+
+/** A user's optional link to an organization — a normal user simply has zero rows here. There is
+ * no separate "GymUser"/"StaffUser" account type; staff access is just this row's [role]. Stored
+ * at Firestore doc id `"{organizationId}_{userId}"`, so there's at most one per (org, user) pair. */
+data class OrganizationMembershipEntity(
+    val organizationId: Long,
+    val userId: String,
+    val role: OrganizationRole,
+    val joinedAt: Long,
+)
+
+/** A physical gym location belonging to an organization. */
+data class VenueEntity(
+    val id: Long,
+    val organizationId: Long,
+    val name: String,
+    val address: String? = null,
+    val createdAt: Long,
+)
+
+/** An area within a venue (e.g. "Bouldering Cave", "Lead Wall"). [organizationId] is denormalized
+ * from the parent venue purely so Firestore security rules can check staff access in one hop. */
+data class ZoneEntity(
+    val id: Long,
+    val organizationId: Long,
+    val venueId: Long,
+    val name: String,
+    val createdAt: Long,
+)
+
+/** A physical route/problem on the wall. [retiredAt] marks when staff stripped it — existing
+ * attempts/analyses linked to a retired route keep their link and stay fully readable; a retired
+ * route just stops being offered for new attempts. */
+data class RouteEntity(
+    val id: Long,
+    val organizationId: Long,
+    val zoneId: Long,
+    val name: String,
+    val vGrade: Int?,
+    val createdAt: Long,
+    val retiredAt: Long? = null,
+)
+
+/** One physical setting of a route — routes get stripped and reset periodically, and a route's
+ * "current" setting is versioned rather than mutated in place so historic attempts stay linked
+ * to the exact setting they were actually climbed on. */
+data class RouteVersionEntity(
+    val id: Long,
+    val organizationId: Long,
+    val routeId: Long,
+    val setterUserId: String,
+    val versionNumber: Int,
+    val colorHex: Long? = null,
+    val createdAt: Long,
+)
+
+/**
+ * The optional, denormalized context an analysis/attempt can be enhanced with when the climber
+ * chose a real gym route — never required. Mirrors the spec's `analyzeVideo(video, routeContext = null)`
+ * shape: existing analysis logic takes this as an optional add-on, never a dependency.
+ */
+data class RouteContext(
+    val organizationId: Long,
+    val venueId: Long,
+    val zoneId: Long,
+    val routeId: Long,
+    val routeVersionId: Long?,
+    val routeName: String,
+    val vGrade: Int?,
+)
+
+enum class JoinRequestStatus { PENDING, APPROVED, DENIED }
+
+/** A member never joins instantly — a request sits here until staff act on it. Approving creates
+ * an [OrganizationMembershipEntity]; denying just marks this row. Stored at Firestore doc id
+ * `"{organizationId}_{userId}"`, so re-requesting after a denial reuses (and resets) the same doc
+ * rather than piling up history. */
+data class OrganizationJoinRequestEntity(
+    val organizationId: Long,
+    val userId: String,
+    val status: JoinRequestStatus,
+    val requestedAt: Long,
+    val decidedAt: Long? = null,
+)
+
+/** A staff-posted announcement, read by every member — the "Updates" tab in both Club Mode
+ * (staff, who can post) and the member club view (read-only). */
+data class ClubUpdateEntity(
+    val id: Long,
+    val organizationId: Long,
+    val authorUid: String,
+    val text: String,
+    val createdAt: Long,
+)
+
+/**
+ * A lightweight, cross-member aggregate for the "Club leaderboard" tab — deliberately not the
+ * full grade/consistency/session scoring engine the main app-wide Leaderboard uses (that's built
+ * entirely around [com.example.climb.data.ClimbEntity] + the friends graph, neither of which
+ * applies to club-linked analysis attempts), just enough to rank members by activity at this
+ * specific club: total logged attempts, total sends, and the hardest grade sent.
+ */
+data class ClubStatsEntity(
+    val organizationId: Long,
+    val userId: String,
+    val totalAttempts: Int,
+    val totalSends: Int,
+    val bestVGradeSent: Int?,
+    val updatedAt: Long,
+)
+
+fun hasStaffAccess(memberships: List<OrganizationMembershipEntity>): Boolean =
+    memberships.any { it.role == OrganizationRole.STAFF || it.role == OrganizationRole.ADMIN }
+
+fun staffOrganizationIds(memberships: List<OrganizationMembershipEntity>): Set<Long> =
+    memberships.filter { it.role == OrganizationRole.STAFF || it.role == OrganizationRole.ADMIN }.map { it.organizationId }.toSet()

@@ -3,8 +3,10 @@ package com.example.climb
 import android.content.Context
 import android.os.Environment
 import com.example.climb.analysis.AnalysisRepository
+import com.example.climb.clubs.ClubRepository
 import com.example.climb.data.ClimbDatabase
 import com.example.climb.data.ClimbRepository
+import com.example.climb.data.settings.SettingsStore
 import com.example.climb.data.social.AuthRepository
 import com.example.climb.data.social.SocialRepository
 import com.example.climb.leaderboard.data.LeaderboardRepository
@@ -27,6 +29,10 @@ class AppContainer(context: Context) {
         AnalysisRepository(ClimbDatabase.getInstance(context).analysisDao())
     }
 
+    val clubRepository: ClubRepository by lazy {
+        ClubRepository(FirebaseFirestore.getInstance())
+    }
+
     val poseEstimator: PoseEstimator by lazy {
         MediaPipePoseEstimator(context)
     }
@@ -36,7 +42,7 @@ class AppContainer(context: Context) {
     }
 
     val socialRepository: SocialRepository by lazy {
-        SocialRepository(FirebaseFirestore.getInstance())
+        SocialRepository(FirebaseFirestore.getInstance(), FirebaseStorage.getInstance())
     }
 
     val climbSyncRepository: ClimbSyncRepository by lazy {
@@ -48,6 +54,11 @@ class AppContainer(context: Context) {
     }
 
     val firebaseStorage: FirebaseStorage by lazy { FirebaseStorage.getInstance() }
+
+    // Eager (not `by lazy`) so the persisted theme is applied to ClimbPalette as soon as
+    // ClimbApplication constructs this container — well before MainActivity's first frame —
+    // rather than only once some screen happens to read settingsStore for the first time.
+    val settingsStore: SettingsStore = SettingsStore(context)
 
     val moviesDir: File by lazy {
         (context.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: context.filesDir).apply {

@@ -7,7 +7,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -19,6 +23,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.AppContainer
+import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.data.social.UserProfile
 import com.example.climb.ui.analysis.AnalysisProgressScreen
 import com.example.climb.ui.analysis.AnalysisResultScreen
@@ -26,6 +31,8 @@ import com.example.climb.ui.analysis.ClimbDetailsInputScreen
 import com.example.climb.ui.analysis.VideoSourceScreen
 import com.example.climb.ui.auth.AuthScreen
 import com.example.climb.ui.auth.ProfileSetupScreen
+import com.example.climb.ui.clubs.ClubModeSwitchScreen
+import com.example.climb.ui.clubs.ClubsScreen
 import com.example.climb.ui.detail.DetailScreen
 import com.example.climb.ui.friends.FriendClimbsScreen
 import com.example.climb.ui.friends.FriendsScreen
@@ -34,6 +41,7 @@ import com.example.climb.ui.leaderboard.LeaderboardScreen
 import com.example.climb.ui.nav.ClimbBottomBar
 import com.example.climb.ui.progress.ProgressScreen
 import com.example.climb.ui.record.RecordScreen
+import com.example.climb.ui.settings.SettingsScreen
 import com.example.climb.ui.tag.TagScreen
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
@@ -45,6 +53,9 @@ private object Routes {
     const val FRIENDS = "friends"
     const val LEADERBOARD = "leaderboard"
     const val RECORD = "record"
+    const val SETTINGS = "settings"
+    const val CLUBS = "clubs"
+    const val CLUB_MEMBER = "club_member/{organizationId}"
     const val TAG = "tag/{videoPath}/{durationMs}"
     const val DETAIL = "detail/{climbId}"
     const val VIDEO_SOURCE = "video_source"
@@ -58,6 +69,7 @@ private object Routes {
     fun detail(climbId: Long) = "detail/$climbId"
     fun climbDetailsInput(videoPath: String, durationMs: Long, sourceClimbId: Long = -1L) =
         "climb_details_input/${Uri.encode(videoPath)}/$durationMs/$sourceClimbId"
+    fun clubMember(organizationId: Long) = "club_member/$organizationId"
     fun analysisProgress(attemptId: Long) = "analysis_progress/$attemptId"
     fun analysisResult(analysisId: Long) = "analysis_result/$analysisId"
     fun friendClimbs(friendUid: String, friendUsername: String) = "friend_climbs/$friendUid/${Uri.encode(friendUsername)}"
@@ -69,6 +81,14 @@ private val TAB_ROUTES = setOf(Routes.HOME, Routes.PROGRESS, Routes.LEADERBOARD,
 private sealed interface ProfileLoadState {
     object Loading : ProfileLoadState
     data class Loaded(val profile: UserProfile?) : ProfileLoadState
+}
+
+/** There is only one User — this is a UI-only mode switch, not a second account type. [Club]
+ * just means "render the dedicated Club Mode shell for this organization instead of the normal
+ * one," entered via [ClubModeSwitchScreen] or Settings' "Club Mode" section. */
+private sealed interface AppMode {
+    data object Normal : AppMode
+    data class Club(val organization: OrganizationEntity) : AppMode
 }
 
 private fun navigateToTab(navController: NavHostController, route: String) {
@@ -114,8 +134,58 @@ private fun LoadingScreen() {
     }
 }
 
+/** Dispatches between the normal climber shell and the dedicated Club Mode shell. A user with no
+ * STAFF/ADMIN membership anywhere never sees anything extra here — [staffOrganizations] is empty,
+ * the switcher never renders, and this behaves exactly as it did before Club Mode existed. */
 @Composable
 private fun MainNavHost(container: AppContainer, currentUid: String, profile: UserProfile) {
+    var appMode by remember { mutableStateOf<AppMode>(AppMode.Normal) }
+    var modeChosen by remember { mutableStateOf(false) }
+    val staffOrganizations by container.clubRepository.observeStaffOrganizationsForUser(currentUid)
+        .collectAsStateWithLifecycle(initialValue = emptyList())
+
+    // One-time, idempotent bootstrap of the single club this build supports — a no-op on every
+    // call after the very first, on any phone, since it's backed by a shared Firestore uniqueness
+    // check rather than anything per-device.
+    LaunchedEffect(currentUid) { container.clubRepository.ensureSeedOrganization(currentUid) }
+
+    if (!modeChosen && staffOrganizations.isNotEmpty()) {
+        ClubModeSwitchScreen(
+            staffOrganizations = staffOrganizations,
+            onContinueAsSelf = { modeChosen = true },
+            onContinueAsClub = { organization ->
+                appMode = AppMode.Club(organization)
+                modeChosen = true
+            },
+        )
+        return
+    }
+
+    when (val mode = appMode) {
+        is AppMode.Normal -> NormalNavHost(
+            container = container,
+            currentUid = currentUid,
+            profile = profile,
+            staffOrganizations = staffOrganizations,
+            onEnterClubMode = { organization -> appMode = AppMode.Club(organization) },
+        )
+        is AppMode.Club -> ClubNavHost(
+            container = container,
+            currentUid = currentUid,
+            organization = mode.organization,
+            onExitClub = { appMode = AppMode.Normal },
+        )
+    }
+}
+
+@Composable
+private fun NormalNavHost(
+    container: AppContainer,
+    currentUid: String,
+    profile: UserProfile,
+    staffOrganizations: List<OrganizationEntity>,
+    onEnterClubMode: (OrganizationEntity) -> Unit,
+) {
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
@@ -143,7 +213,48 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                 HomeScreen(
                     repository = container.climbRepository,
                     currentUid = currentUid,
+                    profile = profile,
                     onClimbClick = { id -> navController.navigate(Routes.detail(id)) },
+                    onSettingsClick = { navController.navigate(Routes.SETTINGS) },
+                )
+            }
+
+            composable(Routes.SETTINGS) {
+                SettingsScreen(
+                    uid = currentUid,
+                    profile = profile,
+                    socialRepository = container.socialRepository,
+                    authRepository = container.authRepository,
+                    settingsStore = container.settingsStore,
+                    onBack = { navController.popBackStack() },
+                    onOpenClubs = { navController.navigate(Routes.CLUBS) },
+                    staffOrganizations = staffOrganizations,
+                    onEnterClubMode = onEnterClubMode,
+                )
+            }
+
+            // Entirely optional feature — reached only via the "Clubs" row in Settings, never
+            // part of the default startup destination or bottom-nav tabs, so a normal user who
+            // never taps it is completely unaffected.
+            composable(Routes.CLUBS) {
+                ClubsScreen(
+                    currentUid = currentUid,
+                    clubRepository = container.clubRepository,
+                    onBack = { navController.popBackStack() },
+                    onOpenMemberClub = { organization -> navController.navigate(Routes.clubMember(organization.id)) },
+                )
+            }
+
+            composable(
+                route = Routes.CLUB_MEMBER,
+                arguments = listOf(navArgument("organizationId") { type = NavType.LongType }),
+            ) { backStackEntry ->
+                val organizationId = backStackEntry.arguments?.getLong("organizationId") ?: 0L
+                MemberClubNavHost(
+                    container = container,
+                    currentUid = currentUid,
+                    organizationId = organizationId,
+                    onBack = { navController.popBackStack() },
                 )
             }
 
@@ -256,6 +367,10 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                             popUpTo(Routes.ANALYSIS_RECORD) { inclusive = true }
                         }
                     },
+                    // Only the analysis flow gets a prep countdown — a quick log (Routes.RECORD)
+                    // doesn't get analyzed for a climb window, so there's nothing for the
+                    // climber to lose by starting to record immediately there.
+                    countdownSeconds = 5,
                 )
             }
 
@@ -276,6 +391,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
                     currentUid = currentUid,
                     sourceClimbId = sourceClimbIdArg.takeIf { it > 0 },
                     analysisRepository = container.analysisRepository,
+                    clubRepository = container.clubRepository,
                     onAnalyzeStarted = { attemptId ->
                         navController.navigate(Routes.analysisProgress(attemptId)) {
                             popUpTo(Routes.HOME) { inclusive = false }

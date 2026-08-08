@@ -88,4 +88,5 @@ dependencies {
 
     implementation(libs.mediapipe.tasks.vision)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.coil.compose)
 }

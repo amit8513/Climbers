@@ -57,6 +57,7 @@ import com.example.climb.ui.theme.ClimbTheme
 import com.example.climb.ui.theme.wallTexture
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.auth.api.signin.GoogleSignInStatusCodes
 import com.google.android.gms.common.api.ApiException
 import kotlinx.coroutines.launch
 
@@ -85,19 +86,33 @@ fun AuthScreen(
         )
     }
     val googleSignInLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        val idToken = runCatching {
-            GoogleSignIn.getSignedInAccountFromIntent(result.data).getResult(ApiException::class.java).idToken
-        }.getOrNull()
-
-        if (idToken == null) {
+        // Distinguishing a real user cancellation from every other failure matters here: this
+        // is also how a device-management/work-profile policy blocking Google sign-in shows up
+        // (Play Services fails the token exchange before an account is ever returned), and that
+        // used to get mislabeled as "cancelled" even though the user never touched cancel.
+        var idToken: String? = null
+        try {
+            idToken = GoogleSignIn.getSignedInAccountFromIntent(result.data).getResult(ApiException::class.java).idToken
+        } catch (e: ApiException) {
             loading = false
-            errorMessage = "Google sign-in was cancelled"
-        } else {
+            errorMessage = if (e.statusCode == GoogleSignInStatusCodes.SIGN_IN_CANCELLED) {
+                "Google sign-in was cancelled"
+            } else {
+                "Google sign-in didn't complete (code ${e.statusCode}). If this phone has a work profile or " +
+                    "device-management policy, it may be blocking sign-in for this account — try a personal " +
+                    "Google account, or check with whoever manages this device."
+            }
+        }
+
+        if (idToken != null) {
             scope.launch {
                 val signInResult = authRepository.signInWithGoogle(idToken)
                 loading = false
                 signInResult.onFailure { errorMessage = it.message ?: "Google sign-in failed" }
             }
+        } else if (errorMessage == null) {
+            loading = false
+            errorMessage = "Google sign-in was cancelled"
         }
     }
 
@@ -115,7 +130,7 @@ fun AuthScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
-                text = "CLIMB",
+                text = "CLIMBERS",
                 color = ClimbPalette.textPrimary,
                 fontWeight = FontWeight.Black,
                 fontSize = 26.sp,

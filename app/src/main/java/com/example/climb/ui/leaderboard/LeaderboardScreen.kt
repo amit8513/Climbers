@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.climb.leaderboard.data.LeaderboardRepository
@@ -137,12 +138,19 @@ fun LeaderboardScreen(
 private fun LeaderboardHeader(periodFilter: PeriodFilter, onPeriodSelect: (PeriodFilter) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 20.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(text = "LEADERBOARD", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = 0.5.sp)
-            Text(text = "See how you stack up with your friends.", color = ClimbPalette.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+            Text(
+                text = "See how you stack up with your friends.",
+                color = ClimbPalette.textSecondary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
+            )
         }
         PeriodSelector(selected = periodFilter, onSelect = onPeriodSelect)
     }

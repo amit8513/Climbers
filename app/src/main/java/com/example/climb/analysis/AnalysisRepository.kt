@@ -21,6 +21,11 @@ class AnalysisRepository(private val dao: AnalysisDao) {
     fun observeLatestAttemptForSourceClimb(sourceClimbId: Long): Flow<ClimbAttemptEntity?> =
         dao.observeLatestAttemptForSourceClimb(sourceClimbId)
 
+    /** "My club videos" — always local and always just the caller's own rows, so unlike the rest
+     * of the Clubs feature this never needed to move to Firestore. */
+    fun observeClubAttempts(userId: String, organizationId: Long): Flow<List<ClimbAttemptEntity>> =
+        dao.observeAttemptsForUserAndOrganization(userId, organizationId)
+
     fun observeLatestAnalysis(attemptId: Long): Flow<ClimbAnalysisEntity?> = dao.observeLatestAnalysis(attemptId)
 
     suspend fun createQueuedAnalysis(attemptId: Long, now: Long): Long = dao.insertAnalysis(
@@ -86,5 +91,20 @@ class AnalysisRepository(private val dao: AnalysisDao) {
                 scoringConfigVersion = performanceResult.scoringConfig.version,
             ),
         )
+    }
+
+    /**
+     * The user's own previous attempt on the same route (matched by route name + user, not
+     * [ClimbAttemptEntity.sourceClimbId] — that field links back to a pre-existing logged climb
+     * video, not a general "same route" grouping), with its most recent completed analysis.
+     * Returns null when there's no route name to match on, no earlier attempt, or that earlier
+     * attempt's analysis never completed — a personal baseline this attempt can be compared
+     * against is a bonus, not something to fabricate from partial data.
+     */
+    suspend fun getPreviousCompletedAnalysisForRoute(attempt: ClimbAttemptEntity): ClimbAnalysisEntity? {
+        val routeName = attempt.routeName?.takeIf { it.isNotBlank() } ?: return null
+        val previousAttempt = dao.getPreviousAttemptForRoute(attempt.userId, routeName, attempt.id, attempt.createdAt) ?: return null
+        val previousAnalysis = dao.getLatestAnalysis(previousAttempt.id) ?: return null
+        return previousAnalysis.takeIf { it.status == AnalysisStatus.COMPLETE }
     }
 }

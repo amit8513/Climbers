@@ -23,4 +23,13 @@ data class ClimbAttemptEntity(
     val gymName: String?,
     val notes: String,
     val visibility: Visibility,
+    /** Optional link to a real gym route (see `com.example.climb.clubs`) — null for every
+     * existing attempt and for any normal user who never selects a gym route. When present,
+     * these enhance the analysis report with route context; the analysis pipeline itself never
+     * requires them. */
+    val organizationId: Long? = null,
+    val venueId: Long? = null,
+    val zoneId: Long? = null,
+    val routeId: Long? = null,
+    val routeVersionId: Long? = null,
 )

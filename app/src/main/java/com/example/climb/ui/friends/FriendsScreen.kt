@@ -69,7 +69,7 @@ fun FriendsScreen(
                 .padding(horizontal = 20.dp),
         ) {
             Text(
-                text = "CLIMB",
+                text = "CLIMBERS",
                 color = ClimbPalette.textMuted,
                 fontWeight = FontWeight.Black,
                 fontSize = 13.sp,

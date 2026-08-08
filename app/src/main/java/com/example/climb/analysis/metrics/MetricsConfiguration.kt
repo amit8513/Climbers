@@ -78,4 +78,18 @@ data class MetricsConfiguration(
     /** A hand-velocity peak within this many ms before a fall candidate is treated as the reach
      * that may have led to it. */
     val missedReachWindowMs: Long = 1_500L,
+
+    /** A knee-angle increase (extension) at or above this rate, in the window right before a
+     * large dynamic move, is treated as a possible leg-drive contribution to that move — this is
+     * a guessed threshold, not a biomechanical constant. */
+    val legDriveExtensionDegreesPerSecond: Float = 90f,
+    /** How far before a large dynamic move to look for a qualifying knee-extension rate. */
+    val legDriveLookbackWindowMs: Long = 600L,
+
+    /** Foot-index position sampled during a settled window (see [footSettleDurationMs]) is
+     * compared against the mean of that window; the average deviation (normalized by body
+     * height) across all settled windows becomes jitter — inverted into a 0-100
+     * [ClimbMetrics.footStabilityScore] where less jitter scores higher. This scale factor maps
+     * typical jitter magnitudes onto that 0-100 range and is an empirical fit, not a constant. */
+    val footJitterScoreScale: Float = 600f,
 )

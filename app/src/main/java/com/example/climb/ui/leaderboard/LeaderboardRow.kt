@@ -21,12 +21,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.climb.leaderboard.model.LeaderboardCategory
 import com.example.climb.leaderboard.model.LeaderboardEntry
 import com.example.climb.leaderboard.model.RankMovementType
@@ -35,8 +37,11 @@ import com.example.climb.ui.theme.ClimbPalette
 /** Minimum touch target everywhere in this feature, per the accessibility requirement. */
 private val MinTouchTarget = 44.dp
 
+/** Falls back to the initials whenever [photoUrl] is null, blank, or fails to load — the initials
+ * are drawn first and the photo layered on top, so a failed/loading image never leaves a blank
+ * circle. */
 @Composable
-fun InitialsAvatar(name: String, size: androidx.compose.ui.unit.Dp, modifier: Modifier = Modifier) {
+fun InitialsAvatar(name: String, size: androidx.compose.ui.unit.Dp, photoUrl: String? = null, modifier: Modifier = Modifier) {
     val letter = name.trim().firstOrNull()?.uppercase() ?: "?"
     Box(
         modifier = modifier
@@ -47,6 +52,14 @@ fun InitialsAvatar(name: String, size: androidx.compose.ui.unit.Dp, modifier: Mo
         contentAlignment = Alignment.Center,
     ) {
         Text(text = letter, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = (size.value * 0.4f).sp)
+        if (!photoUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = photoUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize().clip(CircleShape),
+            )
+        }
     }
 }
 

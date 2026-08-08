@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
 import com.example.climb.analysis.AnalysisRepository
@@ -38,6 +39,8 @@ import com.example.climb.analysis.ClimbAttemptEntity
 import com.example.climb.analysis.PoseAnalysisWorker
 import com.example.climb.analysis.Visibility
 import com.example.climb.analysis.WallType
+import com.example.climb.clubs.ClubRepository
+import com.example.climb.clubs.RouteContext
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 import kotlinx.coroutines.launch
@@ -49,6 +52,7 @@ fun ClimbDetailsInputScreen(
     currentUid: String,
     sourceClimbId: Long?,
     analysisRepository: AnalysisRepository,
+    clubRepository: ClubRepository,
     onAnalyzeStarted: (attemptId: Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -65,6 +69,9 @@ fun ClimbDetailsInputScreen(
     var notes by remember { mutableStateOf("") }
     var visibility by remember { mutableStateOf(Visibility.PRIVATE) }
     var saving by remember { mutableStateOf(false) }
+    // Entirely optional — stays null for anyone who never touches the picker below, which is
+    // exactly the "outdoor/no-gym" state the analysis pipeline already treats as normal.
+    var routeContext by remember { mutableStateOf<RouteContext?>(null) }
 
     val attemptNumberInt = attemptNumber.toIntOrNull()
     val flashAllowed = attemptNumberInt == 1 && completed
@@ -141,7 +148,21 @@ fun ClimbDetailsInputScreen(
             }
 
             FieldLabel("Route name (optional)")
-            OutlinedTextField(value = routeName, onValueChange = { routeName = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(value = routeName, onValueChange = { routeName = it; routeContext = null }, singleLine = true, modifier = Modifier.fillMaxWidth())
+
+            FieldLabel("Link to a gym route (optional)")
+            GymRoutePicker(
+                currentUid = currentUid,
+                clubRepository = clubRepository,
+                selected = routeContext,
+                onSelected = { context ->
+                    routeContext = context
+                    if (context != null) {
+                        routeName = context.routeName
+                        vGrade = context.vGrade ?: vGrade
+                    }
+                },
+            )
 
             FieldLabel("Gym / location (optional)")
             OutlinedTextField(value = gymName, onValueChange = { gymName = it }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -184,6 +205,11 @@ fun ClimbDetailsInputScreen(
                                 gymName = gymName.ifBlank { null },
                                 notes = notes,
                                 visibility = visibility,
+                                organizationId = routeContext?.organizationId,
+                                venueId = routeContext?.venueId,
+                                zoneId = routeContext?.zoneId,
+                                routeId = routeContext?.routeId,
+                                routeVersionId = routeContext?.routeVersionId,
                             ),
                         )
                         WorkManager.getInstance(context).enqueueUniqueWork(
@@ -191,6 +217,9 @@ fun ClimbDetailsInputScreen(
                             ExistingWorkPolicy.KEEP,
                             PoseAnalysisWorker.buildRequest(attemptId),
                         )
+                        routeContext?.let { route ->
+                            clubRepository.recordClubAttempt(route.organizationId, currentUid, vGrade, completed)
+                        }
                         saving = false
                         onAnalyzeStarted(attemptId)
                     }
@@ -201,6 +230,119 @@ fun ClimbDetailsInputScreen(
             }
 
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/**
+ * Progressive org → venue → zone → route chip picker, scoped to gyms the current user has
+ * actually joined (you can only link a climb to a route at a gym you're a member of). Shows
+ * nothing but a one-line hint when the user belongs to zero organizations — the common case for
+ * a normal/outdoor climber — so this never adds visual weight to that flow.
+ */
+@Composable
+private fun GymRoutePicker(
+    currentUid: String,
+    clubRepository: ClubRepository,
+    selected: RouteContext?,
+    onSelected: (RouteContext?) -> Unit,
+) {
+    val memberships by clubRepository.observeMembershipsForUser(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
+    if (memberships.isEmpty()) {
+        Text(
+            text = "Join a gym in Settings → Clubs to link climbs to real routes.",
+            color = ClimbPalette.textMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        return
+    }
+
+    val organizations by clubRepository.observeAllOrganizations().collectAsStateWithLifecycle(initialValue = emptyList())
+    val myOrgIds = remember(memberships) { memberships.map { it.organizationId }.toSet() }
+    val myOrganizations = remember(organizations, myOrgIds) { organizations.filter { it.id in myOrgIds } }
+
+    var selectedOrgId by remember { mutableStateOf(selected?.organizationId) }
+    var selectedVenueId by remember { mutableStateOf(selected?.venueId) }
+    var selectedZoneId by remember { mutableStateOf(selected?.zoneId) }
+    val scope = rememberCoroutineScope()
+
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(myOrganizations) { org ->
+            FilterChip(
+                selected = selectedOrgId == org.id,
+                onClick = {
+                    if (selectedOrgId == org.id) {
+                        selectedOrgId = null
+                    } else {
+                        selectedOrgId = org.id
+                        selectedVenueId = null
+                        selectedZoneId = null
+                    }
+                    onSelected(null)
+                },
+                label = { Text(org.name) },
+            )
+        }
+    }
+
+    val orgId = selectedOrgId
+    if (orgId != null) {
+        val venues by clubRepository.observeVenuesForOrganization(orgId).collectAsStateWithLifecycle(initialValue = emptyList())
+        Spacer(Modifier.height(8.dp))
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(venues) { venue ->
+                FilterChip(
+                    selected = selectedVenueId == venue.id,
+                    onClick = {
+                        if (selectedVenueId == venue.id) {
+                            selectedVenueId = null
+                        } else {
+                            selectedVenueId = venue.id
+                            selectedZoneId = null
+                        }
+                        onSelected(null)
+                    },
+                    label = { Text(venue.name) },
+                )
+            }
+        }
+
+        val venueId = selectedVenueId
+        if (venueId != null) {
+            val zones by clubRepository.observeZonesForVenue(venueId).collectAsStateWithLifecycle(initialValue = emptyList())
+            Spacer(Modifier.height(8.dp))
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(zones) { zone ->
+                    FilterChip(
+                        selected = selectedZoneId == zone.id,
+                        onClick = {
+                            selectedZoneId = if (selectedZoneId == zone.id) null else zone.id
+                            onSelected(null)
+                        },
+                        label = { Text(zone.name) },
+                    )
+                }
+            }
+
+            val zoneId = selectedZoneId
+            if (zoneId != null) {
+                val routes by clubRepository.observeActiveRoutesForZone(zoneId).collectAsStateWithLifecycle(initialValue = emptyList())
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(routes) { route ->
+                        FilterChip(
+                            selected = selected?.routeId == route.id,
+                            onClick = {
+                                scope.launch {
+                                    onSelected(clubRepository.buildRouteContext(orgId, venueId, zoneId, route))
+                                }
+                            },
+                            label = { Text("${route.name}${route.vGrade?.let { " V$it" } ?: ""}") },
+                        )
+                    }
+                }
+            }
         }
     }
 }

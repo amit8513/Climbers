@@ -290,6 +290,22 @@ fun buildEvents(frames: List<PoseFrame>, computation: AnalysisComputation, confi
         )
     }
 
+    computation.legDriveCandidates.forEachIndexed { index, legDrive ->
+        val side = if (legDrive.side == Side.LEFT) "left" else "right"
+        events += ClimbEvent(
+            id = "leg_drive_${legDrive.side}_$index",
+            type = ClimbEventType.LEG_DRIVE_CANDIDATE,
+            startTimestampMs = legDrive.timestampMs,
+            endTimestampMs = legDrive.dynamicMoveTimestampMs,
+            peakTimestampMs = legDrive.timestampMs,
+            confidence = 0.45f,
+            severity = 1,
+            metricValues = mapOf("extensionDegreesPerSecond" to legDrive.extensionDegreesPerSecond),
+            userVisibleTitle = "${side.replaceFirstChar { it.uppercase() }} leg-drive candidate",
+            userVisibleDescription = "Your $side knee straightened quickly just before a dynamic move around ${formatTimestampMs(legDrive.dynamicMoveTimestampMs)} — pose tracking can't confirm the foot was actually pushing off a hold.",
+        )
+    }
+
     val missedReachFallTimestamps = computation.missedReachCandidates.map { it.fallTimestampMs }.toSet()
     computation.fallCandidates.filter { it.timestampMs !in missedReachFallTimestamps }.forEachIndexed { index, fall ->
         events += ClimbEvent(

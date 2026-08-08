@@ -63,5 +63,103 @@ service cloud.firestore {
         request.resource.data.visibility in ['FRIENDS_ONLY', 'PUBLIC'];
       allow delete: if signedIn() && request.auth.uid == resource.data.ownerUid;
     }
+
+    function isStaffOf(organizationId) {
+      return exists(/databases/$(database)/documents/organizationMemberships/$(organizationId + '_' + request.auth.uid)) &&
+        get(/databases/$(database)/documents/organizationMemberships/$(organizationId + '_' + request.auth.uid)).data.role in ['STAFF', 'ADMIN'];
+    }
+
+    // Shared, monotonically-increasing id counters (one per entity type) so organization/venue/
+    // zone/route ids stay plain Longs — see ClubRepository.nextId.
+    match /counters/{counterName} {
+      allow read, write: if signedIn();
+    }
+
+    // There's no in-app "create a club" button — the app only ever calls this once, to bootstrap
+    // the single seed club it supports (see ClubRepository.ensureSeedOrganization). Left open to
+    // any signed-in user at the rules layer rather than locked to an allowlist, matching this
+    // app's existing trust level elsewhere (e.g. friendRequests).
+    match /organizations/{orgId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+
+    // A membership is either you becoming ADMIN of a club you just created, or staff/admin of
+    // that org approving someone else's join request — never a user granting themselves access.
+    match /organizationMemberships/{membershipId} {
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        (
+          (request.resource.data.role == 'ADMIN' && request.resource.data.userId == request.auth.uid) ||
+          isStaffOf(request.resource.data.organizationId)
+        );
+      allow update, delete: if false;
+    }
+
+    match /organizationJoinRequests/{requestId} {
+      allow read: if signedIn() &&
+        (resource == null || request.auth.uid == resource.data.userId || isStaffOf(resource.data.organizationId));
+      allow create: if signedIn() && request.auth.uid == request.resource.data.userId && request.resource.data.status == 'PENDING';
+      // Two different callers hit this as an "update" (the doc already exists): staff deciding a
+      // pending request, or the same requester re-requesting after an earlier denial — a fresh
+      // request reuses (and resets) the same doc id rather than piling up history.
+      allow update: if signedIn() &&
+        (
+          isStaffOf(resource.data.organizationId) ||
+          (
+            request.auth.uid == resource.data.userId &&
+            resource.data.status != 'PENDING' &&
+            request.resource.data.status == 'PENDING' &&
+            request.resource.data.userId == resource.data.userId &&
+            request.resource.data.organizationId == resource.data.organizationId
+          )
+        );
+      allow delete: if false;
+    }
+
+    match /venues/{venueId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && isStaffOf(request.resource.data.organizationId);
+      allow update: if signedIn() && isStaffOf(resource.data.organizationId);
+      allow delete: if false;
+    }
+
+    match /zones/{zoneId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && isStaffOf(request.resource.data.organizationId);
+      allow update: if signedIn() && isStaffOf(resource.data.organizationId);
+      allow delete: if false;
+    }
+
+    match /routes/{routeId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && isStaffOf(request.resource.data.organizationId);
+      allow update: if signedIn() && isStaffOf(resource.data.organizationId);
+      allow delete: if false;
+    }
+
+    match /routeVersions/{versionId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && isStaffOf(request.resource.data.organizationId);
+      allow update, delete: if false;
+    }
+
+    match /clubUpdates/{updateId} {
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        isStaffOf(request.resource.data.organizationId) &&
+        request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Attempt-count bookkeeping for the member-facing club leaderboard — any member can record
+    // their own stats (it's their own participation data, not a staff action), but never anyone
+    // else's.
+    match /clubStats/{statsId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
   }
 }

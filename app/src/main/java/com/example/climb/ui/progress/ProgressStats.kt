@@ -34,6 +34,14 @@ fun headlineStats(climbs: List<ClimbEntity>): HeadlineStats {
     )
 }
 
+/** Average grade across sent climbs only — unsent attempts don't reflect a level actually
+ * climbed at, and a null [ClimbEntity.vGrade] (ungraded) is excluded rather than treated as 0. */
+fun averageSentGrade(climbs: List<ClimbEntity>): Double? =
+    climbs.filter { it.outcome == ClimbOutcome.SENT }
+        .mapNotNull { it.vGrade }
+        .takeIf { it.isNotEmpty() }
+        ?.average()
+
 /**
  * Sends per grade over the last [PYRAMID_WINDOW_DAYS] days only. A lifetime pyramid keeps
  * accumulating and stops reflecting current form, which is the whole point of the shape.
