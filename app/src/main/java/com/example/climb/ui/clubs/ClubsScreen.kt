@@ -1,5 +1,8 @@
 package com.example.climb.ui.clubs
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,15 +11,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,10 +34,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.JoinRequestStatus
 import com.example.climb.clubs.OrganizationEntity
@@ -306,6 +315,21 @@ fun ZoneDetailContent(
 
     Text(text = zone.name, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.padding(bottom = 16.dp))
 
+    val imageUrl = zone.imageUrl
+    if (imageUrl != null) {
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = "${zone.name} photo",
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp)).padding(bottom = 16.dp),
+        )
+    }
+
+    if (isStaff) {
+        ZonePhotoUploader(currentUid = currentUid, clubRepository = clubRepository, organization = organization, zone = zone)
+        Spacer(Modifier.height(16.dp))
+    }
+
     SectionCard(title = "Active routes") {
         if (routes.isEmpty()) {
             Text(text = "No active routes yet.", color = ClimbPalette.textMuted, fontSize = 13.sp)
@@ -349,6 +373,48 @@ fun ZoneDetailContent(
                     }
                 },
             ) { Text("Set route") }
+        }
+    }
+}
+
+@Composable
+private fun ZonePhotoUploader(currentUid: String, clubRepository: ClubRepository, organization: OrganizationEntity, zone: ZoneEntity) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var uploading by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val pickPhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        uploading = true
+        errorMessage = null
+        scope.launch {
+            val contentType = context.contentResolver.getType(uri)
+            val uploadResult = clubRepository.uploadZonePhoto(organization.id, currentUid, zone.id, uri, contentType)
+            val url = uploadResult.getOrNull()
+            if (url == null) {
+                uploading = false
+                errorMessage = uploadResult.exceptionOrNull()?.message ?: "Upload failed"
+                return@launch
+            }
+            val attachResult = clubRepository.setZoneImage(organization.id, currentUid, zone, url)
+            uploading = false
+            attachResult.onFailure { errorMessage = it.message ?: "Something went wrong" }
+        }
+    }
+
+    SectionCard(title = "Zone photo") {
+        errorMessage?.let { Text(text = it, color = ClimbPalette.fell, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp)) }
+        Button(
+            enabled = !uploading,
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { pickPhotoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+        ) {
+            if (uploading) {
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            } else {
+                Text(if (zone.imageUrl != null) "Replace photo" else "Add a photo")
+            }
         }
     }
 }

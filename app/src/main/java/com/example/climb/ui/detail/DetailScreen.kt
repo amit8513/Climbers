@@ -1,6 +1,7 @@
 package com.example.climb.ui.detail
 
 import android.net.Uri
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,11 +16,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -36,6 +40,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,6 +53,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.work.WorkManager
+import com.example.climb.R
 import com.example.climb.analysis.AnalysisRepository
 import com.example.climb.analysis.AnalysisStatus
 import com.example.climb.analysis.ClimbAttemptEntity
@@ -54,6 +62,7 @@ import com.example.climb.data.ClimbRepository
 import com.example.climb.playback.ColorIsolationEffect
 import com.example.climb.playback.exportWithColorIsolation
 import com.example.climb.sharing.ClimbSyncWorker
+import com.example.climb.sharing.StorySharer
 import com.example.climb.util.saveVideoToGallery
 import com.example.climb.ui.components.HoldBadge
 import com.example.climb.ui.components.OutcomePill
@@ -117,6 +126,10 @@ fun DetailScreen(
     var isSavingToGallery by remember { mutableStateOf(false) }
     var galleryError by remember { mutableStateOf<String?>(null) }
     var gallerySavedMessage by remember { mutableStateOf<String?>(null) }
+    var isSharingToInstagram by remember { mutableStateOf(false) }
+    var instagramError by remember { mutableStateOf<String?>(null) }
+    var isSharingToFacebook by remember { mutableStateOf(false) }
+    var facebookError by remember { mutableStateOf<String?>(null) }
 
     // Effects must be set before prepare() — ExoPlayer decides whether to route through the GL
     // effects pipeline at prepare time, so setting them afterwards (e.g. only from the
@@ -356,6 +369,72 @@ fun DetailScreen(
                     Text(text = message, color = ClimbPalette.sent, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
                 }
             }
+
+            Spacer(Modifier.height(14.dp))
+            Text(text = "Share to", color = ClimbPalette.textMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                ShareIconButton(
+                    iconRes = R.drawable.ic_instagram,
+                    contentDescription = "Share to Instagram Story",
+                    inProgress = isSharingToInstagram,
+                    enabled = !isExportingVideo && !isSharingToInstagram && !isSharingToFacebook,
+                    onClick = {
+                        isSharingToInstagram = true
+                        instagramError = null
+                        val exportedFile = File(context.cacheDir, "climb_${currentClimb.id}_story_${System.currentTimeMillis()}.mp4")
+                        scope.launch {
+                            runCatching {
+                                exportWithColorIsolation(
+                                    context = context,
+                                    inputPath = currentClimb.videoPath,
+                                    outputPath = exportedFile.absolutePath,
+                                    routeColor = currentClimb.routeColor,
+                                    hueOffsetDegrees = hueOffsetPosition,
+                                    hueToleranceDegrees = hueTolerancePosition,
+                                )
+                                StorySharer.shareToInstagramStory(context, exportedFile).getOrThrow()
+                            }.onFailure { error ->
+                                instagramError = error.message ?: "Couldn't open Instagram — is it installed?"
+                            }
+                            isSharingToInstagram = false
+                        }
+                    },
+                )
+                ShareIconButton(
+                    iconRes = R.drawable.ic_facebook,
+                    contentDescription = "Share to Facebook",
+                    inProgress = isSharingToFacebook,
+                    enabled = !isExportingVideo && !isSharingToInstagram && !isSharingToFacebook,
+                    onClick = {
+                        isSharingToFacebook = true
+                        facebookError = null
+                        val exportedFile = File(context.cacheDir, "climb_${currentClimb.id}_fbshare_${System.currentTimeMillis()}.mp4")
+                        scope.launch {
+                            runCatching {
+                                exportWithColorIsolation(
+                                    context = context,
+                                    inputPath = currentClimb.videoPath,
+                                    outputPath = exportedFile.absolutePath,
+                                    routeColor = currentClimb.routeColor,
+                                    hueOffsetDegrees = hueOffsetPosition,
+                                    hueToleranceDegrees = hueTolerancePosition,
+                                )
+                                StorySharer.shareToFacebook(context, exportedFile).getOrThrow()
+                            }.onFailure { error ->
+                                facebookError = error.message ?: "Couldn't open Facebook — is it installed?"
+                            }
+                            isSharingToFacebook = false
+                        }
+                    },
+                )
+            }
+            instagramError?.let { message ->
+                Text(text = message, color = ClimbPalette.fell, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+            }
+            facebookError?.let { message ->
+                Text(text = message, color = ClimbPalette.fell, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -513,6 +592,37 @@ private fun PoseAnalysisStatusRow(
             fontSize = 13.sp,
             modifier = Modifier.clickable { onViewProgress(attempt.id) },
         )
+    }
+}
+
+@Composable
+private fun ShareIconButton(
+    @DrawableRes iconRes: Int,
+    contentDescription: String,
+    inProgress: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(ClimbPalette.surfaceRaised)
+            .border(1.dp, ClimbPalette.border, CircleShape)
+            .clickable(enabled = enabled && !inProgress, onClick = onClick)
+            .semantics { this.contentDescription = contentDescription },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (inProgress) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = ClimbPalette.chalk)
+        } else {
+            Icon(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                tint = if (enabled) ClimbPalette.textPrimary else ClimbPalette.textMuted,
+                modifier = Modifier.size(22.dp),
+            )
+        }
     }
 }
 

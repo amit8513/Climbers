@@ -47,6 +47,9 @@ data class ZoneEntity(
     val venueId: Long,
     val name: String,
     val createdAt: Long,
+    /** A staff-uploaded photo of the zone, shown to any member — optional, so every zone created
+     * before this existed just has null. */
+    val imageUrl: String? = null,
 )
 
 /** A physical route/problem on the wall. [retiredAt] marks when staff stripped it — existing

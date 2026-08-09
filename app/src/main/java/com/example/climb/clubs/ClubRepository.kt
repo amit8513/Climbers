@@ -327,8 +327,24 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         val now = System.currentTimeMillis()
         val id = nextId(ZONES)
         firestore.collection(ZONES).document(id.toString())
-            .set(mapOf("organizationId" to organizationId, "venueId" to venueId, "name" to trimmed, "createdAt" to now)).await()
+            .set(mapOf("organizationId" to organizationId, "venueId" to venueId, "name" to trimmed, "createdAt" to now, "imageUrl" to null)).await()
         ZoneEntity(id = id, organizationId = organizationId, venueId = venueId, name = trimmed, createdAt = now)
+    }
+
+    /** Same two-step upload-then-attach shape as [uploadBetaVideo]/[setRouteBetaVideo]. */
+    suspend fun uploadZonePhoto(organizationId: Long, userId: String, zoneId: Long, imageUri: Uri, contentType: String?): Result<String> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        val ref = storage.reference.child("club_zone_photos/$organizationId/$zoneId.jpg")
+        val metadata = StorageMetadata.Builder().apply {
+            if (contentType != null) setContentType(contentType)
+        }.build()
+        ref.putFile(imageUri, metadata).await()
+        ref.downloadUrl.await().toString()
+    }
+
+    suspend fun setZoneImage(organizationId: Long, userId: String, zone: ZoneEntity, imageUrl: String?): Result<Unit> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        firestore.collection(ZONES).document(zone.id.toString()).update("imageUrl", imageUrl).await()
     }
 
     suspend fun createRoute(organizationId: Long, userId: String, zoneId: Long, name: String, vGrade: Int?): Result<RouteEntity> = runCatching {
@@ -431,6 +447,7 @@ private fun DocumentSnapshot.toZone(): ZoneEntity? {
         venueId = getLong("venueId") ?: return null,
         name = name,
         createdAt = getLong("createdAt") ?: 0L,
+        imageUrl = getString("imageUrl"),
     )
 }
 
