@@ -22,6 +22,10 @@ enum class OrganizationRole { MEMBER, STAFF, ADMIN }
 data class OrganizationMembershipEntity(
     val organizationId: Long,
     val userId: String,
+    /** Denormalized at write time (same pattern as [com.example.climb.data.social.FriendRequest]'s
+     * fromUsername/toUsername) so displaying a member never depends on a separate, possibly-failed
+     * profile lookup. */
+    val userDisplayName: String,
     val role: OrganizationRole,
     val joinedAt: Long,
 )
@@ -56,6 +60,9 @@ data class RouteEntity(
     val vGrade: Int?,
     val createdAt: Long,
     val retiredAt: Long? = null,
+    /** An instructional "how to climb this" video staff uploaded, played back for any member —
+     * never required to set a route, so every route created before this existed just has null. */
+    val betaVideoUrl: String? = null,
 )
 
 /** One physical setting of a route — routes get stripped and reset periodically, and a route's
@@ -95,6 +102,8 @@ enum class JoinRequestStatus { PENDING, APPROVED, DENIED }
 data class OrganizationJoinRequestEntity(
     val organizationId: Long,
     val userId: String,
+    /** Denormalized at write time — same reasoning as [OrganizationMembershipEntity.userDisplayName]. */
+    val userDisplayName: String,
     val status: JoinRequestStatus,
     val requestedAt: Long,
     val decidedAt: Long? = null,
@@ -120,9 +129,22 @@ data class ClubUpdateEntity(
 data class ClubStatsEntity(
     val organizationId: Long,
     val userId: String,
+    /** Denormalized at write time — same reasoning as [OrganizationMembershipEntity.userDisplayName]. */
+    val userDisplayName: String,
     val totalAttempts: Int,
     val totalSends: Int,
     val bestVGradeSent: Int?,
+    val updatedAt: Long,
+)
+
+/** Route-wide analytics: how many people tried this specific route, how many sent it, how many
+ * fell — one row per route, counting every member's attempts, not just the viewer's own. */
+data class RouteStatsEntity(
+    val routeId: Long,
+    val organizationId: Long,
+    val totalAttempts: Int,
+    val totalSends: Int,
+    val totalFails: Int,
     val updatedAt: Long,
 )
 

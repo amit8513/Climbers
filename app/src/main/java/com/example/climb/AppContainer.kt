@@ -30,7 +30,7 @@ class AppContainer(context: Context) {
     }
 
     val clubRepository: ClubRepository by lazy {
-        ClubRepository(FirebaseFirestore.getInstance())
+        ClubRepository(FirebaseFirestore.getInstance(), FirebaseStorage.getInstance())
     }
 
     val poseEstimator: PoseEstimator by lazy {

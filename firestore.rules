@@ -64,9 +64,13 @@ service cloud.firestore {
       allow delete: if signedIn() && request.auth.uid == resource.data.ownerUid;
     }
 
+    // organizationId is stored as a Firestore number (from Kotlin Long), but a membership doc id
+    // is "{organizationId}_{uid}" — a string. Rules' `+` operator errors on number+string (which
+    // Firestore treats as the check failing, i.e. PERMISSION_DENIED) unless the number is first
+    // converted with string(), matching Kotlin's membershipDocId().
     function isStaffOf(organizationId) {
-      return exists(/databases/$(database)/documents/organizationMemberships/$(organizationId + '_' + request.auth.uid)) &&
-        get(/databases/$(database)/documents/organizationMemberships/$(organizationId + '_' + request.auth.uid)).data.role in ['STAFF', 'ADMIN'];
+      return exists(/databases/$(database)/documents/organizationMemberships/$(string(organizationId) + '_' + request.auth.uid)) &&
+        get(/databases/$(database)/documents/organizationMemberships/$(string(organizationId) + '_' + request.auth.uid)).data.role in ['STAFF', 'ADMIN'];
     }
 
     // Shared, monotonically-increasing id counters (one per entity type) so organization/venue/
@@ -159,6 +163,15 @@ service cloud.firestore {
     match /clubStats/{statsId} {
       allow read: if signedIn();
       allow create, update: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // Route-wide attempt/send/fail counters — unlike clubStats there's no single owning user (it
+    // aggregates every member's attempts), so this is open to any signed-in member, same trust
+    // level as /counters.
+    match /routeStats/{routeId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn();
       allow delete: if false;
     }
   }

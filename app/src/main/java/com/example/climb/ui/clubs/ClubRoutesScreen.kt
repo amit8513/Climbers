@@ -45,6 +45,7 @@ fun ClubRoutesScreen(
             when (val current = view) {
                 is ClubsView.VenueDetail -> BackRow { view = ClubsView.OrganizationDetail(current.organization) }
                 is ClubsView.ZoneDetail -> BackRow { view = ClubsView.VenueDetail(current.organization, current.venue) }
+                is ClubsView.RouteDetail -> BackRow { view = ClubsView.ZoneDetail(current.organization, current.venue, current.zone) }
                 else -> Spacer(Modifier.height(20.dp))
             }
             Text(text = "Routes", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 22.sp, modifier = Modifier.padding(bottom = 16.dp))
@@ -69,8 +70,18 @@ fun ClubRoutesScreen(
                     currentUid = currentUid,
                     clubRepository = clubRepository,
                     organization = current.organization,
+                    venue = current.venue,
                     zone = current.zone,
                     isStaff = isStaff,
+                    onOpenRoute = { route -> view = ClubsView.RouteDetail(current.organization, current.venue, current.zone, route) },
+                )
+                is ClubsView.RouteDetail -> RouteDetailContent(
+                    currentUid = currentUid,
+                    clubRepository = clubRepository,
+                    organization = current.organization,
+                    route = current.route,
+                    isStaff = isStaff,
+                    onRetired = { view = ClubsView.ZoneDetail(current.organization, current.venue, current.zone) },
                 )
                 is ClubsView.OrganizationList -> Unit // unreachable — this screen is always scoped to one organization
             }

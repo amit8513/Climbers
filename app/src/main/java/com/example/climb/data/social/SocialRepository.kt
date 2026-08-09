@@ -83,7 +83,11 @@ class SocialRepository(
         firestore.collection(USERS).document(uid).update("photoUrl", photoUrl).await()
     }
 
-    suspend fun getProfile(uid: String): UserProfile? = firestore.collection(USERS).document(uid).get().await().toUserProfile(uid)
+    // Used for one-shot batch lookups (e.g. resolving a list of club member uids to display
+    // names) where a single failed/missing profile must never take the whole list down — falls
+    // back to null (callers show the uid) rather than throwing.
+    suspend fun getProfile(uid: String): UserProfile? =
+        runCatching { firestore.collection(USERS).document(uid).get().await().toUserProfile(uid) }.getOrNull()
 
     fun observeProfile(uid: String): Flow<UserProfile?> = callbackFlow {
         val registration = firestore.collection(USERS).document(uid)

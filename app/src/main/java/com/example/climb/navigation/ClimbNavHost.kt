@@ -147,7 +147,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
     // One-time, idempotent bootstrap of the single club this build supports — a no-op on every
     // call after the very first, on any phone, since it's backed by a shared Firestore uniqueness
     // check rather than anything per-device.
-    LaunchedEffect(currentUid) { container.clubRepository.ensureSeedOrganization(currentUid) }
+    LaunchedEffect(currentUid) { container.clubRepository.ensureSeedOrganization(currentUid, profile.username) }
 
     if (!modeChosen && staffOrganizations.isNotEmpty()) {
         ClubModeSwitchScreen(
@@ -239,6 +239,7 @@ private fun NormalNavHost(
             composable(Routes.CLUBS) {
                 ClubsScreen(
                     currentUid = currentUid,
+                    currentUsername = profile.username,
                     clubRepository = container.clubRepository,
                     onBack = { navController.popBackStack() },
                     onOpenMemberClub = { organization -> navController.navigate(Routes.clubMember(organization.id)) },
@@ -389,6 +390,7 @@ private fun NormalNavHost(
                     videoPath = videoPath,
                     durationMs = durationMs,
                     currentUid = currentUid,
+                    currentUsername = profile.username,
                     sourceClimbId = sourceClimbIdArg.takeIf { it > 0 },
                     analysisRepository = container.analysisRepository,
                     clubRepository = container.clubRepository,

@@ -14,11 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -28,8 +24,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.ClubStatsEntity
 import com.example.climb.clubs.OrganizationEntity
-import com.example.climb.data.social.SocialRepository
-import com.example.climb.data.social.UserProfile
 import com.example.climb.ui.components.SectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
@@ -39,20 +33,15 @@ import com.example.climb.ui.theme.wallTexture
  * [ClubStatsEntity]). Deliberately not the app-wide Leaderboard's full scoring engine, which is
  * built entirely around the friends graph and [com.example.climb.data.ClimbEntity] — neither
  * applies here, since this ranks members of one club by their club-linked analysis attempts.
+ * Display names come straight off [ClubStatsEntity.userDisplayName], denormalized at write time.
  */
 @Composable
 fun ClubLeaderboardScreen(
     clubRepository: ClubRepository,
-    socialRepository: SocialRepository,
     organization: OrganizationEntity,
     modifier: Modifier = Modifier,
 ) {
     val stats by clubRepository.observeClubLeaderboard(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
-
-    var profiles by remember { mutableStateOf<Map<String, UserProfile?>>(emptyMap()) }
-    LaunchedEffect(stats) {
-        profiles = stats.map { it.userId }.toSet().associateWith { socialRepository.getProfile(it) }
-    }
 
     Box(modifier = modifier.fillMaxSize().wallTexture()) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
@@ -75,7 +64,7 @@ fun ClubLeaderboardScreen(
                     Column {
                         stats.forEachIndexed { index, entry ->
                             if (index > 0) Spacer(Modifier.height(12.dp))
-                            LeaderboardRow(rank = index + 1, entry = entry, displayName = profiles[entry.userId]?.username ?: entry.userId)
+                            LeaderboardRow(rank = index + 1, entry = entry, displayName = entry.userDisplayName)
                         }
                     }
                 }

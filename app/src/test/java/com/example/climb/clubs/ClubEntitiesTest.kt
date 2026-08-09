@@ -7,7 +7,7 @@ import org.junit.Test
 class ClubEntitiesTest {
 
     private fun membership(role: OrganizationRole, orgId: Long = 1L) = OrganizationMembershipEntity(
-        organizationId = orgId, userId = "u1", role = role, joinedAt = 0L,
+        organizationId = orgId, userId = "u1", userDisplayName = "Test User", role = role, joinedAt = 0L,
     )
 
     @Test

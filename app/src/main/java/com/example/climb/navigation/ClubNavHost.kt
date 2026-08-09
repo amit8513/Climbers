@@ -79,7 +79,6 @@ fun ClubNavHost(container: AppContainer, currentUid: String, organization: Organ
                 ClubMembersScreen(
                     currentUid = currentUid,
                     clubRepository = container.clubRepository,
-                    socialRepository = container.socialRepository,
                     organization = organization,
                 )
             }

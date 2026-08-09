@@ -26,5 +26,16 @@ service firebase.storage {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == ownerUid;
     }
+
+    // Gym staff-uploaded "how to climb this" videos, read by any member. Same constraint as the
+    // rest of this file applies: cross-checking Firestore's organizationMemberships from here to
+    // verify the uploader is actually staff has already proven unreliable in this project (see the
+    // header comment), so write is left open to any signed-in user at the Storage-rules layer —
+    // the real gate is ClubRepository.setRouteBetaVideo, which re-checks staff access against
+    // Firestore before a route doc is ever updated to point at an uploaded file.
+    match /club_beta_videos/{organizationId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
   }
 }

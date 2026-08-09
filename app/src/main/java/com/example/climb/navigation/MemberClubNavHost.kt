@@ -111,7 +111,7 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, organizationI
                 ClubVideosScreen(currentUid = currentUid, analysisRepository = container.analysisRepository, organization = org)
             }
             composable(MemberClubRoutes.LEADERBOARD) {
-                ClubLeaderboardScreen(clubRepository = container.clubRepository, socialRepository = container.socialRepository, organization = org)
+                ClubLeaderboardScreen(clubRepository = container.clubRepository, organization = org)
             }
         }
     }

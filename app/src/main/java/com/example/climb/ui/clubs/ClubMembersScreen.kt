@@ -15,12 +15,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -31,8 +27,6 @@ import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.clubs.OrganizationJoinRequestEntity
 import com.example.climb.clubs.OrganizationMembershipEntity
-import com.example.climb.data.social.SocialRepository
-import com.example.climb.data.social.UserProfile
 import com.example.climb.ui.components.SectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
@@ -42,24 +36,21 @@ import kotlinx.coroutines.launch
  * The "Members" tab of Club Mode — current members plus pending join requests, with
  * approve/deny. [ClubRepository.approveJoinRequest]/[ClubRepository.denyJoinRequest] re-check
  * staff access server-side, so this is safe even though every viewer here is already staff.
+ * Display names come straight off each record ([OrganizationMembershipEntity.userDisplayName] /
+ * [OrganizationJoinRequestEntity.userDisplayName]) rather than a separate profile lookup — the
+ * same denormalize-at-write-time pattern [com.example.climb.data.social.FriendRequest] already
+ * uses, so a member never shows as a raw uid because some unrelated lookup happened to fail.
  */
 @Composable
 fun ClubMembersScreen(
     currentUid: String,
     clubRepository: ClubRepository,
-    socialRepository: SocialRepository,
     organization: OrganizationEntity,
     modifier: Modifier = Modifier,
 ) {
     val members by clubRepository.observeMembersForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val pendingRequests by clubRepository.observePendingJoinRequests(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
-
-    var profiles by remember { mutableStateOf<Map<String, UserProfile?>>(emptyMap()) }
-    LaunchedEffect(members, pendingRequests) {
-        val uids = (members.map { it.userId } + pendingRequests.map { it.userId }).toSet()
-        profiles = uids.associateWith { socialRepository.getProfile(it) }
-    }
 
     Box(modifier = modifier.fillMaxSize().wallTexture()) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
@@ -80,7 +71,7 @@ fun ClubMembersScreen(
                             if (index > 0) Spacer(Modifier.height(12.dp))
                             JoinRequestRow(
                                 request = request,
-                                displayName = profiles[request.userId]?.username ?: request.userId,
+                                displayName = request.userDisplayName,
                                 onApprove = { scope.launch { clubRepository.approveJoinRequest(organization.id, currentUid, request) } },
                                 onDeny = { scope.launch { clubRepository.denyJoinRequest(organization.id, currentUid, request) } },
                             )
@@ -97,7 +88,7 @@ fun ClubMembersScreen(
                     Column {
                         members.forEachIndexed { index, member ->
                             if (index > 0) Spacer(Modifier.height(10.dp))
-                            MemberRow(member = member, displayName = profiles[member.userId]?.username ?: member.userId)
+                            MemberRow(member = member, displayName = member.userDisplayName)
                         }
                     }
                 }

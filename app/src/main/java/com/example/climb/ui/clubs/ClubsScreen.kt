@@ -51,6 +51,7 @@ sealed interface ClubsView {
     data class OrganizationDetail(val organization: OrganizationEntity) : ClubsView
     data class VenueDetail(val organization: OrganizationEntity, val venue: VenueEntity) : ClubsView
     data class ZoneDetail(val organization: OrganizationEntity, val venue: VenueEntity, val zone: ZoneEntity) : ClubsView
+    data class RouteDetail(val organization: OrganizationEntity, val venue: VenueEntity, val zone: ZoneEntity, val route: RouteEntity) : ClubsView
 }
 
 /**
@@ -65,6 +66,7 @@ sealed interface ClubsView {
 @Composable
 fun ClubsScreen(
     currentUid: String,
+    currentUsername: String,
     clubRepository: ClubRepository,
     onBack: () -> Unit,
     onOpenMemberClub: (OrganizationEntity) -> Unit,
@@ -85,6 +87,7 @@ fun ClubsScreen(
 
             OrganizationListContent(
                 currentUid = currentUid,
+                currentUsername = currentUsername,
                 clubRepository = clubRepository,
                 memberships = memberships,
                 onOpenOrganization = onOpenMemberClub,
@@ -98,6 +101,7 @@ fun ClubsScreen(
 @Composable
 private fun OrganizationListContent(
     currentUid: String,
+    currentUsername: String,
     clubRepository: ClubRepository,
     memberships: List<OrganizationMembershipEntity>,
     onOpenOrganization: (OrganizationEntity) -> Unit,
@@ -133,7 +137,7 @@ private fun OrganizationListContent(
             Column {
                 browsableOrganizations.forEachIndexed { index, org ->
                     if (index > 0) Spacer(Modifier.height(10.dp))
-                    OtherOrganizationRow(org = org, currentUid = currentUid, clubRepository = clubRepository, scope = scope)
+                    OtherOrganizationRow(org = org, currentUid = currentUid, currentUsername = currentUsername, clubRepository = clubRepository, scope = scope)
                 }
             }
         }
@@ -143,7 +147,7 @@ private fun OrganizationListContent(
 }
 
 @Composable
-private fun OtherOrganizationRow(org: OrganizationEntity, currentUid: String, clubRepository: ClubRepository, scope: CoroutineScope) {
+private fun OtherOrganizationRow(org: OrganizationEntity, currentUid: String, currentUsername: String, clubRepository: ClubRepository, scope: CoroutineScope) {
     val latestRequest by clubRepository.observeLatestJoinRequest(org.id, currentUid).collectAsStateWithLifecycle(initialValue = null)
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -159,7 +163,7 @@ private fun OtherOrganizationRow(org: OrganizationEntity, currentUid: String, cl
                 color = ClimbPalette.chalk,
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
-                modifier = Modifier.clickable { scope.launch { clubRepository.requestToJoin(org.id, currentUid) } },
+                modifier = Modifier.clickable { scope.launch { clubRepository.requestToJoin(org.id, currentUid, currentUsername) } },
             )
         }
     }
@@ -292,8 +296,10 @@ fun ZoneDetailContent(
     currentUid: String,
     clubRepository: ClubRepository,
     organization: OrganizationEntity,
+    venue: VenueEntity,
     zone: ZoneEntity,
     isStaff: Boolean,
+    onOpenRoute: (RouteEntity) -> Unit,
 ) {
     val routes by clubRepository.observeActiveRoutesForZone(zone.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
@@ -307,16 +313,14 @@ fun ZoneDetailContent(
             Column {
                 routes.forEachIndexed { index, route ->
                     if (index > 0) Spacer(Modifier.height(10.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { onOpenRoute(route) },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(text = "${route.name}${route.vGrade?.let { " (V$it)" } ?: ""}", color = ClimbPalette.textPrimary, fontSize = 14.sp)
-                        if (isStaff) {
-                            Text(
-                                text = "Retire",
-                                color = ClimbPalette.fell,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clickable { scope.launch { clubRepository.retireRoute(organization.id, currentUid, route) } },
-                            )
+                        if (route.betaVideoUrl != null) {
+                            Text(text = "▶ Beta", color = ClimbPalette.chalk, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

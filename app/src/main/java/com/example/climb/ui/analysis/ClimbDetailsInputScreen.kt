@@ -50,6 +50,7 @@ fun ClimbDetailsInputScreen(
     videoPath: String,
     durationMs: Long,
     currentUid: String,
+    currentUsername: String,
     sourceClimbId: Long?,
     analysisRepository: AnalysisRepository,
     clubRepository: ClubRepository,
@@ -218,7 +219,8 @@ fun ClimbDetailsInputScreen(
                             PoseAnalysisWorker.buildRequest(attemptId),
                         )
                         routeContext?.let { route ->
-                            clubRepository.recordClubAttempt(route.organizationId, currentUid, vGrade, completed)
+                            clubRepository.recordClubAttempt(route.organizationId, currentUid, currentUsername, vGrade, completed)
+                            clubRepository.recordRouteAttempt(route.routeId, route.organizationId, completed)
                         }
                         saving = false
                         onAnalyzeStarted(attemptId)

@@ -1,8 +1,11 @@
 package com.example.climb.clubs
 
+import android.net.Uri
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.storage.FirebaseStorage
+import com.google.firebase.storage.StorageMetadata
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -25,6 +28,7 @@ private const val JOIN_REQUESTS = "organizationJoinRequests"
 private const val COUNTERS = "counters"
 private const val CLUB_UPDATES = "clubUpdates"
 private const val CLUB_STATS = "clubStats"
+private const val ROUTE_STATS = "routeStats"
 
 private fun membershipDocId(organizationId: Long, userId: String) = "${organizationId}_$userId"
 
@@ -37,7 +41,7 @@ private fun membershipDocId(organizationId: Long, userId: String) = "${organizat
  * `organizationId`/`venueId`/`zoneId`/`routeId`/`routeVersionId` `Long?` columns on the local
  * `climbs`/`climb_attempts` Room tables never needed to change type.
  */
-class ClubRepository(private val firestore: FirebaseFirestore) {
+class ClubRepository(private val firestore: FirebaseFirestore, private val storage: FirebaseStorage) {
 
     private suspend fun nextId(counterName: String): Long {
         val ref = firestore.collection(COUNTERS).document(counterName)
@@ -49,10 +53,14 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
         }.await()
     }
 
+    /** Never lets a Firestore error (permission-denied, offline, whatever) crash the collector —
+     * Clubs is an optional feature and must not be able to take the rest of the app down with it
+     * (e.g. if security rules haven't been deployed yet, or the device is offline). Degrades to
+     * an empty list instead of closing the flow with an exception. */
     private fun <T> observeCollection(query: Query, mapper: (DocumentSnapshot) -> T?): Flow<List<T>> = callbackFlow {
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                close(error)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             trySend(snapshot?.documents?.mapNotNull(mapper).orEmpty())
@@ -98,7 +106,7 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
         val registration = firestore.collection(JOIN_REQUESTS).document(membershipDocId(organizationId, userId))
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    trySend(null)
                     return@addSnapshotListener
                 }
                 trySend(snapshot?.toJoinRequest())
@@ -110,7 +118,7 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
         val registration = firestore.collection(ORGANIZATIONS).document(organizationId.toString())
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    trySend(null)
                     return@addSnapshotListener
                 }
                 trySend(snapshot?.toOrganization())
@@ -139,7 +147,7 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
      * staff mutation, so unlike [createVenue]/[createRoute]/etc. it doesn't call
      * [requireStaffAccess]. Called once per saved club-linked attempt (see
      * `ClimbDetailsInputScreen`), never edited or removed afterward. */
-    suspend fun recordClubAttempt(organizationId: Long, userId: String, vGrade: Int?, completed: Boolean): Result<Unit> = runCatching {
+    suspend fun recordClubAttempt(organizationId: Long, userId: String, username: String, vGrade: Int?, completed: Boolean): Result<Unit> = runCatching {
         val ref = firestore.collection(CLUB_STATS).document(membershipDocId(organizationId, userId))
         firestore.runTransaction { transaction ->
             val snapshot = transaction.get(ref)
@@ -152,6 +160,7 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
                 mapOf(
                     "organizationId" to organizationId,
                     "userId" to userId,
+                    "userDisplayName" to username,
                     "totalAttempts" to totalAttempts,
                     "totalSends" to totalSends,
                     "bestVGradeSent" to bestVGradeSent,
@@ -166,10 +175,47 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
         observeCollection(firestore.collection(CLUB_STATS).whereEqualTo("organizationId", organizationId)) { it.toClubStats() }
             .map { stats -> stats.sortedWith(compareByDescending<ClubStatsEntity> { it.totalSends }.thenByDescending { it.bestVGradeSent ?: -1 }) }
 
+    /** Route-wide analytics — how many people tried this route, how many sent it, how many fell.
+     * Any member records their own attempt against the route's shared counters (participation
+     * bookkeeping, not a staff mutation, same trust level as [recordClubAttempt]). */
+    suspend fun recordRouteAttempt(routeId: Long, organizationId: Long, completed: Boolean): Result<Unit> = runCatching {
+        val ref = firestore.collection(ROUTE_STATS).document(routeId.toString())
+        firestore.runTransaction { transaction ->
+            val snapshot = transaction.get(ref)
+            val totalAttempts = (snapshot.getLong("totalAttempts") ?: 0L) + 1
+            val totalSends = (snapshot.getLong("totalSends") ?: 0L) + if (completed) 1 else 0
+            val totalFails = (snapshot.getLong("totalFails") ?: 0L) + if (completed) 0 else 1
+            transaction.set(
+                ref,
+                mapOf(
+                    "routeId" to routeId,
+                    "organizationId" to organizationId,
+                    "totalAttempts" to totalAttempts,
+                    "totalSends" to totalSends,
+                    "totalFails" to totalFails,
+                    "updatedAt" to System.currentTimeMillis(),
+                ),
+            )
+        }.await()
+        Unit
+    }
+
+    fun observeRouteStats(routeId: Long): Flow<RouteStatsEntity?> = callbackFlow {
+        val registration = firestore.collection(ROUTE_STATS).document(routeId.toString())
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(null)
+                    return@addSnapshotListener
+                }
+                trySend(snapshot?.toRouteStats())
+            }
+        awaitClose { registration.remove() }
+    }
+
     /** Creating an organization makes the creator its ADMIN immediately. There is no self-serve
      * "create a club" UI anywhere in the app — this only runs via [ensureSeedOrganization], the
      * one-time bootstrap for the single club this app currently supports. */
-    suspend fun createOrganization(name: String, creatorUid: String): Result<OrganizationEntity> = runCatching {
+    suspend fun createOrganization(name: String, creatorUid: String, creatorUsername: String): Result<OrganizationEntity> = runCatching {
         val trimmed = name.trim()
         require(trimmed.isNotEmpty()) { "Organization name can't be empty" }
         val nameLower = trimmed.lowercase(Locale.US)
@@ -179,7 +225,12 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
         firestore.collection(ORGANIZATIONS).document(id.toString())
             .set(mapOf("name" to trimmed, "nameLower" to nameLower, "createdAt" to now)).await()
         firestore.collection(MEMBERSHIPS).document(membershipDocId(id, creatorUid))
-            .set(mapOf("organizationId" to id, "userId" to creatorUid, "role" to OrganizationRole.ADMIN.name, "joinedAt" to now)).await()
+            .set(
+                mapOf(
+                    "organizationId" to id, "userId" to creatorUid, "userDisplayName" to creatorUsername,
+                    "role" to OrganizationRole.ADMIN.name, "joinedAt" to now,
+                ),
+            ).await()
         OrganizationEntity(id = id, name = trimmed, createdAt = now)
     }
 
@@ -188,9 +239,14 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
      * it's called across every phone (the name-uniqueness check is shared via Firestore, not
      * per-device); every call after that is a no-op. [adminUid] becomes its ADMIN, which today is
      * whichever account happens to win the race to call this first. */
-    suspend fun ensureSeedOrganization(adminUid: String) {
-        if (findOrganizationByNameLower(SEED_ORGANIZATION_NAME.lowercase(Locale.US)) != null) return
-        createOrganization(SEED_ORGANIZATION_NAME, adminUid)
+    suspend fun ensureSeedOrganization(adminUid: String, adminUsername: String) {
+        // Best-effort — this runs unconditionally right after every sign-in (see ClimbNavHost),
+        // so a Firestore hiccup here (offline, security rules not yet deployed, etc.) must never
+        // surface as an exception and take the rest of the app down with it.
+        runCatching {
+            if (findOrganizationByNameLower(SEED_ORGANIZATION_NAME.lowercase(Locale.US)) != null) return@runCatching
+            createOrganization(SEED_ORGANIZATION_NAME, adminUid, adminUsername)
+        }
     }
 
     private suspend fun findOrganizationByNameLower(nameLower: String): OrganizationEntity? =
@@ -200,7 +256,7 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
     /** Joining is never instant — this just records interest. Staff decide via
      * [approveJoinRequest]/[denyJoinRequest]. Idempotent: calling again while already a member or
      * already pending is a silent no-op rather than an error. */
-    suspend fun requestToJoin(organizationId: Long, userId: String): Result<Unit> = runCatching {
+    suspend fun requestToJoin(organizationId: Long, userId: String, username: String): Result<Unit> = runCatching {
         if (getMembership(organizationId, userId) != null) return@runCatching
         val docRef = firestore.collection(JOIN_REQUESTS).document(membershipDocId(organizationId, userId))
         val existing = docRef.get().await().toJoinRequest()
@@ -209,6 +265,7 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
             mapOf(
                 "organizationId" to organizationId,
                 "userId" to userId,
+                "userDisplayName" to username,
                 "status" to JoinRequestStatus.PENDING.name,
                 "requestedAt" to System.currentTimeMillis(),
                 "decidedAt" to null,
@@ -221,7 +278,12 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
         require(request.status == JoinRequestStatus.PENDING) { "This request was already decided" }
         val now = System.currentTimeMillis()
         firestore.collection(MEMBERSHIPS).document(membershipDocId(organizationId, request.userId))
-            .set(mapOf("organizationId" to organizationId, "userId" to request.userId, "role" to OrganizationRole.MEMBER.name, "joinedAt" to now)).await()
+            .set(
+                mapOf(
+                    "organizationId" to organizationId, "userId" to request.userId, "userDisplayName" to request.userDisplayName,
+                    "role" to OrganizationRole.MEMBER.name, "joinedAt" to now,
+                ),
+            ).await()
         firestore.collection(JOIN_REQUESTS).document(membershipDocId(organizationId, request.userId))
             .update(mapOf("status" to JoinRequestStatus.APPROVED.name, "decidedAt" to now)).await()
     }
@@ -293,6 +355,25 @@ class ClubRepository(private val firestore: FirebaseFirestore) {
         firestore.collection(ROUTES).document(route.id.toString()).update("retiredAt", System.currentTimeMillis()).await()
     }
 
+    /** Uploads straight from the picked content:// [videoUri] (same `putFile` pattern as
+     * [com.example.climb.data.social.SocialRepository.uploadProfilePhoto]) and returns the
+     * playback URL — [setRouteBetaVideo] is what actually attaches it to a route and is the
+     * staff-gated half of this two-step flow. */
+    suspend fun uploadBetaVideo(organizationId: Long, userId: String, routeId: Long, videoUri: Uri, contentType: String?): Result<String> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        val ref = storage.reference.child("club_beta_videos/$organizationId/$routeId.mp4")
+        val metadata = StorageMetadata.Builder().apply {
+            if (contentType != null) setContentType(contentType)
+        }.build()
+        ref.putFile(videoUri, metadata).await()
+        ref.downloadUrl.await().toString()
+    }
+
+    suspend fun setRouteBetaVideo(organizationId: Long, userId: String, route: RouteEntity, videoUrl: String?): Result<Unit> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        firestore.collection(ROUTES).document(route.id.toString()).update("betaVideoUrl", videoUrl).await()
+    }
+
     /** Builds the enhancement object an attempt/climb can optionally attach — never required by
      * anything downstream (see [RouteContext]). */
     suspend fun buildRouteContext(organizationId: Long, venueId: Long, zoneId: Long, route: RouteEntity): RouteContext {
@@ -319,9 +400,11 @@ private fun DocumentSnapshot.toOrganization(): OrganizationEntity? {
 private fun DocumentSnapshot.toMembership(): OrganizationMembershipEntity? {
     if (!exists()) return null
     val role = getString("role")?.let { raw -> runCatching { OrganizationRole.valueOf(raw) }.getOrNull() } ?: return null
+    val userId = getString("userId") ?: return null
     return OrganizationMembershipEntity(
         organizationId = getLong("organizationId") ?: return null,
-        userId = getString("userId") ?: return null,
+        userId = userId,
+        userDisplayName = getString("userDisplayName") ?: userId,
         role = role,
         joinedAt = getLong("joinedAt") ?: 0L,
     )
@@ -362,6 +445,7 @@ private fun DocumentSnapshot.toRoute(): RouteEntity? {
         vGrade = getLong("vGrade")?.toInt(),
         createdAt = getLong("createdAt") ?: 0L,
         retiredAt = getLong("retiredAt"),
+        betaVideoUrl = getString("betaVideoUrl"),
     )
 }
 
@@ -381,9 +465,11 @@ private fun DocumentSnapshot.toRouteVersion(): RouteVersionEntity? {
 private fun DocumentSnapshot.toJoinRequest(): OrganizationJoinRequestEntity? {
     if (!exists()) return null
     val status = getString("status")?.let { raw -> runCatching { JoinRequestStatus.valueOf(raw) }.getOrNull() } ?: return null
+    val userId = getString("userId") ?: return null
     return OrganizationJoinRequestEntity(
         organizationId = getLong("organizationId") ?: return null,
-        userId = getString("userId") ?: return null,
+        userId = userId,
+        userDisplayName = getString("userDisplayName") ?: userId,
         status = status,
         requestedAt = getLong("requestedAt") ?: 0L,
         decidedAt = getLong("decidedAt"),
@@ -402,11 +488,25 @@ private fun DocumentSnapshot.toClubUpdate(): ClubUpdateEntity? {
     )
 }
 
+private fun DocumentSnapshot.toRouteStats(): RouteStatsEntity? {
+    if (!exists()) return null
+    return RouteStatsEntity(
+        routeId = getLong("routeId") ?: return null,
+        organizationId = getLong("organizationId") ?: return null,
+        totalAttempts = (getLong("totalAttempts") ?: 0L).toInt(),
+        totalSends = (getLong("totalSends") ?: 0L).toInt(),
+        totalFails = (getLong("totalFails") ?: 0L).toInt(),
+        updatedAt = getLong("updatedAt") ?: 0L,
+    )
+}
+
 private fun DocumentSnapshot.toClubStats(): ClubStatsEntity? {
     if (!exists()) return null
+    val userId = getString("userId") ?: return null
     return ClubStatsEntity(
         organizationId = getLong("organizationId") ?: return null,
-        userId = getString("userId") ?: return null,
+        userId = userId,
+        userDisplayName = getString("userDisplayName") ?: userId,
         totalAttempts = (getLong("totalAttempts") ?: 0L).toInt(),
         totalSends = (getLong("totalSends") ?: 0L).toInt(),
         bestVGradeSent = getLong("bestVGradeSent")?.toInt(),
