@@ -69,6 +69,12 @@ fun smoothPoseSequence(frames: List<PoseFrame>, maxGapMs: Long = 500L): List<Pos
 
     return frames.map { frame ->
         if (!frame.isReliable) {
+            // Clear immediately rather than just forgetting lastReliableTimestampMs: leaving that
+            // null would make the *next* reliable frame's gap check below default to "no gap"
+            // (null?.let{} ?: false), so filters would keep blending across the unreliable frame
+            // instead of resetting — exactly the wrong/occluded-position blending this is meant
+            // to avoid.
+            filtersByLandmark.clear()
             lastReliableTimestampMs = null
             return@map frame
         }
