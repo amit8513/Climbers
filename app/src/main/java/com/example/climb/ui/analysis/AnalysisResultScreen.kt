@@ -59,6 +59,7 @@ import com.example.climb.analysis.NextSessionFocusItem
 import com.example.climb.analysis.QualityIndicator
 import com.example.climb.analysis.SessionOverview
 import com.example.climb.analysis.StrengthItem
+import com.example.climb.analysis.TechnicalLimitation
 import com.example.climb.analysis.TechnicalObservation
 import com.example.climb.analysis.buildAttemptComparison
 import com.example.climb.analysis.buildBetaOpportunities
@@ -67,6 +68,7 @@ import com.example.climb.analysis.buildNextSessionFocus
 import com.example.climb.analysis.buildQualityIndicators
 import com.example.climb.analysis.buildSessionOverview
 import com.example.climb.analysis.buildStrengths
+import com.example.climb.analysis.buildTechnicalLimitations
 import com.example.climb.analysis.buildTechnicalPerformanceReport
 import com.example.climb.analysis.formatTimestampMs
 import com.example.climb.analysis.metrics.ClimbMetrics
@@ -415,6 +417,19 @@ private fun AnalysisResultContent(analysis: ClimbAnalysisEntity, analysisReposit
             Spacer(Modifier.height(12.dp))
         }
 
+        if (metrics != null && categoryScores.isNotEmpty()) {
+            val technicalLimitations = remember(metrics, categoryScores) { buildTechnicalLimitations(metrics, categoryScores) }
+            CollapsibleSectionCard(title = "Technical limitations and warnings", badge = "${technicalLimitations.size}") {
+                Column {
+                    technicalLimitations.forEachIndexed { index, limitation ->
+                        if (index > 0) Spacer(Modifier.height(10.dp))
+                        TechnicalLimitationRow(limitation)
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+
         if (currentAttempt.notes.isNotBlank()) {
             Spacer(Modifier.height(16.dp))
             SectionCard(title = "Notes") {
@@ -677,6 +692,21 @@ private fun QualityIndicatorList(indicators: List<QualityIndicator>) {
                 Text(text = indicator.label, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
             }
         }
+    }
+}
+
+@Composable
+private fun TechnicalLimitationRow(limitation: TechnicalLimitation) {
+    Row(verticalAlignment = Alignment.Top) {
+        Box(
+            modifier = Modifier
+                .padding(top = 5.dp)
+                .size(6.dp)
+                .clip(RoundedCornerShape(50))
+                .background(if (limitation.evidence != null) ClimbPalette.project else ClimbPalette.textMuted),
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(text = limitation.text, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 16.sp)
     }
 }
 
