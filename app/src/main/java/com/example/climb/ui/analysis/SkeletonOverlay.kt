@@ -48,6 +48,12 @@ private val BONES = listOf(
 @Composable
 fun SkeletonOverlay(frame: PoseFrame?, modifier: Modifier = Modifier, highlightedLandmarks: Set<PoseLandmarkType> = emptySet()) {
     if (frame == null || frame.landmarks.isEmpty()) return
+
+    // Captured here because the Canvas draw lambda isn't a composable scope.
+    val boneColor = ClimbPalette.chalk
+    val lowConfidenceColor = ClimbPalette.fell
+    val confidentColor = ClimbPalette.sent
+
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -62,7 +68,7 @@ fun SkeletonOverlay(frame: PoseFrame?, modifier: Modifier = Modifier, highlighte
             if (la != null && lb != null) {
                 val alpha = ((la.presence + lb.presence) / 2f).coerceIn(0.15f, 1f)
                 drawLine(
-                    color = ClimbPalette.chalk.copy(alpha = alpha),
+                    color = boneColor.copy(alpha = alpha),
                     start = Offset(la.normalizedX * w, la.normalizedY * h),
                     end = Offset(lb.normalizedX * w, lb.normalizedY * h),
                     strokeWidth = strokeWidth,
@@ -71,7 +77,7 @@ fun SkeletonOverlay(frame: PoseFrame?, modifier: Modifier = Modifier, highlighte
         }
 
         for (landmark in frame.landmarks) {
-            val color = if (landmark.presence < LOW_CONFIDENCE_THRESHOLD) ClimbPalette.fell else ClimbPalette.sent
+            val color = if (landmark.presence < LOW_CONFIDENCE_THRESHOLD) lowConfidenceColor else confidentColor
             drawCircle(
                 color = color.copy(alpha = landmark.presence.coerceIn(0.25f, 1f)),
                 radius = pointRadius,

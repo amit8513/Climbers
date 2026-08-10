@@ -18,8 +18,18 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.climb.ui.theme.ClimbPalette
+
+/** Colors captured in composable scope up front, since the Canvas draw lambda below isn't one. */
+private data class ProgressColors(
+    val border: Color,
+    val borderStrong: Color,
+    val sent: Color,
+    val chalk: Color,
+    val textPrimary: Color,
+)
 
 /**
  * A stick climber working its way up a line of holds — one hold per analysis phase. The climber
@@ -56,15 +66,24 @@ fun ClimbingProgressIndicator(
         0f
     }
 
+    // Captured here because the Canvas draw lambda isn't a composable scope.
+    val colors = ProgressColors(
+        border = ClimbPalette.border,
+        borderStrong = ClimbPalette.borderStrong,
+        sent = ClimbPalette.sent,
+        chalk = ClimbPalette.chalk,
+        textPrimary = ClimbPalette.textPrimary,
+    )
+
     Canvas(modifier = modifier) {
         val holds = List(stepCount) { holdCenter(it, stepCount, size.width, size.height) }
 
-        drawRouteLine(holds)
+        drawRouteLine(holds, colors)
 
         holds.forEachIndexed { index, center ->
             val reached = index < completedSteps
             val isCurrent = index == completedSteps
-            drawHold(center = center, reached = reached, isCurrent = isCurrent)
+            drawHold(center = center, reached = reached, isCurrent = isCurrent, colors = colors)
         }
 
         // Interpolate between the hold just cleared and the one being worked on.
@@ -81,7 +100,7 @@ fun ClimbingProgressIndicator(
             null
         }
 
-        drawClimber(handHold = handHold, heelHold = heelHold, reach = reach)
+        drawClimber(handHold = handHold, heelHold = heelHold, reach = reach, colors = colors)
     }
 }
 
@@ -96,7 +115,7 @@ private fun holdCenter(index: Int, stepCount: Int, width: Float, height: Float):
     )
 }
 
-private fun DrawScope.drawRouteLine(holds: List<Offset>) {
+private fun DrawScope.drawRouteLine(holds: List<Offset>, colors: ProgressColors) {
     if (holds.size < 2) return
     val path = Path().apply {
         moveTo(holds.first().x, holds.first().y)
@@ -104,23 +123,23 @@ private fun DrawScope.drawRouteLine(holds: List<Offset>) {
     }
     drawPath(
         path = path,
-        color = ClimbPalette.border,
+        color = colors.border,
         style = Stroke(width = 1.dp.toPx()),
     )
 }
 
-private fun DrawScope.drawHold(center: Offset, reached: Boolean, isCurrent: Boolean) {
+private fun DrawScope.drawHold(center: Offset, reached: Boolean, isCurrent: Boolean, colors: ProgressColors) {
     val radius = 5.dp.toPx()
     when {
-        reached -> drawCircle(color = ClimbPalette.sent, radius = radius, center = center)
+        reached -> drawCircle(color = colors.sent, radius = radius, center = center)
         isCurrent -> drawCircle(
-            color = ClimbPalette.chalk,
+            color = colors.chalk,
             radius = radius,
             center = center,
             style = Stroke(width = 2.dp.toPx()),
         )
         else -> drawCircle(
-            color = ClimbPalette.borderStrong,
+            color = colors.borderStrong,
             radius = radius * 0.75f,
             center = center,
             style = Stroke(width = 1.dp.toPx()),
@@ -133,9 +152,9 @@ private fun DrawScope.drawHold(center: Offset, reached: Boolean, isCurrent: Bool
  * [reach] drives a 0..1 cycle that bobs the body as it pulls in against the hook — both hands
  * are committed, so the motion comes from the core rather than a free arm waving.
  */
-private fun DrawScope.drawClimber(handHold: Offset, heelHold: Offset?, reach: Float) {
+private fun DrawScope.drawClimber(handHold: Offset, heelHold: Offset?, reach: Float, colors: ProgressColors) {
     val stroke = 1.6.dp.toPx()
-    val color = ClimbPalette.textPrimary
+    val color = colors.textPrimary
     fun px(dp: Float) = dp.dp.toPx()
 
     // Matched hands either side of the hold's centre.

@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -307,6 +308,8 @@ private fun SendRateRow(rate: GradeSendRate) {
 
 // Green where you're consolidating, amber mid, rust where it's still a project — so the
 // grade you're working on reads at a glance instead of needing the numbers.
+@Composable
+@ReadOnlyComposable
 private fun sendRateColor(percent: Int) = when {
     percent >= 60 -> ClimbPalette.sent
     percent >= 30 -> ClimbPalette.project
@@ -509,6 +512,8 @@ private fun ConsistencyHeatmap(grid: List<List<Int>>) {
     }
 }
 
+@Composable
+@ReadOnlyComposable
 private fun heatColor(count: Int) = when {
     count <= 0 -> ClimbPalette.border
     count == 1 -> ClimbPalette.textPrimary.copy(alpha = 0.14f)

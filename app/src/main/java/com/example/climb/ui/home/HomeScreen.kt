@@ -226,27 +226,41 @@ private fun StatsStrip(sends: Int, streak: Int, modifier: Modifier = Modifier) {
             .clip(shape)
             .border(1.dp, ClimbPalette.border, shape),
     ) {
-        StatCell(value = sends, label = "Sends this week", modifier = Modifier.weight(1f))
+        StatCell(value = sends, label = "sends this week", modifier = Modifier.weight(1f))
         Box(
             modifier = Modifier
                 .width(1.dp)
                 .fillMaxHeight()
                 .background(ClimbPalette.border),
         )
-        StatCell(value = streak, label = "Day streak", modifier = Modifier.weight(1f))
+        StatCell(value = streak, label = "day streak", modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
 private fun StatCell(value: Int, label: String, modifier: Modifier = Modifier) {
-    Column(
+    // Value and label on one line — stacking them made the strip tall and the uppercase
+    // letter-spaced label wrapped awkwardly at "SENDS THIS / WEEK".
+    Row(
         modifier = modifier
             .background(ClimbPalette.surface)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(text = value.toString(), color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 24.sp)
-        Spacer(Modifier.height(4.dp))
-        Text(text = label.uppercase(Locale.US), color = ClimbPalette.textSecondary, fontSize = 11.sp, letterSpacing = 0.6.sp)
+        Text(
+            text = value.toString(),
+            color = ClimbPalette.textPrimary,
+            fontWeight = FontWeight.Black,
+            fontSize = 22.sp,
+        )
+        Text(
+            text = label,
+            color = ClimbPalette.textSecondary,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
