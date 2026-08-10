@@ -320,6 +320,15 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         VenueEntity(id = id, organizationId = organizationId, name = trimmed, address = cleanAddress, createdAt = now)
     }
 
+    /** Cascades through every zone (and everything under it — see [deleteZoneCascade]) before
+     * removing the venue doc itself. */
+    suspend fun deleteVenue(organizationId: Long, userId: String, venue: VenueEntity): Result<Unit> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        val zones = firestore.collection(ZONES).whereEqualTo("venueId", venue.id).get().await().documents.mapNotNull { it.toZone() }
+        zones.forEach { deleteZoneCascade(it) }
+        firestore.collection(VENUES).document(venue.id.toString()).delete().await()
+    }
+
     suspend fun createZone(organizationId: Long, userId: String, venueId: Long, name: String): Result<ZoneEntity> = runCatching {
         requireStaffAccess(organizationId, userId)
         val trimmed = name.trim()
@@ -345,6 +354,33 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
     suspend fun setZoneImage(organizationId: Long, userId: String, zone: ZoneEntity, imageUrl: String?): Result<Unit> = runCatching {
         requireStaffAccess(organizationId, userId)
         firestore.collection(ZONES).document(zone.id.toString()).update("imageUrl", imageUrl).await()
+    }
+
+    suspend fun deleteZone(organizationId: Long, userId: String, zone: ZoneEntity): Result<Unit> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        deleteZoneCascade(zone)
+    }
+
+    /** Removes every route under [zone] (each route's versions and beta video first), then the
+     * zone's own photo and doc — same delete-doc-then-delete-file shape as
+     * [com.example.climb.sharing.ClimbSyncRepository.deleteSyncedClimb], with each Storage
+     * deletion wrapped in its own [runCatching] so a missing/already-gone file never blocks
+     * removing the rest. Shared by [deleteZone] and [deleteVenue], which already checked staff
+     * access before calling this. */
+    private suspend fun deleteZoneCascade(zone: ZoneEntity) {
+        val routes = firestore.collection(ROUTES).whereEqualTo("zoneId", zone.id).get().await().documents.mapNotNull { it.toRoute() }
+        routes.forEach { route ->
+            val versionDocs = firestore.collection(ROUTE_VERSIONS).whereEqualTo("routeId", route.id).get().await().documents
+            versionDocs.forEach { doc -> runCatching { doc.reference.delete().await() } }
+            if (route.betaVideoUrl != null) {
+                runCatching { storage.reference.child("club_beta_videos/${route.organizationId}/${route.id}.mp4").delete().await() }
+            }
+            firestore.collection(ROUTES).document(route.id.toString()).delete().await()
+        }
+        if (zone.imageUrl != null) {
+            runCatching { storage.reference.child("club_zone_photos/${zone.organizationId}/${zone.id}.jpg").delete().await() }
+        }
+        firestore.collection(ZONES).document(zone.id.toString()).delete().await()
     }
 
     suspend fun createRoute(organizationId: Long, userId: String, zoneId: Long, name: String, vGrade: Int?): Result<RouteEntity> = runCatching {

@@ -65,6 +65,7 @@ fun ClubRoutesScreen(
                     venue = current.venue,
                     isStaff = isStaff,
                     onOpenZone = { zone -> view = ClubsView.ZoneDetail(current.organization, current.venue, zone) },
+                    onDeleted = { view = ClubsView.OrganizationDetail(current.organization) },
                 )
                 is ClubsView.ZoneDetail -> ZoneDetailContent(
                     currentUid = currentUid,
@@ -74,6 +75,7 @@ fun ClubRoutesScreen(
                     zone = current.zone,
                     isStaff = isStaff,
                     onOpenRoute = { route -> view = ClubsView.RouteDetail(current.organization, current.venue, current.zone, route) },
+                    onDeleted = { view = ClubsView.VenueDetail(current.organization, current.venue) },
                 )
                 is ClubsView.RouteDetail -> RouteDetailContent(
                     currentUid = currentUid,

@@ -21,10 +21,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -254,9 +257,13 @@ fun VenueDetailContent(
     venue: VenueEntity,
     isStaff: Boolean,
     onOpenZone: (ZoneEntity) -> Unit,
+    onDeleted: () -> Unit,
 ) {
     val zones by clubRepository.observeZonesForVenue(venue.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
 
     Text(text = venue.name, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.padding(bottom = 16.dp))
 
@@ -297,6 +304,43 @@ fun VenueDetailContent(
                 },
             ) { Text("Add zone") }
         }
+
+        Spacer(Modifier.height(16.dp))
+        SectionCard(title = "Delete this venue") {
+            Text(
+                text = "Deletes every zone and route inside, along with their photos and beta videos. This can't be undone.",
+                color = ClimbPalette.textMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+            deleteError?.let { Text(text = it, color = ClimbPalette.fell, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp)) }
+            Button(
+                enabled = !deleting,
+                colors = ButtonDefaults.buttonColors(containerColor = ClimbPalette.fell),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { showDeleteConfirm = true },
+            ) {
+                if (deleting) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Delete venue")
+            }
+        }
+    }
+
+    if (showDeleteConfirm) {
+        DeleteConfirmDialog(
+            title = "Delete ${venue.name}?",
+            message = "This removes every zone and route inside, along with their photos and beta videos. This can't be undone.",
+            onConfirm = {
+                showDeleteConfirm = false
+                deleting = true
+                scope.launch {
+                    val result = clubRepository.deleteVenue(organization.id, currentUid, venue)
+                    deleting = false
+                    result.onSuccess { onDeleted() }
+                    result.onFailure { deleteError = it.message ?: "Something went wrong" }
+                }
+            },
+            onDismiss = { showDeleteConfirm = false },
+        )
     }
 }
 
@@ -309,9 +353,13 @@ fun ZoneDetailContent(
     zone: ZoneEntity,
     isStaff: Boolean,
     onOpenRoute: (RouteEntity) -> Unit,
+    onDeleted: () -> Unit,
 ) {
     val routes by clubRepository.observeActiveRoutesForZone(zone.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf(false) }
+    var deleteError by remember { mutableStateOf<String?>(null) }
 
     Text(text = zone.name, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 18.sp, modifier = Modifier.padding(bottom = 16.dp))
 
@@ -374,7 +422,58 @@ fun ZoneDetailContent(
                 },
             ) { Text("Set route") }
         }
+
+        Spacer(Modifier.height(16.dp))
+        SectionCard(title = "Delete this zone") {
+            Text(
+                text = "Deletes every route inside, along with their beta videos and this zone's photo. This can't be undone.",
+                color = ClimbPalette.textMuted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+            deleteError?.let { Text(text = it, color = ClimbPalette.fell, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp)) }
+            Button(
+                enabled = !deleting,
+                colors = ButtonDefaults.buttonColors(containerColor = ClimbPalette.fell),
+                modifier = Modifier.fillMaxWidth(),
+                onClick = { showDeleteConfirm = true },
+            ) {
+                if (deleting) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp) else Text("Delete zone")
+            }
+        }
     }
+
+    if (showDeleteConfirm) {
+        DeleteConfirmDialog(
+            title = "Delete ${zone.name}?",
+            message = "This removes every route inside, along with their beta videos and this zone's photo. This can't be undone.",
+            onConfirm = {
+                showDeleteConfirm = false
+                deleting = true
+                scope.launch {
+                    val result = clubRepository.deleteZone(organization.id, currentUid, zone)
+                    deleting = false
+                    result.onSuccess { onDeleted() }
+                    result.onFailure { deleteError = it.message ?: "Something went wrong" }
+                }
+            },
+            onDismiss = { showDeleteConfirm = false },
+        )
+    }
+}
+
+/** Shared by [VenueDetailContent] and [ZoneDetailContent] — a plain "delete" click has no confirm
+ * step anywhere else in this app (see e.g. [RouteDetailContent]'s retire button), but unlike
+ * retiring a route, deleting a venue/zone is a real cascade with no undo, so it warrants one. */
+@Composable
+private fun DeleteConfirmDialog(title: String, message: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text("Delete", color = ClimbPalette.fell) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

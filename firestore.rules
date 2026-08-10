@@ -126,27 +126,30 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && isStaffOf(request.resource.data.organizationId);
       allow update: if signedIn() && isStaffOf(resource.data.organizationId);
-      allow delete: if false;
+      allow delete: if signedIn() && isStaffOf(resource.data.organizationId);
     }
 
     match /zones/{zoneId} {
       allow read: if signedIn();
       allow create: if signedIn() && isStaffOf(request.resource.data.organizationId);
       allow update: if signedIn() && isStaffOf(resource.data.organizationId);
-      allow delete: if false;
+      allow delete: if signedIn() && isStaffOf(resource.data.organizationId);
     }
 
+    // Deleting a venue/zone cascades to every route beneath it (see ClubRepository.deleteZoneCascade),
+    // so routes/routeVersions need the same staff-delete grant, not just venues/zones themselves.
     match /routes/{routeId} {
       allow read: if signedIn();
       allow create: if signedIn() && isStaffOf(request.resource.data.organizationId);
       allow update: if signedIn() && isStaffOf(resource.data.organizationId);
-      allow delete: if false;
+      allow delete: if signedIn() && isStaffOf(resource.data.organizationId);
     }
 
     match /routeVersions/{versionId} {
       allow read: if signedIn();
       allow create: if signedIn() && isStaffOf(request.resource.data.organizationId);
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if signedIn() && isStaffOf(resource.data.organizationId);
     }
 
     match /clubUpdates/{updateId} {
