@@ -11,6 +11,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -139,10 +140,19 @@ private fun LoadingScreen() {
  * the switcher never renders, and this behaves exactly as it did before Club Mode existed. */
 @Composable
 private fun MainNavHost(container: AppContainer, currentUid: String, profile: UserProfile) {
-    var appMode by remember { mutableStateOf<AppMode>(AppMode.Normal) }
-    var modeChosen by remember { mutableStateOf(false) }
+    // Saveable (not plain remember): this choice must survive a configuration change (e.g. a
+    // rotation) without falling back to the mode-switch screen the user already got past.
+    // AppMode.Club carries a whole OrganizationEntity, which isn't directly Saveable, so only the
+    // chosen org's id is saved and the full AppMode is re-derived below once staffOrganizations
+    // loads.
+    var modeChosen by rememberSaveable { mutableStateOf(false) }
+    var chosenClubOrganizationId by rememberSaveable { mutableStateOf<Long?>(null) }
     val staffOrganizations by container.clubRepository.observeStaffOrganizationsForUser(currentUid)
         .collectAsStateWithLifecycle(initialValue = emptyList())
+    val appMode: AppMode = chosenClubOrganizationId
+        ?.let { id -> staffOrganizations.find { it.id == id } }
+        ?.let { AppMode.Club(it) }
+        ?: AppMode.Normal
 
     // One-time, idempotent bootstrap of the single club this build supports — a no-op on every
     // call after the very first, on any phone, since it's backed by a shared Firestore uniqueness
@@ -154,7 +164,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
             staffOrganizations = staffOrganizations,
             onContinueAsSelf = { modeChosen = true },
             onContinueAsClub = { organization ->
-                appMode = AppMode.Club(organization)
+                chosenClubOrganizationId = organization.id
                 modeChosen = true
             },
         )
@@ -167,13 +177,13 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
             currentUid = currentUid,
             profile = profile,
             staffOrganizations = staffOrganizations,
-            onEnterClubMode = { organization -> appMode = AppMode.Club(organization) },
+            onEnterClubMode = { organization -> chosenClubOrganizationId = organization.id },
         )
         is AppMode.Club -> ClubNavHost(
             container = container,
             currentUid = currentUid,
             organization = mode.organization,
-            onExitClub = { appMode = AppMode.Normal },
+            onExitClub = { chosenClubOrganizationId = null },
         )
     }
 }
