@@ -224,6 +224,7 @@ private fun NormalNavHost(
                     repository = container.climbRepository,
                     currentUid = currentUid,
                     profile = profile,
+                    settingsStore = container.settingsStore,
                     onClimbClick = { id -> navController.navigate(Routes.detail(id)) },
                     onSettingsClick = { navController.navigate(Routes.SETTINGS) },
                 )

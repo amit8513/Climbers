@@ -9,6 +9,7 @@ import com.example.climb.ui.theme.palette
 
 private const val PREFS_NAME = "climb_settings"
 private const val KEY_THEME = "theme_option"
+private const val KEY_HOME_VIDEO_BACKGROUND = "home_video_background_enabled"
 
 /**
  * Device-local (not synced to Firestore) preferences. [themeOption] is backed by [mutableStateOf]
@@ -26,6 +27,10 @@ class SettingsStore(context: Context) {
     )
         private set
 
+    /** On by default — the Home background montage is opt-out, not opt-in. */
+    var homeVideoBackgroundEnabled: Boolean by mutableStateOf(prefs.getBoolean(KEY_HOME_VIDEO_BACKGROUND, true))
+        private set
+
     init {
         ClimbPalette.applyPalette(themeOption.palette())
     }
@@ -34,5 +39,10 @@ class SettingsStore(context: Context) {
         themeOption = option
         ClimbPalette.applyPalette(option.palette())
         prefs.edit().putString(KEY_THEME, option.storageKey).apply()
+    }
+
+    fun updateHomeVideoBackgroundEnabled(enabled: Boolean) {
+        homeVideoBackgroundEnabled = enabled
+        prefs.edit().putBoolean(KEY_HOME_VIDEO_BACKGROUND, enabled).apply()
     }
 }

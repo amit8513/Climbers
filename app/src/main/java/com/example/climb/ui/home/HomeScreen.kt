@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.data.ClimbEntity
 import com.example.climb.data.ClimbOutcome
 import com.example.climb.data.ClimbRepository
+import com.example.climb.data.settings.SettingsStore
 import com.example.climb.data.social.UserProfile
 import com.example.climb.ui.components.HoldBadge
 import com.example.climb.ui.components.OutcomePill
@@ -93,6 +94,7 @@ fun HomeScreen(
     repository: ClimbRepository,
     currentUid: String,
     profile: UserProfile,
+    settingsStore: SettingsStore,
     onClimbClick: (Long) -> Unit,
     onSettingsClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -102,6 +104,9 @@ fun HomeScreen(
     val averageGrade = remember(climbs) { averageSentGrade(climbs) }
 
     Box(modifier = modifier.fillMaxSize().wallTexture()) {
+        if (settingsStore.homeVideoBackgroundEnabled) {
+            HomeVideoBackground(climbs = climbs, modifier = Modifier.fillMaxSize())
+        }
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp),

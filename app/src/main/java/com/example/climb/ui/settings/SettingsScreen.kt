@@ -24,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -143,6 +144,11 @@ fun SettingsScreen(
 
             SectionCard(title = "Appearance") {
                 AppearanceSection(settingsStore = settingsStore)
+            }
+            Spacer(Modifier.height(16.dp))
+
+            SectionCard(title = "Home background") {
+                HomeBackgroundSection(settingsStore = settingsStore)
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -365,6 +371,30 @@ private fun AppearanceSection(settingsStore: SettingsStore) {
                 onClick = { settingsStore.selectTheme(option) },
             )
         }
+    }
+}
+
+@Composable
+private fun HomeBackgroundSection(settingsStore: SettingsStore) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(text = "Video montage", color = ClimbPalette.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "Cycle through your own climb videos, with cut transitions, behind the Home screen. Turn off to use the plain background instead.",
+                color = ClimbPalette.textSecondary,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+        }
+        Switch(
+            checked = settingsStore.homeVideoBackgroundEnabled,
+            onCheckedChange = { settingsStore.updateHomeVideoBackgroundEnabled(it) },
+        )
     }
 }
 
