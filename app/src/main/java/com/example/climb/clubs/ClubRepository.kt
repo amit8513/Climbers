@@ -95,6 +95,15 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
     fun observeActiveRoutesForZone(zoneId: Long): Flow<List<RouteEntity>> =
         observeCollection(firestore.collection(ROUTES).whereEqualTo("zoneId", zoneId).whereEqualTo("retiredAt", null)) { it.toRoute() }
 
+    /** Every active route across every zone/venue of one organization — used by the Overview
+     * screen's "New this week" and "Latest beta" sections, which need to scan for recency/beta
+     * presence without drilling down venue-by-venue-by-zone like [ClubRoutesScreen] does. Sorted
+     * client-side (same reasoning as [observeUpdatesForOrganization]: no Firestore CLI here to
+     * deploy a composite index for equality-filter + orderBy on a different field). */
+    fun observeActiveRoutesForOrganization(organizationId: Long): Flow<List<RouteEntity>> =
+        observeCollection(firestore.collection(ROUTES).whereEqualTo("organizationId", organizationId).whereEqualTo("retiredAt", null)) { it.toRoute() }
+            .map { routes -> routes.sortedByDescending { it.createdAt } }
+
     fun observePendingJoinRequests(organizationId: Long): Flow<List<OrganizationJoinRequestEntity>> =
         observeCollection(
             firestore.collection(JOIN_REQUESTS)

@@ -24,14 +24,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.clubs.ClubRepository
-import com.example.climb.clubs.ClubUpdateEntity
 import com.example.climb.clubs.OrganizationEntity
+import com.example.climb.ui.components.EmptyState
 import com.example.climb.ui.components.SectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlinx.coroutines.launch
 
 /**
@@ -81,30 +78,26 @@ fun ClubUpdatesScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            SectionCard(title = "Recent") {
-                if (updates.isEmpty()) {
-                    Text(text = "No updates yet.", color = ClimbPalette.textMuted, fontSize = 13.sp)
-                } else {
-                    Column {
-                        updates.forEachIndexed { index, update ->
-                            if (index > 0) Spacer(Modifier.height(14.dp))
-                            UpdateRow(update)
-                        }
+            Text(
+                text = "RECENT",
+                color = ClimbPalette.textMuted,
+                fontSize = 11.sp,
+                letterSpacing = 1.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+            if (updates.isEmpty()) {
+                EmptyState(title = "No updates yet.", message = "New sets, maintenance notices, and events will show up here.")
+            } else {
+                Column {
+                    updates.forEachIndexed { index, update ->
+                        if (index > 0) Spacer(Modifier.height(10.dp))
+                        GymUpdateCard(update)
                     }
                 }
             }
 
             Spacer(Modifier.height(100.dp))
         }
-    }
-}
-
-private val dateFormat = SimpleDateFormat("MMM d, h:mm a", Locale.US)
-
-@Composable
-private fun UpdateRow(update: ClubUpdateEntity) {
-    Column {
-        Text(text = update.text, color = ClimbPalette.textPrimary, fontSize = 14.sp, lineHeight = 19.sp)
-        Text(text = dateFormat.format(Date(update.createdAt)), color = ClimbPalette.textMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
     }
 }

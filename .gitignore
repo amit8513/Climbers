@@ -12,6 +12,7 @@
 /captures
 .externalNativeBuild
 .cxx
+.kotlin/
 local.properties
 .claude/settings.local.json
 /app/google-services.json

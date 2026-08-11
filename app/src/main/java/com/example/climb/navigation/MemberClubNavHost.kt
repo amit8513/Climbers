@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Scaffold
@@ -26,6 +27,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.climb.AppContainer
 import com.example.climb.ui.clubs.ClubLeaderboardScreen
+import com.example.climb.ui.clubs.ClubOverviewScreen
 import com.example.climb.ui.clubs.ClubRoutesScreen
 import com.example.climb.ui.clubs.ClubUpdatesScreen
 import com.example.climb.ui.clubs.ClubVideosScreen
@@ -35,6 +37,7 @@ import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 
 private object MemberClubRoutes {
+    const val OVERVIEW = "member_club_overview"
     const val ROUTES = "member_club_routes"
     const val UPDATES = "member_club_updates"
     const val VIDEOS = "member_club_videos"
@@ -42,20 +45,22 @@ private object MemberClubRoutes {
 }
 
 private val MEMBER_CLUB_TAB_ROUTES = setOf(
-    MemberClubRoutes.ROUTES, MemberClubRoutes.UPDATES, MemberClubRoutes.VIDEOS, MemberClubRoutes.LEADERBOARD,
+    MemberClubRoutes.OVERVIEW, MemberClubRoutes.ROUTES, MemberClubRoutes.UPDATES, MemberClubRoutes.VIDEOS, MemberClubRoutes.LEADERBOARD,
 )
 
 private fun navigateToMemberClubTab(navController: NavHostController, route: String) {
     navController.navigate(route) {
         launchSingleTop = true
-        popUpTo(MemberClubRoutes.ROUTES) { inclusive = false }
+        popUpTo(MemberClubRoutes.OVERVIEW) { inclusive = false }
     }
 }
 
 /**
  * What an approved member sees once they open a club they belong to — a dedicated floating bar
- * (Routes / Updates / My club videos / Club leaderboard), separate from both the normal climber
- * shell and the staff Club Mode shell. Reached from "Your gyms" in [com.example.climb.ui.clubs.ClubsScreen].
+ * (Overview / Routes / Updates / My club videos / Club leaderboard), separate from both the
+ * normal climber shell and the staff Club Mode shell. Reached from "Your gyms" in
+ * [com.example.climb.ui.clubs.ClubsScreen]. Overview is the landing tab — "what's happening at my
+ * gym today" — added as the smallest addition to this bar's existing four tabs.
  */
 @Composable
 fun MemberClubNavHost(container: AppContainer, currentUid: String, organizationId: Long, onBack: () -> Unit) {
@@ -87,6 +92,7 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, organizationI
             if (currentRoute in MEMBER_CLUB_TAB_ROUTES) {
                 ClubBottomBar(
                     tabs = listOf(
+                        ClubBarTab(Icons.Filled.Home, "Overview", currentRoute == MemberClubRoutes.OVERVIEW) { navigateToMemberClubTab(navController, MemberClubRoutes.OVERVIEW) },
                         ClubBarTab(Icons.Filled.Terrain, "Routes", currentRoute == MemberClubRoutes.ROUTES) { navigateToMemberClubTab(navController, MemberClubRoutes.ROUTES) },
                         ClubBarTab(Icons.Filled.Campaign, "Updates", currentRoute == MemberClubRoutes.UPDATES) { navigateToMemberClubTab(navController, MemberClubRoutes.UPDATES) },
                         ClubBarTab(Icons.Filled.VideoLibrary, "My club videos", currentRoute == MemberClubRoutes.VIDEOS) { navigateToMemberClubTab(navController, MemberClubRoutes.VIDEOS) },
@@ -98,9 +104,12 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, organizationI
     ) { padding ->
         NavHost(
             navController = navController,
-            startDestination = MemberClubRoutes.ROUTES,
+            startDestination = MemberClubRoutes.OVERVIEW,
             modifier = Modifier.padding(padding),
         ) {
+            composable(MemberClubRoutes.OVERVIEW) {
+                ClubOverviewScreen(currentUid = currentUid, clubRepository = container.clubRepository, organization = org)
+            }
             composable(MemberClubRoutes.ROUTES) {
                 ClubRoutesScreen(currentUid = currentUid, clubRepository = container.clubRepository, organization = org, isStaff = false)
             }

@@ -6,7 +6,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +16,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +53,7 @@ import com.example.climb.clubs.OrganizationRole
 import com.example.climb.clubs.RouteEntity
 import com.example.climb.clubs.VenueEntity
 import com.example.climb.clubs.ZoneEntity
+import com.example.climb.ui.components.EmptyState
 import com.example.climb.ui.components.SectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
@@ -125,60 +127,78 @@ private fun OrganizationListContent(
     val scope = rememberCoroutineScope()
 
     if (myOrganizations.isNotEmpty()) {
-        SectionCard(title = "Your gyms") {
-            Column {
-                myOrganizations.forEachIndexed { index, org ->
-                    if (index > 0) Spacer(Modifier.height(10.dp))
-                    val role = memberships.firstOrNull { it.organizationId == org.id }?.role
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { onOpenOrganization(org) },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(text = org.name, color = ClimbPalette.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                        if (role != null) RoleBadge(role)
-                    }
-                }
+        SectionLabel("Your gyms")
+        Column {
+            myOrganizations.forEachIndexed { index, org ->
+                if (index > 0) Spacer(Modifier.height(10.dp))
+                val role = memberships.firstOrNull { it.organizationId == org.id }?.role
+                MyOrganizationRow(org = org, role = role, clubRepository = clubRepository, onOpenOrganization = onOpenOrganization)
             }
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
     }
 
     if (browsableOrganizations.isNotEmpty()) {
-        SectionCard(title = "Other gyms") {
-            Column {
-                browsableOrganizations.forEachIndexed { index, org ->
-                    if (index > 0) Spacer(Modifier.height(10.dp))
-                    OtherOrganizationRow(org = org, currentUid = currentUid, currentUsername = currentUsername, clubRepository = clubRepository, scope = scope)
-                }
+        SectionLabel("Discover")
+        Column {
+            browsableOrganizations.forEachIndexed { index, org ->
+                if (index > 0) Spacer(Modifier.height(10.dp))
+                OtherOrganizationRow(org = org, currentUid = currentUid, currentUsername = currentUsername, clubRepository = clubRepository, scope = scope)
             }
         }
     } else if (myOrganizations.isEmpty()) {
-        Text(text = "No clubs to join yet.", color = ClimbPalette.textMuted, fontSize = 13.sp)
+        EmptyState(
+            title = "Find your climbing gym.",
+            message = "Follow along to see new routes, official beta, and updates. You can continue using CLIMB without connecting to a gym.",
+        )
     }
+}
+
+@Composable
+private fun SectionLabel(title: String) {
+    Text(
+        text = title.uppercase(),
+        color = ClimbPalette.textMuted,
+        fontSize = 11.sp,
+        letterSpacing = 1.sp,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(bottom = 10.dp),
+    )
+}
+
+@Composable
+private fun MyOrganizationRow(
+    org: OrganizationEntity,
+    role: OrganizationRole?,
+    clubRepository: ClubRepository,
+    onOpenOrganization: (OrganizationEntity) -> Unit,
+) {
+    val venues by clubRepository.observeVenuesForOrganization(org.id).collectAsStateWithLifecycle(initialValue = emptyList())
+    ClubCard(
+        name = org.name,
+        subtitle = if (venues.isEmpty()) "" else "${venues.size} ${if (venues.size == 1) "venue" else "venues"}",
+        onClick = { onOpenOrganization(org) },
+        trailing = { role?.let { RoleBadge(it) } },
+    )
 }
 
 @Composable
 private fun OtherOrganizationRow(org: OrganizationEntity, currentUid: String, currentUsername: String, clubRepository: ClubRepository, scope: CoroutineScope) {
     val latestRequest by clubRepository.observeLatestJoinRequest(org.id, currentUid).collectAsStateWithLifecycle(initialValue = null)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = org.name, color = ClimbPalette.textPrimary, fontSize = 14.sp)
-        if (latestRequest?.status == JoinRequestStatus.PENDING) {
-            Text(text = "Request pending", color = ClimbPalette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-        } else {
-            Text(
-                text = "Request to join",
-                color = ClimbPalette.chalk,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-                modifier = Modifier.clickable { scope.launch { clubRepository.requestToJoin(org.id, currentUid, currentUsername) } },
-            )
-        }
-    }
+    val venues by clubRepository.observeVenuesForOrganization(org.id).collectAsStateWithLifecycle(initialValue = emptyList())
+    val pending = latestRequest?.status == JoinRequestStatus.PENDING
+    ClubCard(
+        name = org.name,
+        subtitle = if (venues.isEmpty()) "" else "${venues.size} ${if (venues.size == 1) "venue" else "venues"}",
+        onClick = { if (!pending) scope.launch { clubRepository.requestToJoin(org.id, currentUid, currentUsername) } },
+        trailing = {
+            if (pending) {
+                Text(text = "Request pending", color = ClimbPalette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            } else {
+                Text(text = "Request to join", color = ClimbPalette.chalk, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+        },
+    )
 }
 
 @Composable
@@ -378,23 +398,23 @@ fun ZoneDetailContent(
         Spacer(Modifier.height(16.dp))
     }
 
-    SectionCard(title = "Active routes") {
-        if (routes.isEmpty()) {
-            Text(text = "No active routes yet.", color = ClimbPalette.textMuted, fontSize = 13.sp)
+    SectionLabel("Active routes")
+    if (routes.isEmpty()) {
+        EmptyState(title = "No active routes yet.", message = "Staff haven't set anything in this zone yet.")
+    } else {
+        var activeFilter by remember(zone.id) { mutableStateOf<RouteFilter>(RouteFilter.All) }
+        val filteredRoutes = remember(routes, activeFilter) { routes.applyFilter(activeFilter) }
+
+        RouteFilterChips(routes = routes, selected = activeFilter, onSelected = { activeFilter = it })
+        Spacer(Modifier.height(12.dp))
+
+        if (filteredRoutes.isEmpty()) {
+            EmptyState(title = "No routes match this filter.", message = "Try a different grade or filter.")
         } else {
             Column {
-                routes.forEachIndexed { index, route ->
+                filteredRoutes.forEachIndexed { index, route ->
                     if (index > 0) Spacer(Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth().clickable { onOpenRoute(route) },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(text = "${route.name}${route.vGrade?.let { " (V$it)" } ?: ""}", color = ClimbPalette.textPrimary, fontSize = 14.sp)
-                        if (route.betaVideoUrl != null) {
-                            Text(text = "▶ Beta", color = ClimbPalette.chalk, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    RouteCard(route = route, onClick = { onOpenRoute(route) })
                 }
             }
         }
@@ -458,6 +478,59 @@ fun ZoneDetailContent(
                 }
             },
             onDismiss = { showDeleteConfirm = false },
+        )
+    }
+}
+
+/** Quick client-side filters over a zone's already-fetched route list — deliberately just
+ * New/Has beta/grade (what [RouteEntity] actually carries) rather than the visual spec's fuller
+ * zone/style/setter bottom sheet, since style and setter live on [com.example.climb.clubs.RouteVersionEntity]
+ * and aren't fetched at this list level. */
+private sealed interface RouteFilter {
+    data object All : RouteFilter
+    data object New : RouteFilter
+    data object Beta : RouteFilter
+    data class Grade(val vGrade: Int) : RouteFilter
+}
+
+private fun List<RouteEntity>.applyFilter(routeFilter: RouteFilter): List<RouteEntity> = when (routeFilter) {
+    RouteFilter.All -> this
+    RouteFilter.New -> filter { System.currentTimeMillis() - it.createdAt < NEW_WINDOW_MS }
+    RouteFilter.Beta -> filter { it.betaVideoUrl != null }
+    is RouteFilter.Grade -> filter { it.vGrade == routeFilter.vGrade }
+}
+
+@Composable
+private fun RouteFilterChips(routes: List<RouteEntity>, selected: RouteFilter, onSelected: (RouteFilter) -> Unit) {
+    val grades = remember(routes) { routes.mapNotNull { it.vGrade }.distinct().sorted() }
+    Row(modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+        RouteFilterChip("All", selected == RouteFilter.All) { onSelected(RouteFilter.All) }
+        Spacer(Modifier.width(8.dp))
+        RouteFilterChip("New", selected == RouteFilter.New) { onSelected(RouteFilter.New) }
+        Spacer(Modifier.width(8.dp))
+        RouteFilterChip("Has beta", selected == RouteFilter.Beta) { onSelected(RouteFilter.Beta) }
+        grades.forEach { g ->
+            Spacer(Modifier.width(8.dp))
+            RouteFilterChip("V$g", selected == RouteFilter.Grade(g)) { onSelected(RouteFilter.Grade(g)) }
+        }
+    }
+}
+
+@Composable
+private fun RouteFilterChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (selected) ClimbPalette.chalk else ClimbPalette.surface)
+            .border(1.dp, if (selected) ClimbPalette.chalk else ClimbPalette.border, RoundedCornerShape(50))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Text(
+            text = label,
+            color = if (selected) ClimbPalette.chalkText else ClimbPalette.textSecondary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
         )
     }
 }
