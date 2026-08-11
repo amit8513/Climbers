@@ -66,6 +66,7 @@ fun SettingsScreen(
     settingsStore: SettingsStore,
     onBack: () -> Unit,
     onOpenClubs: () -> Unit,
+    onOpenLiveSendPreview: () -> Unit = {},
     staffOrganizations: List<OrganizationEntity> = emptyList(),
     onEnterClubMode: (OrganizationEntity) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -143,6 +144,25 @@ fun SettingsScreen(
 
             SectionCard(title = "Appearance") {
                 AppearanceSection(settingsStore = settingsStore)
+            }
+            Spacer(Modifier.height(16.dp))
+
+            SectionCard(title = "UI Concepts") {
+                Column {
+                    Text(
+                        text = "Design exploration: \"Live Send\" — an energetic sport-style alternative UI with its own auth flow and gym-mode dashboard.",
+                        color = ClimbPalette.textSecondary,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                    )
+                    Text(
+                        text = "Preview: Live Send →",
+                        color = ClimbPalette.chalk,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 10.dp).clickable(onClick = onOpenLiveSendPreview),
+                    )
+                }
             }
             Spacer(Modifier.height(24.dp))
         }

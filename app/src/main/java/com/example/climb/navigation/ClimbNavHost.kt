@@ -39,6 +39,7 @@ import com.example.climb.ui.friends.FriendClimbsScreen
 import com.example.climb.ui.friends.FriendsScreen
 import com.example.climb.ui.home.HomeScreen
 import com.example.climb.ui.leaderboard.LeaderboardScreen
+import com.example.climb.ui.livesend.LiveSendNavHost
 import com.example.climb.ui.nav.ClimbBottomBar
 import com.example.climb.ui.progress.ProgressScreen
 import com.example.climb.ui.record.RecordScreen
@@ -57,6 +58,7 @@ private object Routes {
     const val SETTINGS = "settings"
     const val CLUBS = "clubs"
     const val CLUB_MEMBER = "club_member/{organizationId}"
+    const val LIVE_SEND_PREVIEW = "live_send_preview"
     const val TAG = "tag/{videoPath}/{durationMs}"
     const val DETAIL = "detail/{climbId}"
     const val VIDEO_SOURCE = "video_source"
@@ -238,9 +240,19 @@ private fun NormalNavHost(
                     settingsStore = container.settingsStore,
                     onBack = { navController.popBackStack() },
                     onOpenClubs = { navController.navigate(Routes.CLUBS) },
+                    onOpenLiveSendPreview = { navController.navigate(Routes.LIVE_SEND_PREVIEW) },
                     staffOrganizations = staffOrganizations,
                     onEnterClubMode = onEnterClubMode,
                 )
+            }
+
+            // Design-exploration preview — reached only via the "UI Concepts" row in Settings.
+            // LiveSendNavHost is entirely self-contained (its own routes, no AppContainer, no
+            // real data) and owns its own back stack; pressing system Back at its start
+            // destination (Onboarding) has nothing left to pop internally, so it naturally
+            // bubbles up and pops this composable off the outer back stack, returning to Settings.
+            composable(Routes.LIVE_SEND_PREVIEW) {
+                LiveSendNavHost()
             }
 
             // Entirely optional feature — reached only via the "Clubs" row in Settings, never
