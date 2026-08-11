@@ -105,7 +105,12 @@ fun HomeScreen(
 
     Box(modifier = modifier.fillMaxSize().wallTexture()) {
         if (settingsStore.homeVideoBackgroundEnabled) {
-            HomeVideoBackground(climbs = climbs, modifier = Modifier.fillMaxSize())
+            HomeVideoBackground(
+                climbs = climbs,
+                opacity = settingsStore.homeVideoOpacity,
+                style = settingsStore.homeVideoMontageStyle,
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         Column(modifier = Modifier.fillMaxSize()) {
             Row(

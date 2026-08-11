@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A TextureView-backed PlayerView, used only for the full-screen Home background montage.
+    PlayerView defaults to a SurfaceView, which renders on its own compositor layer and can
+    visually "punch through" other content drawn on top of it - including a translucent scrim
+    and, on devices with a status-bar cutout/pill overlay, the system UI itself - since it
+    doesn't participate in normal view Z-ordering the way a TextureView does.
+-->
+<androidx.media3.ui.PlayerView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/home_video_background_player_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:surface_type="texture_view"
+    app:use_controller="false" />
