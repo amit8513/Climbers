@@ -24,6 +24,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -45,6 +47,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.data.settings.ClimbThemeOption
+import com.example.climb.data.settings.HomeVideoMontageStyle
 import com.example.climb.data.settings.SettingsStore
 import com.example.climb.data.social.AuthRepository
 import com.example.climb.data.social.SocialRepository
@@ -54,6 +57,7 @@ import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.palette
 import com.example.climb.ui.theme.wallTexture
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private val usernamePattern = Regex("^[a-zA-Z0-9_]{3,20}$")
 
@@ -144,6 +148,11 @@ fun SettingsScreen(
 
             SectionCard(title = "Appearance") {
                 AppearanceSection(settingsStore = settingsStore)
+            }
+            Spacer(Modifier.height(16.dp))
+
+            SectionCard(title = "Home background") {
+                HomeBackgroundSection(settingsStore = settingsStore)
             }
             Spacer(Modifier.height(16.dp))
 
@@ -384,6 +393,82 @@ private fun AppearanceSection(settingsStore: SettingsStore) {
                 selected = settingsStore.themeOption == option,
                 onClick = { settingsStore.selectTheme(option) },
             )
+        }
+    }
+}
+
+@Composable
+private fun HomeBackgroundSection(settingsStore: SettingsStore) {
+    Column {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text(text = "Video montage", color = ClimbPalette.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "Cycle through your own climb videos behind the Home screen. Turn off to use the plain background instead.",
+                    color = ClimbPalette.textSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+            }
+            Switch(
+                checked = settingsStore.homeVideoBackgroundEnabled,
+                onCheckedChange = { settingsStore.updateHomeVideoBackgroundEnabled(it) },
+            )
+        }
+
+        if (settingsStore.homeVideoBackgroundEnabled) {
+            Spacer(Modifier.height(18.dp))
+            Text(text = "Style", color = ClimbPalette.textMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
+            Spacer(Modifier.height(10.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                HomeVideoMontageStyle.entries.forEach { option ->
+                    MontageStyleRow(
+                        option = option,
+                        selected = settingsStore.homeVideoMontageStyle == option,
+                        onClick = { settingsStore.selectHomeVideoMontageStyle(option) },
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(text = "Video visibility", color = ClimbPalette.textMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
+                Text(text = "${(settingsStore.homeVideoOpacity * 100).roundToInt()}%", color = ClimbPalette.textMuted, fontSize = 11.sp)
+            }
+            Slider(
+                value = settingsStore.homeVideoOpacity,
+                onValueChange = { settingsStore.updateHomeVideoOpacity(it) },
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Video background visibility" },
+            )
+        }
+    }
+}
+
+@Composable
+private fun MontageStyleRow(option: HomeVideoMontageStyle, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (selected) ClimbPalette.surfaceRaised else ClimbPalette.surface)
+            .border(if (selected) 2.dp else 1.dp, if (selected) ClimbPalette.chalk else ClimbPalette.border, shape)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "${option.label}${if (selected) ", selected" else ""}" }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = option.label, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+            Text(text = option.description, color = ClimbPalette.textSecondary, fontSize = 11.sp, lineHeight = 15.sp)
+        }
+        if (selected) {
+            Text(text = "✓", color = ClimbPalette.sent, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
     }
 }
