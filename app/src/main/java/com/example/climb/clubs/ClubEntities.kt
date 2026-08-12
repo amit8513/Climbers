@@ -163,6 +163,20 @@ data class RouteStatsEntity(
     val updatedAt: Long,
 )
 
+/** One row per (route, user) — who has actually sent this specific route, via the one real flow
+ * that both logs a climb AND links it to a real gym route: [com.example.climb.analysis.ClimbAttemptEntity]
+ * through `ClimbDetailsInputScreen`'s route picker + "Sent this climb" switch (plain `TagScreen`
+ * has no route picker at all, so it can never produce one of these). Re-sending the same route just
+ * refreshes [completedAt] on the same doc (id `"${routeId}_$userId"`) rather than piling up
+ * duplicates — this is "have you sent it," not an attempt log. */
+data class RouteCompletionEntity(
+    val routeId: Long,
+    val organizationId: Long,
+    val userId: String,
+    val userDisplayName: String,
+    val completedAt: Long,
+)
+
 fun hasStaffAccess(memberships: List<OrganizationMembershipEntity>): Boolean =
     memberships.any { it.role == OrganizationRole.STAFF || it.role == OrganizationRole.ADMIN }
 

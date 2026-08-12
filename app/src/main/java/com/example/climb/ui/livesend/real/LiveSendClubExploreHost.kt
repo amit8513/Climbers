@@ -52,6 +52,7 @@ import com.example.climb.ui.livesend.ExploreScreen
 import com.example.climb.ui.livesend.ExploreSection
 import com.example.climb.ui.livesend.ExploreVenue
 import com.example.climb.ui.livesend.PopularRoute
+import com.example.climb.ui.livesend.RouteCompletionRow
 import com.example.climb.ui.livesend.RouteDetailScreen
 import com.example.climb.ui.livesend.components.LiveSendCard
 import com.example.climb.ui.livesend.components.LiveSendPrimaryButton
@@ -175,6 +176,7 @@ fun LiveSendClubExploreHost(
     if (selectedRoute != null) {
         val stats by clubRepository.observeRouteStats(selectedRoute.id).collectAsStateWithLifecycle(initialValue = null)
         val latestVersion by clubRepository.observeLatestRouteVersion(selectedRoute.id).collectAsStateWithLifecycle(initialValue = null)
+        val routeCompletions by clubRepository.observeRouteCompletions(selectedRoute.id).collectAsStateWithLifecycle(initialValue = emptyList())
         val attempts = stats?.totalAttempts ?: 0
         val sends = stats?.totalSends ?: 0
         RouteDetailScreen(
@@ -186,6 +188,7 @@ fun LiveSendClubExploreHost(
             totalSends = sends,
             betaVideoAvailable = selectedRoute.betaVideoUrl != null,
             betaVideoUrl = selectedRoute.betaVideoUrl,
+            completions = routeCompletions.map { RouteCompletionRow(userDisplayName = it.userDisplayName, completedAt = it.completedAt) },
             onBack = { selectedRouteId = null },
             onPlayVideo = { /* no-op: real playback is now inline in RouteDetailScreen's beta card via betaVideoUrl */ },
             onLogAttempt = { /* TODO(live-send-real): needs the full attempt-logging form (ClimbDetailsInputScreen) */ },

@@ -176,6 +176,14 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Who has sent a specific route — same trust level as clubStats (you can only ever write
+    // your own completion record, never someone else's).
+    match /routeCompletions/{completionId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+
     // Route-wide attempt/send/fail counters — unlike clubStats there's no single owning user (it
     // aggregates every member's attempts), so this is open to any signed-in member, same trust
     // level as /counters.

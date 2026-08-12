@@ -30,6 +30,7 @@ private const val COUNTERS = "counters"
 private const val CLUB_UPDATES = "clubUpdates"
 private const val CLUB_STATS = "clubStats"
 private const val ROUTE_STATS = "routeStats"
+private const val ROUTE_COMPLETIONS = "routeCompletions"
 
 private fun membershipDocId(organizationId: Long, userId: String) = "${organizationId}_$userId"
 
@@ -232,6 +233,30 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
     fun observeLatestRouteVersion(routeId: Long): Flow<RouteVersionEntity?> =
         observeCollection(firestore.collection(ROUTE_VERSIONS).whereEqualTo("routeId", routeId)) { it.toRouteVersion() }
             .map { versions -> versions.maxByOrNull { it.versionNumber } }
+
+    /** Records that [userId] has sent [routeId] — same trust level as [recordRouteAttempt]
+     * (participation bookkeeping, not a staff mutation, no [requireStaffAccess]). One doc per
+     * (route, user): re-sending the same route just refreshes [RouteCompletionEntity.completedAt]
+     * on the same doc rather than creating a duplicate row. */
+    suspend fun recordRouteCompletion(routeId: Long, organizationId: Long, userId: String, userDisplayName: String): Result<Unit> = runCatching {
+        firestore.collection(ROUTE_COMPLETIONS).document("${routeId}_$userId")
+            .set(
+                mapOf(
+                    "routeId" to routeId,
+                    "organizationId" to organizationId,
+                    "userId" to userId,
+                    "userDisplayName" to userDisplayName,
+                    "completedAt" to System.currentTimeMillis(),
+                ),
+            ).await()
+        Unit
+    }
+
+    /** Real users who've sent this route, most-recent-first — a plain chronological list, not a
+     * fabricated ranking score (there's no real per-user tiebreak metric to rank by here). */
+    fun observeRouteCompletions(routeId: Long): Flow<List<RouteCompletionEntity>> =
+        observeCollection(firestore.collection(ROUTE_COMPLETIONS).whereEqualTo("routeId", routeId)) { it.toRouteCompletion() }
+            .map { completions -> completions.sortedByDescending { it.completedAt } }
 
     /** Creating an organization makes the creator its ADMIN immediately. There is no self-serve
      * "create a club" UI anywhere in the app — this only runs via [ensureSeedOrganization], the
@@ -615,5 +640,17 @@ private fun DocumentSnapshot.toClubStats(): ClubStatsEntity? {
         totalSends = (getLong("totalSends") ?: 0L).toInt(),
         bestVGradeSent = getLong("bestVGradeSent")?.toInt(),
         updatedAt = getLong("updatedAt") ?: 0L,
+    )
+}
+
+private fun DocumentSnapshot.toRouteCompletion(): RouteCompletionEntity? {
+    if (!exists()) return null
+    val userId = getString("userId") ?: return null
+    return RouteCompletionEntity(
+        routeId = getLong("routeId") ?: return null,
+        organizationId = getLong("organizationId") ?: return null,
+        userId = userId,
+        userDisplayName = getString("userDisplayName") ?: userId,
+        completedAt = getLong("completedAt") ?: 0L,
     )
 }

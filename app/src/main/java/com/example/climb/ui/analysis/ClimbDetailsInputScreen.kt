@@ -221,6 +221,9 @@ fun ClimbDetailsInputScreen(
                         routeContext?.let { route ->
                             clubRepository.recordClubAttempt(route.organizationId, currentUid, currentUsername, vGrade, completed)
                             clubRepository.recordRouteAttempt(route.routeId, route.organizationId, completed)
+                            if (completed) {
+                                clubRepository.recordRouteCompletion(route.routeId, route.organizationId, currentUid, currentUsername)
+                            }
                         }
                         saving = false
                         onAnalyzeStarted(attemptId)

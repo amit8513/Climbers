@@ -113,6 +113,10 @@ fun RouteDetailScreen(
     // the mock preview and the member-facing context (isStaff=false there) unchanged.
     isStaff: Boolean = false,
     onUploadBeta: () -> Unit = {},
+    // Real users who've sent this route (com.example.climb.clubs.ClubRepository.observeRouteCompletions),
+    // most-recent-first — see RouteCompletionRow's doc comment for why this is a plain chronological
+    // list rather than a fabricated ranking score. Empty default keeps the mock preview unaffected.
+    completions: List<RouteCompletionRow> = emptyList(),
 ) {
     Box(modifier = Modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(
@@ -178,6 +182,10 @@ fun RouteDetailScreen(
             }
 
             RouteStatsRow(sendRatePercent = sendRatePercent, totalAttempts = totalAttempts, totalSends = totalSends)
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            SentByRow(completions = completions)
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -368,5 +376,50 @@ private fun StatBlock(text: String, modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold,
             fontSize = 13.sp,
         )
+    }
+}
+
+/** One real user who has sent this route — [completedAt] is a real timestamp, not a rank; there's
+ * no real per-user tiebreak metric (see the TODO above) to rank sends by, so this is presented as
+ * a plain most-recent-first list rather than a fabricated "#1/#2/#3" ranking. */
+data class RouteCompletionRow(val userDisplayName: String, val completedAt: Long)
+
+/** "Sent by" — who has actually completed this route, most-recent-first
+ * (com.example.climb.clubs.ClubRepository.observeRouteCompletions), documented via the one real
+ * flow that both logs a climb AND links it to this route (ClimbDetailsInputScreen's route picker +
+ * "Sent this climb" switch — plain in-app tagging alone has no route picker, so it can't produce
+ * one of these). Bounded-height internal scroll past ~2 rows, matching every other growing real
+ * list in this package (ClubDashboardScreen's activity feed, etc.) rather than stretching the page. */
+@Composable
+private fun SentByRow(completions: List<RouteCompletionRow>) {
+    Column {
+        Text(
+            text = "Sent by (${completions.size})",
+            color = ClimbPalette.liveSendTextMuted,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 10.dp),
+        )
+        if (completions.isEmpty()) {
+            Text(
+                text = "No one has logged a send for this route yet.",
+                color = ClimbPalette.liveSendTextMuted,
+                fontSize = 13.sp,
+            )
+        } else {
+            Column(
+                modifier = Modifier.heightIn(max = 138.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                completions.forEach { completion ->
+                    LiveSendCard(cornerRadius = 14, padding = 14) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = completion.userDisplayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text(text = formatRelativeTime(completion.completedAt), color = ClimbPalette.liveSendTextMuted, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
