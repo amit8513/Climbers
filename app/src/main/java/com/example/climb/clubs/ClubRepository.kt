@@ -24,6 +24,7 @@ private const val VENUES = "venues"
 private const val ZONES = "zones"
 private const val ROUTES = "routes"
 private const val ROUTE_VERSIONS = "routeVersions"
+private const val CAMERAS = "cameras"
 private const val JOIN_REQUESTS = "organizationJoinRequests"
 private const val COUNTERS = "counters"
 private const val CLUB_UPDATES = "clubUpdates"
@@ -91,6 +92,9 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
 
     fun observeZonesForVenue(venueId: Long): Flow<List<ZoneEntity>> =
         observeCollection(firestore.collection(ZONES).whereEqualTo("venueId", venueId)) { it.toZone() }
+
+    fun observeCamerasForOrganization(organizationId: Long): Flow<List<CameraEntity>> =
+        observeCollection(firestore.collection(CAMERAS).whereEqualTo("organizationId", organizationId)) { it.toCamera() }
 
     fun observeActiveRoutesForZone(zoneId: Long): Flow<List<RouteEntity>> =
         observeCollection(firestore.collection(ROUTES).whereEqualTo("zoneId", zoneId).whereEqualTo("retiredAt", null)) { it.toRoute() }
@@ -221,6 +225,14 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         awaitClose { registration.remove() }
     }
 
+    /** A route's current color (and other per-setting data) lives on its latest [RouteVersionEntity]
+     * — routes get re-stripped/re-set periodically, so this is versioned rather than a field on
+     * [RouteEntity] itself (see that entity's doc comment). Same query-then-pick-max pattern as
+     * [buildRouteContext]'s one-shot lookup, just live. */
+    fun observeLatestRouteVersion(routeId: Long): Flow<RouteVersionEntity?> =
+        observeCollection(firestore.collection(ROUTE_VERSIONS).whereEqualTo("routeId", routeId)) { it.toRouteVersion() }
+            .map { versions -> versions.maxByOrNull { it.versionNumber } }
+
     /** Creating an organization makes the creator its ADMIN immediately. There is no self-serve
      * "create a club" UI anywhere in the app — this only runs via [ensureSeedOrganization], the
      * one-time bootstrap for the single club this app currently supports. */
@@ -329,6 +341,24 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         VenueEntity(id = id, organizationId = organizationId, name = trimmed, address = cleanAddress, createdAt = now)
     }
 
+    suspend fun createCamera(organizationId: Long, userId: String, name: String): Result<CameraEntity> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        val trimmed = name.trim()
+        require(trimmed.isNotEmpty()) { "Camera name can't be empty" }
+        val now = System.currentTimeMillis()
+        val id = nextId(CAMERAS)
+        firestore.collection(CAMERAS).document(id.toString())
+            .set(mapOf("organizationId" to organizationId, "name" to trimmed, "assignedVenueId" to null, "createdAt" to now)).await()
+        CameraEntity(id = id, organizationId = organizationId, name = trimmed, assignedVenueId = null, createdAt = now)
+    }
+
+    /** [venueId] null unassigns the camera — same nullable-clear shape as [setRouteBetaVideo] with
+     * a null url. */
+    suspend fun assignCameraToVenue(organizationId: Long, userId: String, cameraId: Long, venueId: Long?): Result<Unit> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        firestore.collection(CAMERAS).document(cameraId.toString()).update("assignedVenueId", venueId).await()
+    }
+
     /** Cascades through every zone (and everything under it — see [deleteZoneCascade]) before
      * removing the venue doc itself. */
     suspend fun deleteVenue(organizationId: Long, userId: String, venue: VenueEntity): Result<Unit> = runCatching {
@@ -392,7 +422,7 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         firestore.collection(ZONES).document(zone.id.toString()).delete().await()
     }
 
-    suspend fun createRoute(organizationId: Long, userId: String, zoneId: Long, name: String, vGrade: Int?): Result<RouteEntity> = runCatching {
+    suspend fun createRoute(organizationId: Long, userId: String, zoneId: Long, name: String, vGrade: Int?, colorHex: Long? = null): Result<RouteEntity> = runCatching {
         requireStaffAccess(organizationId, userId)
         val trimmed = name.trim()
         require(trimmed.isNotEmpty()) { "Route name can't be empty" }
@@ -405,7 +435,7 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
             .set(
                 mapOf(
                     "organizationId" to organizationId, "routeId" to routeId, "setterUserId" to userId,
-                    "versionNumber" to 1, "colorHex" to null, "createdAt" to now,
+                    "versionNumber" to 1, "colorHex" to colorHex, "createdAt" to now,
                 ),
             ).await()
         RouteEntity(id = routeId, organizationId = organizationId, zoneId = zoneId, name = trimmed, vGrade = vGrade, createdAt = now)
@@ -479,6 +509,18 @@ private fun DocumentSnapshot.toVenue(): VenueEntity? {
         organizationId = getLong("organizationId") ?: return null,
         name = name,
         address = getString("address"),
+        createdAt = getLong("createdAt") ?: 0L,
+    )
+}
+
+private fun DocumentSnapshot.toCamera(): CameraEntity? {
+    if (!exists()) return null
+    val name = getString("name") ?: return null
+    return CameraEntity(
+        id = id.toLong(),
+        organizationId = getLong("organizationId") ?: return null,
+        name = name,
+        assignedVenueId = getLong("assignedVenueId"),
         createdAt = getLong("createdAt") ?: 0L,
     )
 }

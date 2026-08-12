@@ -152,6 +152,13 @@ service cloud.firestore {
       allow delete: if signedIn() && isStaffOf(resource.data.organizationId);
     }
 
+    match /cameras/{cameraId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && isStaffOf(request.resource.data.organizationId);
+      allow update: if signedIn() && isStaffOf(resource.data.organizationId);
+      allow delete: if signedIn() && isStaffOf(resource.data.organizationId);
+    }
+
     match /clubUpdates/{updateId} {
       allow read: if signedIn();
       allow create: if signedIn() &&

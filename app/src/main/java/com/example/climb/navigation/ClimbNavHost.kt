@@ -30,8 +30,8 @@ import com.example.climb.ui.analysis.AnalysisProgressScreen
 import com.example.climb.ui.analysis.AnalysisResultScreen
 import com.example.climb.ui.analysis.ClimbDetailsInputScreen
 import com.example.climb.ui.analysis.VideoSourceScreen
-import com.example.climb.ui.auth.AuthScreen
 import com.example.climb.ui.auth.ProfileSetupScreen
+import com.example.climb.ui.livesend.real.LiveSendAuthHost
 import com.example.climb.ui.clubs.ClubModeSwitchScreen
 import com.example.climb.ui.clubs.ClubsScreen
 import com.example.climb.ui.detail.DetailScreen
@@ -109,7 +109,7 @@ fun ClimbNavHost(container: AppContainer) {
 
     val currentUid = uid
     if (currentUid == null) {
-        AuthScreen(authRepository = container.authRepository)
+        LiveSendAuthHost(authRepository = container.authRepository, socialRepository = container.socialRepository)
         return
     }
 
@@ -184,6 +184,7 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
         is AppMode.Club -> ClubNavHost(
             container = container,
             currentUid = currentUid,
+            profile = profile,
             organization = mode.organization,
             onExitClub = { chosenClubOrganizationId = null },
         )
@@ -291,7 +292,6 @@ private fun NormalNavHost(
                     currentUid = currentUid,
                     currentUsername = profile.username,
                     socialRepository = container.socialRepository,
-                    authRepository = container.authRepository,
                     onFriendClick = { friend -> navController.navigate(Routes.friendClimbs(friend.uid, friend.username)) },
                 )
             }

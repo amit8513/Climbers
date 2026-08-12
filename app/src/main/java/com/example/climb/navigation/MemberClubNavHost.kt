@@ -28,9 +28,9 @@ import androidx.navigation.compose.rememberNavController
 import com.example.climb.AppContainer
 import com.example.climb.ui.clubs.ClubLeaderboardScreen
 import com.example.climb.ui.clubs.ClubOverviewScreen
-import com.example.climb.ui.clubs.ClubRoutesScreen
-import com.example.climb.ui.clubs.ClubUpdatesScreen
 import com.example.climb.ui.clubs.ClubVideosScreen
+import com.example.climb.ui.livesend.real.LiveSendBroadcastScreen
+import com.example.climb.ui.livesend.real.LiveSendClubExploreHost
 import com.example.climb.ui.nav.ClubBarTab
 import com.example.climb.ui.nav.ClubBottomBar
 import com.example.climb.ui.theme.ClimbPalette
@@ -44,8 +44,11 @@ private object MemberClubRoutes {
     const val LEADERBOARD = "member_club_leaderboard"
 }
 
+// ROUTES and UPDATES each render their own full-screen "Live Send" chrome (their own floating
+// bottom bar baked in) rather than using this Scaffold's bottomBar slot, so they're deliberately
+// excluded here — including either would double up two bottom bars on screen at once.
 private val MEMBER_CLUB_TAB_ROUTES = setOf(
-    MemberClubRoutes.OVERVIEW, MemberClubRoutes.ROUTES, MemberClubRoutes.UPDATES, MemberClubRoutes.VIDEOS, MemberClubRoutes.LEADERBOARD,
+    MemberClubRoutes.OVERVIEW, MemberClubRoutes.VIDEOS, MemberClubRoutes.LEADERBOARD,
 )
 
 private fun navigateToMemberClubTab(navController: NavHostController, route: String) {
@@ -111,10 +114,23 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, organizationI
                 ClubOverviewScreen(currentUid = currentUid, clubRepository = container.clubRepository, organization = org)
             }
             composable(MemberClubRoutes.ROUTES) {
-                ClubRoutesScreen(currentUid = currentUid, clubRepository = container.clubRepository, organization = org, isStaff = false)
+                LiveSendClubExploreHost(
+                    currentUid = currentUid,
+                    clubRepository = container.clubRepository,
+                    organization = org,
+                    onClubTab = { navigateToMemberClubTab(navController, MemberClubRoutes.OVERVIEW) },
+                    onGoHome = onBack,
+                    onRanksTab = { navigateToMemberClubTab(navController, MemberClubRoutes.LEADERBOARD) },
+                )
             }
             composable(MemberClubRoutes.UPDATES) {
-                ClubUpdatesScreen(currentUid = currentUid, clubRepository = container.clubRepository, organization = org, isStaff = false)
+                LiveSendBroadcastScreen(
+                    currentUid = currentUid,
+                    clubRepository = container.clubRepository,
+                    organization = org,
+                    isStaff = false,
+                    onGoHome = onBack,
+                )
             }
             composable(MemberClubRoutes.VIDEOS) {
                 ClubVideosScreen(currentUid = currentUid, analysisRepository = container.analysisRepository, organization = org)

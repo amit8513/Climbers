@@ -33,7 +33,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.climb.data.social.AuthRepository
 import com.example.climb.data.social.Friend
 import com.example.climb.data.social.FriendRequest
 import com.example.climb.data.social.SocialRepository
@@ -47,7 +46,6 @@ fun FriendsScreen(
     currentUid: String,
     currentUsername: String,
     socialRepository: SocialRepository,
-    authRepository: AuthRepository,
     onFriendClick: (Friend) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -76,32 +74,17 @@ fun FriendsScreen(
                 letterSpacing = 1.sp,
                 modifier = Modifier.padding(top = 4.dp),
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text(
-                        text = "Friends",
-                        color = ClimbPalette.textPrimary,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 22.sp,
-                    )
-                    Text(
-                        text = "@$currentUsername",
-                        color = ClimbPalette.textSecondary,
-                        fontSize = 13.sp,
-                    )
-                }
-                Text(
-                    text = "Sign out",
-                    color = ClimbPalette.fell,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable { authRepository.signOut() },
-                )
-            }
+            Text(
+                text = "Friends",
+                color = ClimbPalette.textPrimary,
+                fontWeight = FontWeight.Black,
+                fontSize = 22.sp,
+            )
+            Text(
+                text = "@$currentUsername",
+                color = ClimbPalette.textSecondary,
+                fontSize = 13.sp,
+            )
 
             Spacer(Modifier.height(18.dp))
 

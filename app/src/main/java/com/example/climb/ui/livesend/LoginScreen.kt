@@ -61,6 +61,8 @@ fun LoginScreen(
     onAppleLogin: () -> Unit,
     onCreateAccount: () -> Unit,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -146,9 +148,20 @@ fun LoginScreen(
                     )
                 }
 
+                if (errorMessage != null) {
+                    Text(
+                        text = errorMessage,
+                        color = ClimbPalette.fell,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 10.dp),
+                    )
+                }
+
                 LiveSendPrimaryButton(
                     text = "Log In",
                     onClick = { onLogin(email, password) },
+                    enabled = !isLoading && email.isNotBlank() && password.isNotBlank(),
+                    loading = isLoading,
                     modifier = Modifier.padding(top = 12.dp),
                 )
 

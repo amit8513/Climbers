@@ -173,6 +173,17 @@ fun SettingsScreen(
                     )
                 }
             }
+            Spacer(Modifier.height(16.dp))
+
+            SectionCard(title = "Account") {
+                Text(
+                    text = "Sign out",
+                    color = ClimbPalette.fell,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable { authRepository.signOut() },
+                )
+            }
             Spacer(Modifier.height(24.dp))
         }
     }

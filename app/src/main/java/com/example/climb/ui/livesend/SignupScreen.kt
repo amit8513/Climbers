@@ -53,6 +53,8 @@ fun SignupScreen(
     onLogin: () -> Unit,
     onCreateAccount: (name: String, email: String, password: String, joiningAsGym: Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
+    errorMessage: String? = null,
 ) {
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -150,11 +152,17 @@ fun SignupScreen(
                     )
                 }
 
+                if (errorMessage != null) {
+                    Text(text = errorMessage, color = ClimbPalette.fell, fontSize = 12.sp)
+                }
+
                 Spacer(modifier = Modifier.height(6.dp))
 
                 LiveSendPrimaryButton(
                     text = "Create Account",
                     onClick = { onCreateAccount(name, email, password, joiningIndex == 1) },
+                    enabled = !isLoading && name.isNotBlank() && email.isNotBlank() && password.isNotBlank(),
+                    loading = isLoading,
                     modifier = Modifier.semantics { role = Role.Button },
                 )
 

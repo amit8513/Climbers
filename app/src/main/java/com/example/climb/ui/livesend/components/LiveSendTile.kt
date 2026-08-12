@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 import com.example.climb.ui.theme.ClimbPalette
 
 /**
- * A 160x90 grid tile — ClubDashboard's "Manage" grid (Routes/Members/Venues/Broadcast, each
+ * A 132x66 grid tile — ClubDashboard's "Manage" grid (Routes/Members/Cameras/Broadcast, each
  * "🧗 Routes"-style emoji + label) and ExploreScreen's venue tiles (name + route count). Same
  * shape either way; [sublabel] is null for the Manage tiles and set for the venue tiles.
  */
@@ -31,26 +31,26 @@ fun LiveSendTile(
     emoji: String? = null,
     sublabel: String? = null,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = RoundedCornerShape(14.dp)
     Column(
         modifier = modifier
-            .width(160.dp)
-            .height(90.dp)
+            .width(132.dp)
+            .height(66.dp)
             .clip(shape)
             .background(ClimbPalette.liveSendSurface)
             .border(1.dp, ClimbPalette.liveSendBorder, shape)
             .clickable(onClick = onClick)
-            .padding(14.dp),
+            .padding(10.dp),
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
             text = if (emoji != null) "$emoji $label" else label,
             color = ClimbPalette.liveSendTextPrimary,
             fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
+            fontSize = 13.sp,
         )
         if (sublabel != null) {
-            Text(text = sublabel, color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+            Text(text = sublabel, color = ClimbPalette.liveSendTextMuted, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
         }
     }
 }

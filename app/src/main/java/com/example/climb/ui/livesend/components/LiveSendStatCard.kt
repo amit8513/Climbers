@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.climb.ui.theme.ClimbPalette
@@ -38,13 +39,15 @@ fun LiveSendStatCard(
             .padding(horizontal = 12.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(text = value, color = valueColor, fontWeight = FontWeight.Black, fontSize = 22.sp)
+        Text(text = value, color = valueColor, fontWeight = FontWeight.Black, fontSize = 22.sp, maxLines = 1)
         Text(
             text = label.uppercase(),
             color = ClimbPalette.liveSendTextMuted,
             fontWeight = FontWeight.Bold,
             fontSize = 10.sp,
             letterSpacing = 0.5.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 4.dp),
         )
     }

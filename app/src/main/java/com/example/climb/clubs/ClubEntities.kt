@@ -96,6 +96,18 @@ data class RouteContext(
     val vGrade: Int?,
 )
 
+/** A physical camera staff place around the gym (e.g. mounted near a venue's walls to capture
+ * beta footage) — distinct from the app's own in-app climb-recording flow. [assignedVenueId] is
+ * nullable: a camera can exist unassigned before staff pick a venue for it, or be unassigned again
+ * later. */
+data class CameraEntity(
+    val id: Long,
+    val organizationId: Long,
+    val name: String,
+    val assignedVenueId: Long? = null,
+    val createdAt: Long,
+)
+
 enum class JoinRequestStatus { PENDING, APPROVED, DENIED }
 
 /** A member never joins instantly — a request sits here until staff act on it. Approving creates
