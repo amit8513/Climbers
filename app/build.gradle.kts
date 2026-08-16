@@ -49,6 +49,11 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.material)
     testImplementation(libs.junit)
+    // A real org.json implementation for plain JVM unit tests — Android's own JSONObject is a
+    // stub on the unit-test classpath (every method throws "Stub!"), so anything exercising
+    // AnalysisJson.kt/TargetColorModelJson.kt-style JSON round-trips needs this to run outside
+    // Robolectric/instrumentation.
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
 

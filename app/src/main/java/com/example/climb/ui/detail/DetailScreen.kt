@@ -73,6 +73,8 @@ import com.example.climb.colordetection.ColorCalibrator
 import com.example.climb.colordetection.DebugCoordinateMapper
 import com.example.climb.colordetection.PixelBuffer
 import com.example.climb.colordetection.RoiSampler
+import com.example.climb.colordetection.toJson
+import com.example.climb.colordetection.toTargetColorModel
 import com.example.climb.data.ClimbRepository
 import com.example.climb.playback.ColorIsolationEffect
 import com.example.climb.playback.DetectedHoldHighlightEffect
@@ -246,6 +248,28 @@ fun DetailScreen(
     var referenceFrame by remember(currentClimb.videoPath) { mutableStateOf<Bitmap?>(null) }
     var bonusState by remember(currentClimb.videoPath) { mutableStateOf<DetectionBonusState>(DetectionBonusState.Idle) }
 
+    // Restores a previously successful "Calibrate on this hold" result (see onCalibrationTap
+    // below) so reopening this climb doesn't require tap-to-calibrate again every time.
+    LaunchedEffect(currentClimb.id, currentClimb.calibratedColorModelJson) {
+        val savedModel = currentClimb.calibratedColorModelJson?.toTargetColorModel() ?: return@LaunchedEffect
+        bonusState = DetectionBonusState.Loading
+        val (result, frame) = withContext(Dispatchers.Default) {
+            val frame = referenceFrame ?: HoldHighlightPipeline.extractReferenceFrame(currentClimb.videoPath)
+            HoldHighlightPipeline.buildMask(frame, savedModel) to frame
+        }
+        referenceFrame = frame
+        if (result.holdCount > 0) {
+            exoPlayer.setVideoEffects(listOf(DetectedHoldHighlightEffect(result.maskBitmap)))
+            exoPlayer.seekTo(exoPlayer.currentPosition)
+            bonusState = DetectionBonusState.Active(result.holdCount, savedModel)
+        } else {
+            // Lighting/frame differences since the calibration was saved meant it didn't
+            // reproduce this time - fall back to the always-working default silently, rather than
+            // showing "not found" for something the user didn't just ask for this session.
+            bonusState = DetectionBonusState.Idle
+        }
+    }
+
     fun resetToDefaultEffect() {
         exoPlayer.setVideoEffects(
             listOf(ColorIsolationEffect(currentClimb.routeColor, appliedHueTolerance, appliedHueOffset)),
@@ -326,6 +350,10 @@ fun DetailScreen(
                 exoPlayer.setVideoEffects(listOf(DetectedHoldHighlightEffect(result.maskBitmap)))
                 exoPlayer.seekTo(exoPlayer.currentPosition)
                 bonusState = DetectionBonusState.Active(result.holdCount, targetModel)
+                // Persisted so reopening this climb restores the calibrated view instead of
+                // requiring the user to tap-to-calibrate again every time (see the
+                // restore-on-load LaunchedEffect below).
+                repository.update(currentClimb.copy(calibratedColorModelJson = targetModel.toJson()))
             } else {
                 bonusState = DetectionBonusState.NotFound
             }

@@ -13,7 +13,7 @@ import com.example.climb.analysis.ClimbAttemptEntity
     entities = [
         ClimbEntity::class, ClimbAttemptEntity::class, ClimbAnalysisEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class ClimbDatabase : RoomDatabase() {
@@ -247,12 +247,20 @@ abstract class ClimbDatabase : RoomDatabase() {
             }
         }
 
+        // Additive: a successful "Calibrate on this hold" result, so reopening a climb restores
+        // it instead of requiring the user to tap-to-calibrate again every time.
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE climbs ADD COLUMN calibratedColorModelJson TEXT DEFAULT NULL")
+            }
+        }
+
         fun getInstance(context: Context): ClimbDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context, ClimbDatabase::class.java, "climb.db")
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-                        MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10,
+                        MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
                     )
                     .build()
                     .also { instance = it }

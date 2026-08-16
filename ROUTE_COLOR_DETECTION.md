@@ -115,10 +115,14 @@ device**, not just adb-scripted taps, before trusting or further debugging the r
    measurement (the PINK video). More real footage across different gyms/lighting would validate
    whether `ColorCalibrator`'s median/MAD approach is actually robust in practice, and whether the
    ROI size (`RoiSampler.DEFAULT_RADIUS_PX = 10`) is well-chosen.
-3. **Persist a successful calibration** — right now a calibrated `TargetColorModel` lives only in
-   `DetailScreen`'s in-memory `DetectionBonusState`, lost on navigating away. If tap-to-calibrate
-   works reliably, consider persisting the calibrated Lab/HSV center per climb (would need new
-   `ClimbEntity` fields) so a user doesn't have to recalibrate every time they reopen a climb.
+3. ~~**Persist a successful calibration**~~ — **Done.** `ClimbEntity.calibratedColorModelJson`
+   (migration 10→11) plus `TargetColorModelJson.kt` (`toJson()`/`toTargetColorModel()`, unit
+   tested including round-trip and corrupt-JSON fallback) now saves a successful calibration and
+   restores it automatically on reopening the climb — see the `LaunchedEffect(currentClimb.id, ...)`
+   near the top of `DetailScreen.kt`. Restore fails silently back to the default effect (not a
+   confusing "not found") if re-running the saved model against a freshly-extracted reference frame
+   doesn't find anything this time. This was implemented independently of item 1 below — it works
+   regardless of which path (tap or a future fix) produces the calibration.
 4. **Real-photo test dataset** — every fixture in every phase's tests is synthetic. Phase 8's own
    `SegmentationMetrics`/regression tests document a reserved (currently-empty) location for real
    annotated photos: `app/src/test/resources/colordetection/realFrames/`. Populating this would let

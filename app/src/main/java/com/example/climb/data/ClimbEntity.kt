@@ -30,4 +30,8 @@ data class ClimbEntity(
     val zoneId: Long? = null,
     val routeId: Long? = null,
     val routeVersionId: Long? = null,
+    /** A successful "Calibrate on this hold" result (see `TargetColorModelJson.kt`), so reopening
+     * this climb restores it instead of requiring the user to tap-to-calibrate again every time.
+     * Null for every climb that's never been calibrated. */
+    val calibratedColorModelJson: String? = null,
 )
