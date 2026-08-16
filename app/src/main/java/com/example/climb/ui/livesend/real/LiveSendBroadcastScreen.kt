@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Campaign
@@ -105,6 +106,10 @@ fun LiveSendBroadcastScreen(
     // staff, whose own floating island already has a Home tab). Unused/defaulted no-op in the
     // member context, which reaches chat via its own shared island's Chat tab instead.
     onOpenChat: () -> Unit = {},
+    // Member-only — this screen is a pushed destination reached from the Social tab, not a tab
+    // itself, so it needs a real "back to Social" affordance instead of the header's usual Home
+    // icon. Null (default) for staff, whose Broadcast is still a real top-level tab.
+    onBack: (() -> Unit)? = null,
 ) {
     val updates by clubRepository.observeUpdatesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
@@ -129,6 +134,7 @@ fun LiveSendBroadcastScreen(
                 // Staff's floating island already has its own Home tab, so this header slot is
                 // repurposed to open the club chat instead (moved here from the Manage grid).
                 onOpenChat = if (isStaff) onOpenChat else null,
+                onBack = onBack,
             )
             Spacer(Modifier.height(16.dp))
 
@@ -286,12 +292,13 @@ fun LiveSendBroadcastScreen(
 
 /** Shared page header for the Live-Send-styled real club screens (Broadcast/Members) — a title
  * plus an explicit icon button, matching [com.example.climb.ui.livesend.ClubDashboardScreen]'s
- * header row so all of Club Mode reads as one consistent surface. That button is normally Home
- * ([onGoHome]); passing [onOpenChat] swaps it for a Chat icon instead — used by Broadcast's staff
- * context, whose own floating island already has a Home tab, so this slot is repurposed rather
- * than left redundant. */
+ * header row so all of Club Mode reads as one consistent surface. That button is Home by default
+ * ([onGoHome]); [onOpenChat] swaps it for a Chat icon (Broadcast's staff context, whose own
+ * floating island already has a Home tab); [onBack] — highest priority — swaps it for a back arrow
+ * instead, for a screen that isn't a tab at all but a pushed destination (member Broadcast/Chat,
+ * reached from the Social tab). */
 @Composable
-internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit, onOpenChat: (() -> Unit)? = null) {
+internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit, onOpenChat: (() -> Unit)? = null, onBack: (() -> Unit)? = null) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = title,
@@ -306,15 +313,19 @@ internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit, onOpenChat:
                 .clip(RoundedCornerShape(20.dp))
                 .background(ClimbPalette.liveSendSurface)
                 .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(20.dp))
-                .clickable(onClick = onOpenChat ?: onGoHome)
+                .clickable(onClick = onBack ?: onOpenChat ?: onGoHome)
                 .semantics {
                     role = Role.Button
-                    contentDescription = if (onOpenChat != null) "Open club chat" else "Go to Home"
+                    contentDescription = if (onBack != null) "Back" else if (onOpenChat != null) "Open club chat" else "Go to Home"
                 },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                if (onOpenChat != null) Icons.AutoMirrored.Filled.Chat else Icons.Filled.Home,
+                when {
+                    onBack != null -> Icons.AutoMirrored.Filled.ArrowBack
+                    onOpenChat != null -> Icons.AutoMirrored.Filled.Chat
+                    else -> Icons.Filled.Home
+                },
                 contentDescription = null,
                 tint = ClimbPalette.liveSendTextPrimary,
                 modifier = Modifier.size(20.dp),

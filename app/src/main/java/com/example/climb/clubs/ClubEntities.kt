@@ -210,6 +210,9 @@ data class SharedAttemptEntity(
     val userId: String,
     /** Denormalized at write time — same reasoning as [OrganizationMembershipEntity.userDisplayName]. */
     val userDisplayName: String,
+    /** Denormalized at write time too — the club-wide Social feed lists shared videos across every
+     * route, so it needs a route name to show without a per-item route lookup. */
+    val routeName: String?,
     val videoUrl: String,
     val vGrade: Int?,
     val completed: Boolean,

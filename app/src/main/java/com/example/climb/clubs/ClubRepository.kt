@@ -325,6 +325,12 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         observeCollection(firestore.collection(SHARED_ATTEMPTS).whereEqualTo("routeId", routeId)) { it.toSharedAttempt() }
             .map { attempts -> attempts.sortedByDescending { it.createdAt } }
 
+    /** Every member-shared video across the whole club, regardless of route — the Social tab's
+     * feed, most-recent-first, distinct from [observeSharedAttemptsForRoute]'s per-route scoping. */
+    fun observeSharedAttemptsForOrganization(organizationId: Long): Flow<List<SharedAttemptEntity>> =
+        observeCollection(firestore.collection(SHARED_ATTEMPTS).whereEqualTo("organizationId", organizationId)) { it.toSharedAttempt() }
+            .map { attempts -> attempts.sortedByDescending { it.createdAt } }
+
     /** Uploads a member's own local attempt video (see [com.example.climb.analysis.ClimbAttemptEntity.videoPath]
      * — this is the one case a Club Mode video upload starts from a file already on disk rather
      * than a picker Uri, since the attempt was already recorded earlier through the normal analysis
@@ -335,6 +341,7 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         routeId: Long,
         userId: String,
         userDisplayName: String,
+        routeName: String?,
         localVideoPath: String,
         vGrade: Int?,
         completed: Boolean,
@@ -352,6 +359,7 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
                     "routeId" to routeId,
                     "userId" to userId,
                     "userDisplayName" to userDisplayName,
+                    "routeName" to routeName,
                     "videoUrl" to videoUrl,
                     "vGrade" to vGrade,
                     "completed" to completed,
@@ -806,6 +814,7 @@ private fun DocumentSnapshot.toSharedAttempt(): SharedAttemptEntity? {
         routeId = getLong("routeId") ?: return null,
         userId = userId,
         userDisplayName = getString("userDisplayName") ?: userId,
+        routeName = getString("routeName"),
         videoUrl = videoUrl,
         vGrade = getLong("vGrade")?.toInt(),
         completed = getBoolean("completed") ?: false,

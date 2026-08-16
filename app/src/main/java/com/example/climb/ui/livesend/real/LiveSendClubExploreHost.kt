@@ -24,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,8 +59,8 @@ import com.example.climb.ui.livesend.ExploreVenue
 import com.example.climb.ui.livesend.PopularRoute
 import com.example.climb.ui.livesend.RouteCompletionRow
 import com.example.climb.ui.livesend.RouteDetailScreen
-import com.example.climb.ui.livesend.SharedAttemptRow
 import com.example.climb.ui.livesend.components.LiveSendCard
+import com.example.climb.ui.livesend.components.rememberSharedAttemptRows
 import com.example.climb.ui.livesend.components.LiveSendPrimaryButton
 import com.example.climb.ui.livesend.components.LiveSendSectionLabel
 import com.example.climb.ui.livesend.components.LiveSendTextField
@@ -246,23 +245,7 @@ fun LiveSendClubExploreHost(
             val latestVersion by clubRepository.observeLatestRouteVersion(routeId).collectAsStateWithLifecycle(initialValue = null)
             val routeCompletions by clubRepository.observeRouteCompletions(routeId).collectAsStateWithLifecycle(initialValue = emptyList())
             val sharedAttempts by clubRepository.observeSharedAttemptsForRoute(routeId).collectAsStateWithLifecycle(initialValue = emptyList())
-            // Each shared attempt observes its own live like list — key() gives every item a
-            // stable composition slot as the list's size/order changes, since collectAsStateWithLifecycle
-            // is itself a composable call made inside this loop.
-            val sharedAttemptRows = sharedAttempts.map { shared ->
-                key(shared.id) {
-                    val likes by clubRepository.observeLikesForSharedAttempt(shared.id).collectAsStateWithLifecycle(initialValue = emptyList())
-                    SharedAttemptRow(
-                        id = shared.id,
-                        userDisplayName = shared.userDisplayName,
-                        videoUrl = shared.videoUrl,
-                        completed = shared.completed,
-                        flash = shared.flash,
-                        likeCount = likes.size,
-                        likedByViewer = likes.any { it.userId == currentUid },
-                    )
-                }
-            }
+            val sharedAttemptRows = rememberSharedAttemptRows(clubRepository, sharedAttempts, currentUid)
             val attempts = stats?.totalAttempts ?: 0
             val sends = stats?.totalSends ?: 0
             if (route != null) {

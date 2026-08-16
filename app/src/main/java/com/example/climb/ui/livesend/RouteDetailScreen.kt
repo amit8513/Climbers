@@ -459,6 +459,9 @@ data class SharedAttemptRow(
     val flash: Boolean,
     val likeCount: Int,
     val likedByViewer: Boolean,
+    // Only shown by the club-wide Social feed, which lists shared videos across every route —
+    // null here on RouteDetail's own per-route feed, which doesn't need to repeat the route name.
+    val routeName: String? = null,
 )
 
 /** "Member sends" — real videos other members shared of their own attempts on this exact route,

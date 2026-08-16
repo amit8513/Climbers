@@ -122,6 +122,7 @@ fun ClubAttemptVideoScreen(
                             routeId = routeId,
                             userId = currentUid,
                             userDisplayName = currentUsername,
+                            routeName = attempt.routeName,
                             localVideoPath = attempt.videoPath,
                             vGrade = attempt.vGrade,
                             completed = attempt.completed,
