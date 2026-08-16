@@ -21,11 +21,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.climb.AppContainer
+import com.example.climb.ui.clubs.ClubAttemptVideoScreen
 import com.example.climb.ui.clubs.ClubLeaderboardScreen
 import com.example.climb.ui.clubs.ClubOverviewScreen
 import com.example.climb.ui.clubs.ClubVideosScreen
@@ -46,6 +49,8 @@ private object MemberClubRoutes {
     // Same real push/pop destination pattern as the staff shell's Home/Progress previews — the
     // Routes tab's "Progress" bottom-bar tab had no real destination before.
     const val PROGRESS_PREVIEW = "member_club_progress_preview"
+    const val ATTEMPT_VIDEO = "member_club_attempt_video/{attemptId}"
+    fun attemptVideo(attemptId: Long) = "member_club_attempt_video/$attemptId"
 }
 
 // ROUTES and UPDATES each render their own full-screen "Live Send" chrome (their own floating
@@ -141,7 +146,27 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, organizationI
                 )
             }
             composable(MemberClubRoutes.VIDEOS) {
-                ClubVideosScreen(currentUid = currentUid, analysisRepository = container.analysisRepository, organization = org)
+                ClubVideosScreen(
+                    currentUid = currentUid,
+                    analysisRepository = container.analysisRepository,
+                    organization = org,
+                    onAttemptClick = { attempt -> navController.navigate(MemberClubRoutes.attemptVideo(attempt.id)) },
+                )
+            }
+            composable(
+                route = MemberClubRoutes.ATTEMPT_VIDEO,
+                arguments = listOf(navArgument("attemptId") { type = NavType.LongType }),
+            ) { backStackEntry ->
+                val attemptId = backStackEntry.arguments?.getLong("attemptId") ?: return@composable
+                val attempt by container.analysisRepository.observeAttempt(attemptId).collectAsStateWithLifecycle(initialValue = null)
+                val currentAttempt = attempt
+                if (currentAttempt == null) {
+                    Box(modifier = Modifier.fillMaxSize().wallTexture(), contentAlignment = Alignment.Center) {
+                        Text("Loading…", color = ClimbPalette.textSecondary)
+                    }
+                } else {
+                    ClubAttemptVideoScreen(attempt = currentAttempt, onBack = { navController.popBackStack() })
+                }
             }
             composable(MemberClubRoutes.LEADERBOARD) {
                 ClubLeaderboardScreen(clubRepository = container.clubRepository, organization = org)
