@@ -1,6 +1,7 @@
 package com.example.climb.ui.livesend
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,10 +11,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -161,7 +162,15 @@ fun ExploreScreen(
                 .fillMaxSize()
                 .then(if (applyStatusBarPadding) Modifier.statusBarsPadding() else Modifier)
                 .padding(horizontal = 20.dp, vertical = 20.dp)
-                .padding(bottom = 90.dp),
+                // When showOwnBottomBar is false (the member shell), MemberClubNavHost's own
+                // Scaffold already reserves real, measured space for its shared floating island via
+                // the padding it hands this screen, so this only needs to be a small visual gap
+                // above it (see LiveSendSocialScreen's matching comment) — a bigger value here was
+                // double-reserving that space, which is why this box used to sit noticeably higher
+                // than the island. When showOwnBottomBar is true, THIS screen renders its own bottom
+                // bar as an overlay with no such enclosing reservation, so it still needs real
+                // clearance above that self-drawn bar.
+                .padding(bottom = if (showOwnBottomBar) 90.dp else 8.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Column {
@@ -225,19 +234,29 @@ fun ExploreScreen(
                 if (venues.isEmpty()) {
                     EmptyState(title = "No venues yet.", message = "Venues staff add will show up here.")
                 } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
+                    // Scrolls sideways rather than overflowing off-screen once there are more
+                    // venues than fit in one row.
+                    Row(
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
                         venues.forEach { venue ->
                             LiveSendTile(
                                 label = venue.name,
                                 sublabel = venue.routesLabel.ifBlank { null },
                                 onClick = { onVenueClick(venue) },
+                                width = 108.dp,
+                                height = 56.dp,
                             )
                         }
                     }
                 }
             }
 
-            Column {
+            // weight(1f) so this section — the main content of the page — stretches to fill
+            // whatever vertical space Venues and the header above don't use, instead of being
+            // capped to a short fixed-height box.
+            Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LiveSendSectionLabel(
                         text = if (venueFilterLabel != null) "Routes · $venueFilterLabel" else "Popular routes",
@@ -280,17 +299,24 @@ fun ExploreScreen(
                         message = if (venueFilterLabel != null) "This venue has no routes yet." else "Routes staff set will show up here.",
                     )
                 } else {
-                    // Fixed-height + its own scroll (~3 rows: PopularRouteRow's real height is
-                    // roughly 70dp with its two-line name/subtitle text) so a long real route
-                    // list scrolls in place rather than stretching the now-fixed page.
-                    Column(
+                    // Same bordered-box treatment as Social's Updates/Shared tabs — fills the rest
+                    // of this section's (now weighted) space, scrolling in place rather than being
+                    // capped to a short fixed-height box.
+                    Box(
                         modifier = Modifier
-                            .heightIn(max = 230.dp)
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(14.dp))
+                            .padding(10.dp),
                     ) {
-                        routes.forEach { route ->
-                            PopularRouteRow(route = route, onClick = { onRouteClick(route) })
+                        Column(
+                            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            routes.forEach { route ->
+                                PopularRouteRow(route = route, onClick = { onRouteClick(route) })
+                            }
                         }
                     }
                 }

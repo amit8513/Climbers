@@ -2,6 +2,7 @@ package com.example.climb.navigation
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -39,6 +40,7 @@ import com.example.climb.ui.livesend.components.LiveSendBottomBar
 import com.example.climb.ui.livesend.components.LiveSendNavTab
 import com.example.climb.ui.livesend.real.LiveSendClubExploreHost
 import com.example.climb.ui.livesend.real.LiveSendSocialScreen
+import com.example.climb.ui.livesend.real.LiveSendUserProfileScreen
 import com.example.climb.ui.progress.ProgressScreen
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
@@ -57,6 +59,9 @@ private object MemberClubRoutes {
     const val PROGRESS_PREVIEW = "member_club_progress_preview"
     const val ATTEMPT_VIDEO = "member_club_attempt_video/{attemptId}"
     fun attemptVideo(attemptId: Long) = "member_club_attempt_video/$attemptId"
+    // Reached by tapping a sharer's name/avatar on a shared-video card in Social.
+    const val USER_PROFILE = "member_club_user_profile/{targetUid}"
+    fun userProfile(targetUid: String) = "member_club_user_profile/$targetUid"
 }
 
 // Every top-level member tab shows the same shared floating island (per user request that all
@@ -74,6 +79,7 @@ private val MEMBER_CLUB_TAB_ROUTES = setOf(
 // it's a tab on Browse but has its own back control once a sub-destination is pushed.
 private val ROUTES_WITH_OWN_BACK = setOf(
     MemberClubRoutes.ATTEMPT_VIDEO,
+    MemberClubRoutes.USER_PROFILE,
 )
 
 private fun navigateToMemberClubTab(navController: NavHostController, route: String) {
@@ -159,7 +165,9 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
         NavHost(
             navController = navController,
             startDestination = MemberClubRoutes.OVERVIEW,
-            modifier = Modifier.padding(padding),
+            // Consumes this Scaffold's own padding so ClubChatContent's .imePadding() (three
+            // levels down) doesn't see an already-inflated ime inset stacked on top of this one.
+            modifier = Modifier.padding(padding).consumeWindowInsets(padding),
         ) {
             composable(MemberClubRoutes.OVERVIEW) {
                 ClubOverviewScreen(currentUid = currentUid, clubRepository = container.clubRepository, organization = org)
@@ -185,6 +193,21 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
                     currentUsername = currentUsername,
                     clubRepository = container.clubRepository,
                     organization = org,
+                    onOpenUserProfile = { targetUid -> navController.navigate(MemberClubRoutes.userProfile(targetUid)) },
+                )
+            }
+            composable(
+                route = MemberClubRoutes.USER_PROFILE,
+                arguments = listOf(navArgument("targetUid") { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val targetUid = backStackEntry.arguments?.getString("targetUid") ?: return@composable
+                LiveSendUserProfileScreen(
+                    currentUid = currentUid,
+                    currentUsername = currentUsername,
+                    targetUid = targetUid,
+                    socialRepository = container.socialRepository,
+                    clubRepository = container.clubRepository,
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable(MemberClubRoutes.VIDEOS) {

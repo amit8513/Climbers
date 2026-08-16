@@ -26,6 +26,7 @@ fun rememberSharedAttemptRows(
         val likes by clubRepository.observeLikesForSharedAttempt(shared.id).collectAsStateWithLifecycle(initialValue = emptyList())
         SharedAttemptRow(
             id = shared.id,
+            userId = shared.userId,
             userDisplayName = shared.userDisplayName,
             videoUrl = shared.videoUrl,
             completed = shared.completed,

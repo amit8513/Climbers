@@ -1,6 +1,5 @@
 package com.example.climb.ui.livesend
 
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,7 +40,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -50,10 +47,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
+import com.example.climb.ui.livesend.components.ExpandableVideoPlayer
 import com.example.climb.ui.livesend.components.GradeBadge
 import com.example.climb.ui.livesend.components.LiveSendBottomBar
 import com.example.climb.ui.livesend.components.LiveSendCard
@@ -305,9 +299,7 @@ private fun BetaVideoCard(onPlayVideo: () -> Unit, videoUrl: String?) {
     val shape = RoundedCornerShape(28.dp)
 
     if (isPlaying && videoUrl != null) {
-        Box(modifier = Modifier.fillMaxWidth().aspectRatio(335f / 420f).clip(shape)) {
-            BetaVideoPlayer(videoUrl = videoUrl)
-        }
+        ExpandableVideoPlayer(videoUrl = videoUrl, aspectRatio = 335f / 420f)
         return
     }
 
@@ -339,26 +331,6 @@ private fun BetaVideoCard(onPlayVideo: () -> Unit, videoUrl: String?) {
             )
         }
     }
-}
-
-/** Real ExoPlayer playback — same mechanism as
- * [com.example.climb.ui.clubs.ClubRouteDetailScreen]'s `BetaVideoPlayer`, copied here since that
- * one is `private` in its own file. */
-@Composable
-private fun BetaVideoPlayer(videoUrl: String) {
-    val context = LocalContext.current
-    val exoPlayer = remember(videoUrl) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(Uri.parse(videoUrl)))
-            prepare()
-        }
-    }
-    DisposableEffect(exoPlayer) { onDispose { exoPlayer.release() } }
-
-    AndroidView(
-        factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer } },
-        modifier = Modifier.fillMaxSize(),
-    )
 }
 
 // TODO(live-send-real): a per-route "top rank by fastest completion time" leaderboard, requested
@@ -453,6 +425,9 @@ private fun SentByRow(completions: List<RouteCompletionRow>) {
  * counter (see [com.example.climb.clubs.SharedAttemptLikeEntity]'s doc comment for why). */
 data class SharedAttemptRow(
     val id: Long,
+    // Needed (not just userDisplayName) so a tap on this row's sharer can open their real user
+    // profile page — see LiveSendSocialScreen's SocialSharedVideoCard.
+    val userId: String,
     val userDisplayName: String,
     val videoUrl: String,
     val completed: Boolean,
@@ -501,7 +476,17 @@ private fun SharedAttemptCard(row: SharedAttemptRow, onToggleLike: () -> Unit) {
     LiveSendCard(cornerRadius = 16, padding = 14) {
         Column {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
+                // While the video is open, tapping this header closes it back to just this
+                // header row instead of the video staying open indefinitely.
+                Column(
+                    modifier = if (isPlaying) {
+                        Modifier
+                            .clickable(onClick = { isPlaying = false })
+                            .semantics { role = Role.Button; contentDescription = "Close video" }
+                    } else {
+                        Modifier
+                    },
+                ) {
                     Text(text = row.userDisplayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Text(
                         text = if (row.flash) "Flash" else if (row.completed) "Sent" else "Fell",
@@ -532,9 +517,7 @@ private fun SharedAttemptCard(row: SharedAttemptRow, onToggleLike: () -> Unit) {
             }
             Spacer(Modifier.height(10.dp))
             if (isPlaying) {
-                Box(modifier = Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(12.dp))) {
-                    BetaVideoPlayer(videoUrl = row.videoUrl)
-                }
+                ExpandableVideoPlayer(videoUrl = row.videoUrl)
             } else {
                 Row(
                     modifier = Modifier

@@ -1,10 +1,12 @@
 package com.example.climb.ui.livesend.components
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
 import com.example.climb.ui.theme.ClimbPalette
 
@@ -24,6 +26,9 @@ fun LiveSendSectionLabel(
     fontSize: Int = 12,
     forceUppercase: Boolean = true,
     color: Color = ClimbPalette.liveSendTextMuted,
+    // Opt-in — most call sites (Venues, Popular routes, Manage, etc.) keep the original
+    // left-aligned look; only the handful reported as needing centering pass this.
+    centered: Boolean = false,
 ) {
     Text(
         text = if (forceUppercase) text.uppercase() else text,
@@ -31,6 +36,7 @@ fun LiveSendSectionLabel(
         fontWeight = FontWeight.Bold,
         fontSize = fontSize.sp,
         letterSpacing = 1.sp,
-        modifier = modifier,
+        textAlign = if (centered) TextAlign.Center else TextAlign.Unspecified,
+        modifier = if (centered) modifier.fillMaxWidth() else modifier,
     )
 }

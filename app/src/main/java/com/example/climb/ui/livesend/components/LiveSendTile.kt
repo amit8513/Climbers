@@ -14,14 +14,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.climb.ui.theme.ClimbPalette
 
 /**
- * A 132x66 grid tile — ClubDashboard's "Manage" grid (Routes/Members/Cameras/Broadcast, each
- * "🧗 Routes"-style emoji + label) and ExploreScreen's venue tiles (name + route count). Same
- * shape either way; [sublabel] is null for the Manage tiles and set for the venue tiles.
+ * A grid tile, 132x66 by default — ClubDashboard's "Manage" grid (Routes/Members/Cameras/
+ * Broadcast, each "🧗 Routes"-style emoji + label) and ExploreScreen's venue tiles (name + route
+ * count). Same shape either way; [sublabel] is null for the Manage tiles and set for the venue
+ * tiles. [width]/[height] are overridable (ExploreScreen's venues use a smaller size) without
+ * changing the Manage grid's own default.
  */
 @Composable
 fun LiveSendTile(
@@ -30,12 +33,14 @@ fun LiveSendTile(
     modifier: Modifier = Modifier,
     emoji: String? = null,
     sublabel: String? = null,
+    width: Dp = 132.dp,
+    height: Dp = 66.dp,
 ) {
     val shape = RoundedCornerShape(14.dp)
     Column(
         modifier = modifier
-            .width(132.dp)
-            .height(66.dp)
+            .width(width)
+            .height(height)
             .clip(shape)
             .background(ClimbPalette.liveSendSurface)
             .border(1.dp, ClimbPalette.liveSendBorder, shape)

@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -259,7 +260,10 @@ private fun NormalNavHost(
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
-            modifier = Modifier.padding(padding),
+            // Scaffold's default contentWindowInsets includes the ime inset; without consuming
+            // it here, a nested Scaffold further down the tree (e.g. MemberClubNavHost) would
+            // independently re-reserve the same inset on top of this one, ballooning it.
+            modifier = Modifier.padding(padding).consumeWindowInsets(padding),
         ) {
             composable(Routes.HOME) {
                 HomeScreen(

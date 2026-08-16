@@ -1,6 +1,5 @@
 package com.example.climb.ui.livesend.real
 
-import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,10 +24,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -37,19 +33,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.ui.clubs.ClubChatContent
@@ -57,6 +49,8 @@ import com.example.climb.ui.components.EmptyState
 import com.example.climb.ui.livesend.ActivityItem
 import com.example.climb.ui.livesend.SharedAttemptRow
 import com.example.climb.ui.livesend.formatRelativeTime
+import com.example.climb.ui.livesend.components.ExpandableVideoPlayer
+import com.example.climb.ui.livesend.components.LiveSendAvatar
 import com.example.climb.ui.livesend.components.rememberSharedAttemptRows
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
@@ -86,6 +80,10 @@ fun LiveSendSocialScreen(
     currentUsername: String,
     clubRepository: ClubRepository,
     organization: OrganizationEntity,
+    // Opens the sharer's user profile page (add friend / friend count / clubs / video gallery) —
+    // real navigation wired from MemberClubNavHost, since that's the only place with a
+    // NavHostController to push a new destination onto.
+    onOpenUserProfile: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(SocialTab.UPDATES) }
@@ -97,7 +95,12 @@ fun LiveSendSocialScreen(
     val saveableStateHolder = rememberSaveableStateHolder()
 
     Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
-        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 100.dp)) {
+        // MemberClubNavHost's own Scaffold already reserves real, measured space for the floating
+        // bottom island via the padding it hands this screen (see consumeWindowInsets there) — this
+        // small bottom value is just a tight visual gap above it, not a second reservation of the
+        // bar's height (an earlier, much larger value here was double-reserving that space, which is
+        // why the content boxes below used to sit noticeably higher than the island).
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp).padding(top = 20.dp, bottom = 8.dp)) {
             Text(
                 text = "Social",
                 color = ClimbPalette.liveSendTextPrimary,
@@ -113,7 +116,7 @@ fun LiveSendSocialScreen(
             saveableStateHolder.SaveableStateProvider(selectedTab) {
                 when (selectedTab) {
                     SocialTab.UPDATES -> UpdatesTabContent(clubRepository = clubRepository, organization = organization, modifier = Modifier.weight(1f))
-                    SocialTab.SHARED -> SharedVideosTabContent(currentUid = currentUid, clubRepository = clubRepository, organization = organization, modifier = Modifier.weight(1f))
+                    SocialTab.SHARED -> SharedVideosTabContent(currentUid = currentUid, clubRepository = clubRepository, organization = organization, onOpenUserProfile = onOpenUserProfile, modifier = Modifier.weight(1f))
                     SocialTab.CHAT -> ClubChatContent(
                         currentUid = currentUid,
                         currentUsername = currentUsername,
@@ -179,7 +182,8 @@ private fun UpdatesTabContent(clubRepository: ClubRepository, organization: Orga
             fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
             letterSpacing = 1.sp,
-            modifier = Modifier.padding(bottom = 10.dp),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
         )
         if (updates.isEmpty()) {
             EmptyState(title = "No updates yet.", message = "New sets, maintenance notices, and events will show up here.")
@@ -208,7 +212,13 @@ private fun UpdatesTabContent(clubRepository: ClubRepository, organization: Orga
 }
 
 @Composable
-private fun SharedVideosTabContent(currentUid: String, clubRepository: ClubRepository, organization: OrganizationEntity, modifier: Modifier = Modifier) {
+private fun SharedVideosTabContent(
+    currentUid: String,
+    clubRepository: ClubRepository,
+    organization: OrganizationEntity,
+    onOpenUserProfile: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val sharedAttempts by clubRepository.observeSharedAttemptsForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val rows = rememberSharedAttemptRows(clubRepository, sharedAttempts, currentUid)
     val scope = rememberCoroutineScope()
@@ -220,7 +230,8 @@ private fun SharedVideosTabContent(currentUid: String, clubRepository: ClubRepos
             fontWeight = FontWeight.Bold,
             fontSize = 12.sp,
             letterSpacing = 1.sp,
-            modifier = Modifier.padding(bottom = 10.dp),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
         )
         if (rows.isEmpty()) {
             EmptyState(title = "No shared videos yet.", message = "When a member shares a sent attempt publicly, it shows up here.")
@@ -243,6 +254,7 @@ private fun SharedVideosTabContent(currentUid: String, clubRepository: ClubRepos
                             onToggleLike = {
                                 scope.launch { clubRepository.setSharedAttemptLiked(row.id, currentUid, liked = !row.likedByViewer) }
                             },
+                            onOpenProfile = { onOpenUserProfile(row.userId) },
                         )
                     }
                 }
@@ -252,7 +264,7 @@ private fun SharedVideosTabContent(currentUid: String, clubRepository: ClubRepos
 }
 
 @Composable
-private fun SocialSharedVideoCard(row: SharedAttemptRow, onToggleLike: () -> Unit) {
+private fun SocialSharedVideoCard(row: SharedAttemptRow, onToggleLike: () -> Unit, onOpenProfile: () -> Unit) {
     var isPlaying by rememberSaveable(row.id) { mutableStateOf(false) }
     val shape = RoundedCornerShape(14.dp)
     Column(
@@ -264,17 +276,32 @@ private fun SocialSharedVideoCard(row: SharedAttemptRow, onToggleLike: () -> Uni
             .padding(14.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                Text(text = row.userDisplayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Text(
-                    text = listOfNotNull(
-                        row.routeName?.let { "on $it" },
-                        if (row.flash) "Flash" else if (row.completed) "Sent" else "Fell",
-                    ).joinToString(" · "),
-                    color = if (row.completed) ClimbPalette.sent else ClimbPalette.fell,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                // While the video is open, tapping this header closes it back to just this
+                // header row (matching the collapsed pre-Watch state) instead of navigating away
+                // — only tap the header again once already collapsed to open the profile.
+                modifier = Modifier
+                    .clickable(onClick = { if (isPlaying) isPlaying = false else onOpenProfile() })
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = if (isPlaying) "Close video" else "Open ${row.userDisplayName}'s profile"
+                    },
+            ) {
+                LiveSendAvatar(initial = row.userDisplayName.firstOrNull()?.toString() ?: "?", size = 32)
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(text = row.userDisplayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(
+                        text = listOfNotNull(
+                            row.routeName?.let { "on $it" },
+                            if (row.flash) "Flash" else if (row.completed) "Sent" else "Fell",
+                        ).joinToString(" · "),
+                        color = if (row.completed) ClimbPalette.sent else ClimbPalette.fell,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -298,9 +325,7 @@ private fun SocialSharedVideoCard(row: SharedAttemptRow, onToggleLike: () -> Uni
         }
         Spacer(Modifier.height(10.dp))
         if (isPlaying) {
-            Box(modifier = Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(12.dp))) {
-                SocialInlineVideoPlayer(videoUrl = row.videoUrl)
-            }
+            ExpandableVideoPlayer(videoUrl = row.videoUrl)
         } else {
             Row(
                 modifier = Modifier
@@ -319,24 +344,4 @@ private fun SocialSharedVideoCard(row: SharedAttemptRow, onToggleLike: () -> Uni
             }
         }
     }
-}
-
-/** Same minimal inline-player shape as every other Storage-hosted video in Club Mode (see
- * [com.example.climb.ui.livesend.RouteDetailScreen]'s private BetaVideoPlayer) — plays a remote
- * Storage URL directly, no download step. */
-@Composable
-private fun SocialInlineVideoPlayer(videoUrl: String) {
-    val context = LocalContext.current
-    val exoPlayer = remember(videoUrl) {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(Uri.parse(videoUrl)))
-            prepare()
-        }
-    }
-    DisposableEffect(exoPlayer) { onDispose { exoPlayer.release() } }
-
-    AndroidView(
-        factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer } },
-        modifier = Modifier.fillMaxSize(),
-    )
 }

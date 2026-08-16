@@ -1,5 +1,6 @@
 package com.example.climb.navigation
 
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -94,7 +95,9 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
         NavHost(
             navController = navController,
             startDestination = ClubRoutes.MANAGE,
-            modifier = Modifier.padding(padding),
+            // Consumes this Scaffold's own padding (including its ime inset) so ClubChatScreen's
+            // .imePadding() further down doesn't see it stacked on top of a second reservation.
+            modifier = Modifier.padding(padding).consumeWindowInsets(padding),
         ) {
             composable(ClubRoutes.MANAGE) {
                 val members by container.clubRepository.observeMembersForOrganization(organization.id)
