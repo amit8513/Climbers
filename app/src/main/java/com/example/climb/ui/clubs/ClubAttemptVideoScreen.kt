@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -84,7 +85,7 @@ fun ClubAttemptVideoScreen(
             modifier = Modifier.padding(top = 20.dp, bottom = 12.dp).clickable(onClick = onBack),
         )
 
-        LocalAttemptVideoPlayer(videoPath = attempt.videoPath)
+        LocalAttemptVideoPlayer(videoPath = attempt.videoPath, modifier = Modifier.align(Alignment.CenterHorizontally))
 
         Spacer(Modifier.height(16.dp))
 
@@ -154,8 +155,12 @@ fun ClubAttemptVideoScreen(
     }
 }
 
+// Capped at just over half the screen width (rather than fillMaxWidth) so the video's 9:16 shape
+// leaves enough room for the route name/outcome/date/notes/Share button to all fit on screen
+// without scrolling on most phones — the whole reason this used to hide the Share button below
+// the fold. verticalScroll on the parent Column stays as a safety net for long notes.
 @Composable
-private fun LocalAttemptVideoPlayer(videoPath: String) {
+private fun LocalAttemptVideoPlayer(videoPath: String, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val exoPlayer = remember(videoPath) {
         ExoPlayer.Builder(context).build().apply {
@@ -168,8 +173,8 @@ private fun LocalAttemptVideoPlayer(videoPath: String) {
 
     AndroidView(
         factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer } },
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
+            .fillMaxWidth(0.55f)
             .aspectRatio(9f / 16f)
             .clip(RoundedCornerShape(16.dp))
             .background(ClimbPalette.liveSendSurface),
