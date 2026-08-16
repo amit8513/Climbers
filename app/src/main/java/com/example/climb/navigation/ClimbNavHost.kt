@@ -1,6 +1,11 @@
 package com.example.climb.navigation
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -15,6 +20,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -48,7 +55,9 @@ import com.example.climb.ui.settings.SettingsScreen
 import com.example.climb.ui.tag.TagScreen
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
+import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.tasks.await
 
 private object Routes {
     const val HOME = "home"
@@ -163,6 +172,24 @@ private fun MainNavHost(container: AppContainer, currentUid: String, profile: Us
     // call after the very first, on any phone, since it's backed by a shared Firestore uniqueness
     // check rather than anything per-device.
     LaunchedEffect(currentUid) { container.clubRepository.ensureSeedOrganization(currentUid, profile.username) }
+
+    // Real push notifications (new club update, new club chat message) - see
+    // com.example.climb.notifications.ClimbMessagingService and functions/src/index.ts.
+    val notificationPermissionContext = LocalContext.current
+    val requestNotificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { /* no-op either way: denial just means no notifications show, not a broken flow */ }
+    LaunchedEffect(currentUid) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(notificationPermissionContext, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        // Also fetched explicitly here, not just left to ClimbMessagingService.onNewToken - that
+        // callback only fires on a genuinely new/refreshed token, which can race past this
+        // composable's first launch on a fresh install/sign-in.
+        runCatching { FirebaseMessaging.getInstance().token.await() }.getOrNull()?.let { token ->
+            container.socialRepository.updateFcmToken(currentUid, token)
+        }
+    }
 
     if (!modeChosen && staffOrganizations.isNotEmpty()) {
         ClubModeSwitchScreen(

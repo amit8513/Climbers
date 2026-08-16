@@ -2,6 +2,7 @@ package com.example.climb.data.social
 
 import android.net.Uri
 import com.google.firebase.firestore.DocumentSnapshot
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
@@ -81,6 +82,15 @@ class SocialRepository(
 
     suspend fun updateProfilePhoto(uid: String, photoUrl: String?): Result<Unit> = runCatching {
         firestore.collection(USERS).document(uid).update("photoUrl", photoUrl).await()
+    }
+
+    /** An array, not a single field — the same account can be signed in on more than one device,
+     * and each device's token needs its own push. [arrayUnion] is a no-op (not a duplicate) if this
+     * exact token is already stored, so this is safe to call on every app start/token refresh, not
+     * just the first time. Never removes a stale token itself (see [ClimbMessagingService]'s doc
+     * comment on why this project accepts that trade-off rather than pruning them). */
+    suspend fun updateFcmToken(uid: String, token: String): Result<Unit> = runCatching {
+        firestore.collection(USERS).document(uid).update("fcmTokens", FieldValue.arrayUnion(token)).await()
     }
 
     // Used for one-shot batch lookups (e.g. resolving a list of club member uids to display
