@@ -218,25 +218,35 @@ fun LiveSendBroadcastScreen(
             if (updates.isEmpty()) {
                 EmptyState(title = "No updates yet.", message = "New sets, maintenance notices, and events will show up here.")
             } else {
-                // Fixed-height + its own scroll (~3 rows, 64dp each) so a growing real update
-                // list scrolls in place rather than stretching the now-fixed page.
-                Column(
+                // Fills the rest of this fixed, non-scrolling page (rather than a small fixed max
+                // height) with its own internal scroll, so a growing real update list scrolls in
+                // place in a large, clearly-bordered frame instead of a cramped little box.
+                Box(
                     modifier = Modifier
-                        .heightIn(max = 220.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(14.dp))
+                        .padding(10.dp),
                 ) {
-                    updates.forEach { update ->
-                        LiveSendActivityRow(
-                            activity = ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt), photoUrl = update.photoUrl),
-                            onDelete = if (isStaff) {
-                                {
-                                    scope.launch { clubRepository.deleteUpdate(organization.id, currentUid, update) }
-                                }
-                            } else {
-                                null
-                            },
-                        )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        updates.forEach { update ->
+                            LiveSendActivityRow(
+                                activity = ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt), photoUrl = update.photoUrl),
+                                onDelete = if (isStaff) {
+                                    {
+                                        scope.launch { clubRepository.deleteUpdate(organization.id, currentUid, update) }
+                                    }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
                     }
                 }
             }
