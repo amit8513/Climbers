@@ -1,10 +1,13 @@
 package com.example.climb.ui.detail
 
+import android.graphics.Bitmap
 import android.net.Uri
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,28 +42,43 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import androidx.work.WorkManager
+import com.example.climb.BuildConfig
 import com.example.climb.R
 import com.example.climb.analysis.AnalysisRepository
 import com.example.climb.analysis.AnalysisStatus
 import com.example.climb.analysis.ClimbAttemptEntity
 import com.example.climb.analysis.Visibility
+import com.example.climb.colordetection.ColorCalibrator
+import com.example.climb.colordetection.DebugCoordinateMapper
+import com.example.climb.colordetection.PixelBuffer
+import com.example.climb.colordetection.RoiSampler
 import com.example.climb.data.ClimbRepository
 import com.example.climb.playback.ColorIsolationEffect
+import com.example.climb.playback.DetectedHoldHighlightEffect
+import com.example.climb.playback.HoldHighlightPipeline
 import com.example.climb.playback.exportWithColorIsolation
+import com.example.climb.playback.exportWithHoldHighlight
 import com.example.climb.sharing.ClimbSyncWorker
 import com.example.climb.sharing.StorySharer
 import com.example.climb.util.saveVideoToGallery
@@ -69,13 +87,57 @@ import com.example.climb.ui.components.OutcomePill
 import com.example.climb.ui.components.SectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
+
+/**
+ * State of the opt-in "Detect holds" bonus feature (see [DetailScreen]'s own doc comment on the
+ * `exoPlayer` default). The default live-preview/export path is always [ColorIsolationEffect] and
+ * does not depend on any of this — this state only governs the separate, user-triggered detection
+ * overlay: [Idle] (never pressed, or reset back to default), [Loading] (a real detector pass is
+ * running on a reference frame), [Active] (detection found holds and [DetectedHoldHighlightEffect]
+ * is currently overriding the live preview), [NotFound] (detection ran and found nothing for this
+ * color/frame — falls back to showing the default effect, same as [Idle], but keeps the honest
+ * "nothing found" message visible instead of silently reverting).
+ *
+ * Shared by BOTH ways of reaching a detection result: the generic "Detect holds (bonus)" button
+ * (a predefined per-[com.example.climb.data.RouteColor] profile — see [HoldHighlightPipeline]'s
+ * `RouteColor`-based `buildMask` overload) and "Calibrate on this hold" (a real per-tap-sampled
+ * color center via [ColorCalibrator] — see [CalibrationPickerState] below and
+ * [HoldHighlightPipeline]'s [com.example.climb.colordetection.TargetColorModel]-based overload).
+ * Both funnel into the same [Active]/[NotFound] outcome states and the same effect-swapping/reset
+ * mechanism, since from here on they're indistinguishable — just two different ways of building
+ * the [com.example.climb.colordetection.TargetColorModel] that produced the result. [Active] carries
+ * that exact model (not just the hold count) so export can bake in precisely what was previewed —
+ * re-deriving it from [currentClimb]'s route color at export time would silently discard a
+ * calibrated model and re-detect against the generic profile instead.
+ */
+private sealed interface DetectionBonusState {
+    object Idle : DetectionBonusState
+    object Loading : DetectionBonusState
+    data class Active(val holdCount: Int, val targetModel: com.example.climb.colordetection.TargetColorModel) : DetectionBonusState
+    object NotFound : DetectionBonusState
+}
+
+/**
+ * State of the "Calibrate on this hold" tap-to-calibrate picker overlay ([CalibrationPickerDialog]):
+ * [Hidden] (not shown), [PickingPoint] (showing the reference frame full-size in a dialog, waiting
+ * for the user to tap the hold they want to highlight). This is deliberately separate from
+ * [DetectionBonusState] — it only governs whether the picker dialog itself is visible; once a tap
+ * lands, this returns to [Hidden] and [DetectionBonusState] takes over exactly as it does for the
+ * generic "Detect holds (bonus)" flow.
+ */
+private sealed interface CalibrationPickerState {
+    object Hidden : CalibrationPickerState
+    object PickingPoint : CalibrationPickerState
+}
 
 private val detailDateFormatter = SimpleDateFormat("MMM d, h:mm a", Locale.US)
 
@@ -101,6 +163,7 @@ fun DetailScreen(
     onStartAnalysis: (videoPath: String, durationMs: Long, sourceClimbId: Long) -> Unit,
     onViewAnalysisProgress: (attemptId: Long) -> Unit,
     onViewAnalysisResult: (analysisId: Long) -> Unit,
+    onOpenHoldDetectionDebug: () -> Unit = {},
 ) {
     val climb by repository.observeById(climbId, currentUid).collectAsStateWithLifecycle(initialValue = null)
     val context = LocalContext.current
@@ -133,7 +196,9 @@ fun DetailScreen(
 
     // Effects must be set before prepare() — ExoPlayer decides whether to route through the GL
     // effects pipeline at prepare time, so setting them afterwards (e.g. only from the
-    // LaunchedEffect below) silently no-ops and video plays back unfiltered.
+    // LaunchedEffect below) silently no-ops and video plays back unfiltered. This is the original,
+    // always-working default (restored after Phase 6's detection-only pipeline turned out to
+    // reject too many real holds — see "Detect holds" below for the now-opt-in bonus feature).
     val exoPlayer = remember(currentClimb.videoPath) {
         ExoPlayer.Builder(context).build().apply {
             setVideoEffects(
@@ -174,6 +239,127 @@ fun DetailScreen(
         effectsGeneration++
     }
 
+    // Bonus feature (opt-in, button-triggered only — see below): runs the real per-object
+    // detection pipeline once on a reference frame and, if it finds anything, temporarily swaps
+    // the live preview to DetectedHoldHighlightEffect. Cache the extracted reference frame so
+    // pressing the button again after a slider retune doesn't re-decode the video.
+    var referenceFrame by remember(currentClimb.videoPath) { mutableStateOf<Bitmap?>(null) }
+    var bonusState by remember(currentClimb.videoPath) { mutableStateOf<DetectionBonusState>(DetectionBonusState.Idle) }
+
+    fun resetToDefaultEffect() {
+        exoPlayer.setVideoEffects(
+            listOf(ColorIsolationEffect(currentClimb.routeColor, appliedHueTolerance, appliedHueOffset)),
+        )
+        exoPlayer.seekTo(exoPlayer.currentPosition)
+        bonusState = DetectionBonusState.Idle
+    }
+
+    fun runHoldDetection() {
+        scope.launch {
+            bonusState = DetectionBonusState.Loading
+            val (result, frame, targetModel) = withContext(Dispatchers.Default) {
+                val frame = referenceFrame ?: HoldHighlightPipeline.extractReferenceFrame(currentClimb.videoPath)
+                val targetModel = HoldHighlightPipeline.targetModelFor(currentClimb.routeColor, appliedHueOffset, appliedHueTolerance)
+                Triple(HoldHighlightPipeline.buildMask(frame, targetModel), frame, targetModel)
+            }
+            referenceFrame = frame
+            if (result.holdCount > 0) {
+                exoPlayer.setVideoEffects(listOf(DetectedHoldHighlightEffect(result.maskBitmap)))
+                exoPlayer.seekTo(exoPlayer.currentPosition)
+                bonusState = DetectionBonusState.Active(result.holdCount, targetModel)
+            } else {
+                bonusState = DetectionBonusState.NotFound
+            }
+        }
+    }
+
+    // Tap-to-calibrate (see CalibrationPickerState/CalibrationPickerDialog): the durable fix for
+    // real per-gym lighting variance that the generic "Detect holds (bonus)" profile can't cover —
+    // real-footage testing proved a single global color-distance threshold cannot both detect real
+    // photos under arbitrary lighting AND keep different route colors discriminated (see
+    // RouteColorDetectionConfig.STRICT_DELTA_E_THRESHOLD's own doc comment for the measured
+    // numbers). Calibrating against THIS hold's own actual sampled color, instead of a theoretical
+    // per-color default, sidesteps that limit entirely.
+    var calibrationPickerState by remember(currentClimb.videoPath) { mutableStateOf<CalibrationPickerState>(CalibrationPickerState.Hidden) }
+    var isPreparingCalibrationFrame by remember(currentClimb.videoPath) { mutableStateOf(false) }
+
+    fun openCalibrationPicker() {
+        scope.launch {
+            isPreparingCalibrationFrame = true
+            val frame = referenceFrame ?: withContext(Dispatchers.Default) {
+                HoldHighlightPipeline.extractReferenceFrame(currentClimb.videoPath)
+            }
+            referenceFrame = frame
+            isPreparingCalibrationFrame = false
+            calibrationPickerState = CalibrationPickerState.PickingPoint
+        }
+    }
+
+    fun onCalibrationTap(tapX: Float, tapY: Float, displayedSize: IntSize) {
+        val frame = referenceFrame ?: return
+        calibrationPickerState = CalibrationPickerState.Hidden
+        scope.launch {
+            bonusState = DetectionBonusState.Loading
+            val (result, targetModel) = withContext(Dispatchers.Default) {
+                val sourcePoint = DebugCoordinateMapper.unmapPoint(
+                    targetX = tapX,
+                    targetY = tapY,
+                    sourceWidth = frame.width,
+                    sourceHeight = frame.height,
+                    targetWidth = displayedSize.width.toFloat(),
+                    targetHeight = displayedSize.height.toFloat(),
+                )
+                val buffer = PixelBuffer.fromBitmap(frame)
+                val centerX = sourcePoint.x.roundToInt().coerceIn(0, buffer.width - 1)
+                val centerY = sourcePoint.y.roundToInt().coerceIn(0, buffer.height - 1)
+                val samples = RoiSampler.sample(buffer, centerX, centerY)
+                val calibratedModel = ColorCalibrator.calibrate(samples, currentClimb.routeColor)
+                HoldHighlightPipeline.buildMask(frame, calibratedModel) to calibratedModel
+            }
+            // A tap that lands mostly on background/wall can legitimately calibrate to a color
+            // that then matches nothing real in the frame — same honest "nothing found" fallback
+            // as the generic bonus flow (DetectionBonusState.NotFound), not a crash or silent
+            // no-op. No separate "that didn't look like a strong color" pre-check is done here:
+            // running the real detector against the calibrated model IS that check, and it's more
+            // accurate than guessing from the ROI's own color spread alone.
+            if (result.holdCount > 0) {
+                exoPlayer.setVideoEffects(listOf(DetectedHoldHighlightEffect(result.maskBitmap)))
+                exoPlayer.seekTo(exoPlayer.currentPosition)
+                bonusState = DetectionBonusState.Active(result.holdCount, targetModel)
+            } else {
+                bonusState = DetectionBonusState.NotFound
+            }
+        }
+    }
+
+    // Export/share should bake in whichever effect is currently on screen: the default
+    // hue-isolation effect, or the bonus detection result (generic or calibrated) if one is
+    // active. Exporting always the default regardless of what's being previewed would be a
+    // confusing mismatch between what you see and what you save. Reuses the exact
+    // TargetColorModel stored on DetectionBonusState.Active rather than re-deriving one from
+    // routeColor/sliders, so a calibrated result exports the calibrated model it actually
+    // previewed, not a re-detected generic one that could find something different (or nothing).
+    suspend fun exportCurrentEffect(outputPath: String) {
+        val currentBonusState = bonusState
+        if (currentBonusState is DetectionBonusState.Active) {
+            exportWithHoldHighlight(
+                context = context,
+                inputPath = currentClimb.videoPath,
+                outputPath = outputPath,
+                targetModel = currentBonusState.targetModel,
+            )
+        } else {
+            exportWithColorIsolation(
+                context = context,
+                inputPath = currentClimb.videoPath,
+                outputPath = outputPath,
+                routeColor = currentClimb.routeColor,
+                hueOffsetDegrees = hueOffsetPosition,
+                hueToleranceDegrees = hueTolerancePosition,
+            )
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -181,8 +367,7 @@ fun DetailScreen(
             .verticalScroll(rememberScrollState())
             .navigationBarsPadding(),
     ) {
-        AndroidView(
-            factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer } },
+        Box(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
@@ -191,7 +376,108 @@ fun DetailScreen(
                 .aspectRatio(9f / 13f)
                 .clip(RoundedCornerShape(16.dp))
                 .background(ClimbPalette.wall),
-        )
+        ) {
+            AndroidView(
+                factory = { ctx -> PlayerView(ctx).apply { player = exoPlayer } },
+                modifier = Modifier.fillMaxSize(),
+            )
+            if (bonusState is DetectionBonusState.Loading) {
+                Box(
+                    modifier = Modifier.matchParentSize().background(Color.Black.copy(alpha = 0.35f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    CircularProgressIndicator(color = ClimbPalette.chalk)
+                }
+            }
+        }
+
+        when (val currentBonusState = bonusState) {
+            is DetectionBonusState.Idle -> {
+                Text(
+                    text = "Detect holds (bonus)",
+                    color = ClimbPalette.chalk,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .padding(start = 16.dp, end = 16.dp, top = 6.dp)
+                        .clickable { runHoldDetection() },
+                )
+            }
+            is DetectionBonusState.Loading -> {
+                Text(
+                    text = "Detecting holds…",
+                    color = ClimbPalette.textMuted,
+                    fontSize = 11.sp,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp),
+                )
+            }
+            is DetectionBonusState.Active -> {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "${currentBonusState.holdCount} hold${if (currentBonusState.holdCount == 1) "" else "s"} detected",
+                        color = ClimbPalette.textMuted,
+                        fontSize = 11.sp,
+                    )
+                    Text(
+                        text = "Reset to default",
+                        color = ClimbPalette.chalk,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        modifier = Modifier.clickable { resetToDefaultEffect() },
+                    )
+                }
+            }
+            is DetectionBonusState.NotFound -> {
+                Column(modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
+                    Text(
+                        text = "No holds of this color detected in the reference frame — showing the original video.",
+                        color = ClimbPalette.textMuted,
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                    )
+                    Text(
+                        text = "Try again",
+                        color = ClimbPalette.chalk,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 4.dp).clickable { runHoldDetection() },
+                    )
+                }
+            }
+        }
+
+        // "Calibrate on this hold" — the tap-to-calibrate alternative to the generic profile-based
+        // "Detect holds (bonus)" button above (see CalibrationPickerState's own doc comment for
+        // why both exist). Hidden while a detection pass is already running to avoid overlapping
+        // attempts; available in every other bonus state so the user can always (re)try it,
+        // including after a generic detection already succeeded or failed.
+        if (bonusState !is DetectionBonusState.Loading) {
+            Text(
+                text = if (isPreparingCalibrationFrame) "Preparing frame…" else "Calibrate on this hold",
+                color = if (isPreparingCalibrationFrame) ClimbPalette.textMuted else ClimbPalette.chalk,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .padding(start = 16.dp, end = 16.dp, top = 6.dp)
+                    .clickable(enabled = !isPreparingCalibrationFrame) { openCalibrationPicker() },
+            )
+        }
+
+        // Phase 7 debug tooling entry point — debug builds only, never shown in a release build.
+        if (BuildConfig.DEBUG) {
+            Text(
+                text = "Debug: view hold detection stages",
+                color = ClimbPalette.textMuted,
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .padding(start = 16.dp, end = 16.dp, top = 6.dp)
+                    .clickable(onClick = onOpenHoldDetectionDebug),
+            )
+        }
 
         Spacer(Modifier.height(16.dp))
 
@@ -232,6 +518,9 @@ fun DetailScreen(
                 onValueChange = { hueOffsetPosition = it },
                 onValueChangeFinished = {
                     appliedHueOffset = hueOffsetPosition
+                    // Retuning the base effect implies retuning from scratch — drop any active
+                    // bonus detection result rather than leaving a stale mask on screen.
+                    bonusState = DetectionBonusState.Idle
                     scope.launch { repository.update(currentClimb.copy(hueOffsetDegrees = hueOffsetPosition)) }
                 },
             )
@@ -244,6 +533,7 @@ fun DetailScreen(
                 onValueChange = { hueTolerancePosition = it },
                 onValueChangeFinished = {
                     appliedHueTolerance = hueTolerancePosition
+                    bonusState = DetectionBonusState.Idle
                     scope.launch { repository.update(currentClimb.copy(hueToleranceDegrees = hueTolerancePosition)) }
                 },
             )
@@ -268,19 +558,12 @@ fun DetailScreen(
                         ).absolutePath
                         scope.launch {
                             runCatching {
-                                exportWithColorIsolation(
-                                    context = context,
-                                    inputPath = currentClimb.videoPath,
-                                    outputPath = outputPath,
-                                    routeColor = currentClimb.routeColor,
-                                    hueOffsetDegrees = hueOffsetPosition,
-                                    hueToleranceDegrees = hueTolerancePosition,
-                                )
+                                exportCurrentEffect(outputPath)
                             }.onSuccess {
                                 val oldPath = currentClimb.videoPath
                                 // The tuning is now baked into the new file's pixels, so it's
                                 // reset to defaults — reopening plays the app's normal (default)
-                                // color-isolation live on top, same as any other climb.
+                                // highlight effect live on top, same as any other climb.
                                 repository.update(
                                     currentClimb.copy(
                                         videoPath = outputPath,
@@ -335,14 +618,7 @@ fun DetailScreen(
                             val tempFile = File(context.cacheDir, "climb_${currentClimb.id}_gallery_${System.currentTimeMillis()}.mp4")
                             scope.launch {
                                 runCatching {
-                                    exportWithColorIsolation(
-                                        context = context,
-                                        inputPath = currentClimb.videoPath,
-                                        outputPath = tempFile.absolutePath,
-                                        routeColor = currentClimb.routeColor,
-                                        hueOffsetDegrees = hueOffsetPosition,
-                                        hueToleranceDegrees = hueTolerancePosition,
-                                    )
+                                    exportCurrentEffect(tempFile.absolutePath)
                                     saveVideoToGallery(context, tempFile, "Climb_${currentClimb.id}_${System.currentTimeMillis()}.mp4")
                                 }.onSuccess {
                                     gallerySavedMessage = "Saved to your device's Movies folder"
@@ -385,14 +661,7 @@ fun DetailScreen(
                         val exportedFile = File(context.cacheDir, "climb_${currentClimb.id}_story_${System.currentTimeMillis()}.mp4")
                         scope.launch {
                             runCatching {
-                                exportWithColorIsolation(
-                                    context = context,
-                                    inputPath = currentClimb.videoPath,
-                                    outputPath = exportedFile.absolutePath,
-                                    routeColor = currentClimb.routeColor,
-                                    hueOffsetDegrees = hueOffsetPosition,
-                                    hueToleranceDegrees = hueTolerancePosition,
-                                )
+                                exportCurrentEffect(exportedFile.absolutePath)
                                 StorySharer.shareToInstagramStory(context, exportedFile).getOrThrow()
                             }.onFailure { error ->
                                 instagramError = error.message ?: "Couldn't open Instagram — is it installed?"
@@ -412,14 +681,7 @@ fun DetailScreen(
                         val exportedFile = File(context.cacheDir, "climb_${currentClimb.id}_fbshare_${System.currentTimeMillis()}.mp4")
                         scope.launch {
                             runCatching {
-                                exportWithColorIsolation(
-                                    context = context,
-                                    inputPath = currentClimb.videoPath,
-                                    outputPath = exportedFile.absolutePath,
-                                    routeColor = currentClimb.routeColor,
-                                    hueOffsetDegrees = hueOffsetPosition,
-                                    hueToleranceDegrees = hueTolerancePosition,
-                                )
+                                exportCurrentEffect(exportedFile.absolutePath)
                                 StorySharer.shareToFacebook(context, exportedFile).getOrThrow()
                             }.onFailure { error ->
                                 facebookError = error.message ?: "Couldn't open Facebook — is it installed?"
@@ -524,6 +786,72 @@ fun DetailScreen(
         }
 
         Spacer(Modifier.height(16.dp))
+    }
+
+    val pickerFrame = referenceFrame
+    if (calibrationPickerState is CalibrationPickerState.PickingPoint && pickerFrame != null) {
+        CalibrationPickerDialog(
+            frame = pickerFrame,
+            onCancel = { calibrationPickerState = CalibrationPickerState.Hidden },
+            onTap = { tapX, tapY, displayedSize -> onCalibrationTap(tapX, tapY, displayedSize) },
+        )
+    }
+}
+
+/**
+ * Full-screen(-ish) dialog showing the reference frame at its own aspect ratio, tappable to pick
+ * the hold to calibrate on. A plain [Dialog] (not inline in [DetailScreen]'s own scrollable
+ * Column) so its own tap-target sizing/positioning is independent of the surrounding screen's
+ * scroll state and layout — the frame is shown at whatever size Compose lays it out at here, and
+ * [onTap] reports both the tap offset and that exact laid-out size so the caller can map back to
+ * the frame's native pixel coordinates via [DebugCoordinateMapper.unmapPoint].
+ */
+@Composable
+private fun CalibrationPickerDialog(frame: Bitmap, onCancel: () -> Unit, onTap: (Float, Float, IntSize) -> Unit) {
+    Dialog(onDismissRequest = onCancel) {
+        var displayedSize by remember { mutableStateOf(IntSize.Zero) }
+        val imageBitmap = remember(frame) { frame.asImageBitmap() }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(ClimbPalette.surfaceRaised)
+                .padding(16.dp),
+        ) {
+            Text(
+                text = "Tap the hold you want to highlight",
+                color = ClimbPalette.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+            )
+            Spacer(Modifier.height(12.dp))
+            Image(
+                bitmap = imageBitmap,
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(frame.width.toFloat() / frame.height.toFloat())
+                    .clip(RoundedCornerShape(10.dp))
+                    .onSizeChanged { displayedSize = it }
+                    .pointerInput(Unit) {
+                        detectTapGestures { offset ->
+                            if (displayedSize.width > 0 && displayedSize.height > 0) {
+                                onTap(offset.x, offset.y, displayedSize)
+                            }
+                        }
+                    },
+            )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Cancel",
+                color = ClimbPalette.textMuted,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                modifier = Modifier.clickable(onClick = onCancel),
+            )
+        }
     }
 }
 

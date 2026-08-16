@@ -35,6 +35,7 @@ import com.example.climb.ui.livesend.real.LiveSendAuthHost
 import com.example.climb.ui.clubs.ClubModeSwitchScreen
 import com.example.climb.ui.clubs.ClubsScreen
 import com.example.climb.ui.detail.DetailScreen
+import com.example.climb.ui.detail.HoldDetectionDebugScreen
 import com.example.climb.ui.friends.FriendClimbsScreen
 import com.example.climb.ui.friends.FriendsScreen
 import com.example.climb.ui.home.HomeScreen
@@ -61,6 +62,7 @@ private object Routes {
     const val LIVE_SEND_PREVIEW = "live_send_preview"
     const val TAG = "tag/{videoPath}/{durationMs}"
     const val DETAIL = "detail/{climbId}"
+    const val HOLD_DEBUG = "hold_debug/{climbId}"
     const val VIDEO_SOURCE = "video_source"
     const val ANALYSIS_RECORD = "analysis_record"
     const val CLIMB_DETAILS_INPUT = "climb_details_input/{videoPath}/{durationMs}/{sourceClimbId}"
@@ -70,6 +72,7 @@ private object Routes {
 
     fun tag(videoPath: String, durationMs: Long) = "tag/${Uri.encode(videoPath)}/$durationMs"
     fun detail(climbId: Long) = "detail/$climbId"
+    fun holdDebug(climbId: Long) = "hold_debug/$climbId"
     fun climbDetailsInput(videoPath: String, durationMs: Long, sourceClimbId: Long = -1L) =
         "climb_details_input/${Uri.encode(videoPath)}/$durationMs/$sourceClimbId"
     fun clubMember(organizationId: Long) = "club_member/$organizationId"
@@ -369,6 +372,20 @@ private fun NormalNavHost(
                     },
                     onViewAnalysisProgress = { attemptId -> navController.navigate(Routes.analysisProgress(attemptId)) },
                     onViewAnalysisResult = { analysisId -> navController.navigate(Routes.analysisResult(analysisId)) },
+                    onOpenHoldDetectionDebug = { navController.navigate(Routes.holdDebug(climbId)) },
+                )
+            }
+
+            composable(
+                route = Routes.HOLD_DEBUG,
+                arguments = listOf(navArgument("climbId") { type = NavType.LongType }),
+            ) { backStackEntry ->
+                val climbId = backStackEntry.arguments?.getLong("climbId") ?: 0L
+                HoldDetectionDebugScreen(
+                    climbId = climbId,
+                    repository = container.climbRepository,
+                    currentUid = currentUid,
+                    onBack = { navController.popBackStack() },
                 )
             }
 
