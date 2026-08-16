@@ -132,6 +132,10 @@ data class ClubUpdateEntity(
     val authorUid: String,
     val text: String,
     val createdAt: Long,
+    /** Optional, hand-annotated photo (see `PhotoAnnotationEditor`) — a hold circled, an arrow
+     * drawn, a highlighted section of wall. Null for a plain text-only update, still the common
+     * case. */
+    val photoUrl: String? = null,
 )
 
 /** One message in a club's single group chat thread — any member (staff or not) can post, unlike

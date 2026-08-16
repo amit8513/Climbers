@@ -106,7 +106,7 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     pendingJoinRequestCount = pendingRequests.size,
                     totalSends = clubStats.sumOf { it.totalSends },
                     recentUpdates = updates.take(5).map { update ->
-                        ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt))
+                        ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt), photoUrl = update.photoUrl)
                     },
                     onSwitchToNormalMode = onExitClub,
                     // A real no-op, not a self-navigate — this screen already IS Club Home, and

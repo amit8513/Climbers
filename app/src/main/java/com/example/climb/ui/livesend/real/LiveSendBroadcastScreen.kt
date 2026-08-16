@@ -1,5 +1,11 @@
 package com.example.climb.ui.livesend.real
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,6 +42,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -43,9 +53,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.ui.components.EmptyState
+import com.example.climb.ui.components.PhotoAnnotationDialog
 import com.example.climb.ui.livesend.ActivityItem
 import com.example.climb.ui.livesend.formatRelativeTime
 import com.example.climb.ui.livesend.components.LiveSendAvatar
@@ -106,25 +118,99 @@ fun LiveSendBroadcastScreen(
             Spacer(Modifier.height(20.dp))
 
             if (isStaff) {
+                val context = LocalContext.current
                 var text by remember { mutableStateOf("") }
                 var errorMessage by remember { mutableStateOf<String?>(null) }
+                var posting by remember { mutableStateOf(false) }
+                // The picked photo before annotation (shows the markup dialog); the annotated
+                // result after "Done" (shown as a small preview, attached on Post).
+                var pickedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+                var annotatedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+                val pickPhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+                    if (uri != null) {
+                        pickedBitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                    }
+                }
+
                 LiveSendSectionLabel(text = "Post an update")
                 Spacer(Modifier.height(10.dp))
                 LiveSendTextField(value = text, onValueChange = { text = it; errorMessage = null }, placeholder = "What's new at the gym?")
-                errorMessage?.let { Text(text = it, color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp)) }
+                Spacer(Modifier.height(10.dp))
+
+                val currentAnnotated = annotatedBitmap
+                if (currentAnnotated != null) {
+                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(currentAnnotated.width.toFloat() / currentAnnotated.height.toFloat())) {
+                        Image(
+                            bitmap = currentAnnotated.asImageBitmap(),
+                            contentDescription = null,
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
+                        )
+                        Text(
+                            text = "Remove photo",
+                            color = ClimbPalette.liveSendCta,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(8.dp)
+                                .clickable { annotatedBitmap = null },
+                        )
+                    }
+                } else {
+                    Text(
+                        text = "+ Add a photo (circle a hold, draw an arrow, highlight the wall)",
+                        color = ClimbPalette.liveSendAccent,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier.clickable {
+                            pickPhotoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        },
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+
+                errorMessage?.let { Text(text = it, color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp)) }
                 LiveSendPrimaryButton(
-                    text = "Post",
-                    enabled = text.isNotBlank(),
+                    text = if (posting) "Posting…" else "Post",
+                    enabled = text.isNotBlank() && !posting,
                     onClick = {
+                        posting = true
                         scope.launch {
-                            val result = clubRepository.postUpdate(organization.id, currentUid, text)
-                            result.onSuccess { text = "" }
-                            result.onFailure { errorMessage = it.message ?: "Something went wrong" }
+                            val photoToUpload = annotatedBitmap
+                            val photoUrlResult = if (photoToUpload != null) {
+                                clubRepository.uploadUpdatePhoto(organization.id, currentUid, photoToUpload)
+                            } else {
+                                Result.success(null)
+                            }
+                            photoUrlResult.onFailure {
+                                posting = false
+                                errorMessage = it.message ?: "Couldn't upload photo"
+                            }
+                            photoUrlResult.onSuccess { photoUrl ->
+                                val result = clubRepository.postUpdate(organization.id, currentUid, text, photoUrl)
+                                posting = false
+                                result.onSuccess { text = ""; annotatedBitmap = null }
+                                result.onFailure { errorMessage = it.message ?: "Something went wrong" }
+                            }
                         }
                     },
-                    modifier = Modifier.padding(top = 12.dp),
+                    modifier = Modifier.padding(top = 2.dp),
                 )
                 Spacer(Modifier.height(24.dp))
+
+                val bitmapToAnnotate = pickedBitmap
+                if (bitmapToAnnotate != null) {
+                    PhotoAnnotationDialog(
+                        bitmap = bitmapToAnnotate,
+                        onCancel = { pickedBitmap = null },
+                        onDone = { result ->
+                            annotatedBitmap = result
+                            pickedBitmap = null
+                        },
+                    )
+                }
             }
 
             LiveSendSectionLabel(text = "Recent")
@@ -142,7 +228,7 @@ fun LiveSendBroadcastScreen(
                 ) {
                     updates.forEach { update ->
                         LiveSendActivityRow(
-                            activity = ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt)),
+                            activity = ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt), photoUrl = update.photoUrl),
                             onDelete = if (isStaff) {
                                 {
                                     scope.launch { clubRepository.deleteUpdate(organization.id, currentUid, update) }
@@ -208,32 +294,44 @@ internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit) {
 @Composable
 internal fun LiveSendActivityRow(activity: ActivityItem, onDelete: (() -> Unit)? = null) {
     val shape = RoundedCornerShape(14.dp)
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .height(64.dp)
             .clip(shape)
             .background(ClimbPalette.liveSendSurfaceRaised)
             .border(1.dp, ClimbPalette.liveSendBorder, shape)
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(14.dp),
     ) {
-        LiveSendAvatar(initial = activity.initial, size = 32)
-        Spacer(Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = activity.text, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            Text(text = activity.timeAgo, color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 36.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LiveSendAvatar(initial = activity.initial, size = 32)
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = activity.text, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                Text(text = activity.timeAgo, color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+            }
+            if (onDelete != null) {
+                Text(
+                    text = "Delete",
+                    color = ClimbPalette.liveSendCta,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable(onClick = onDelete)
+                        .semantics { role = Role.Button; contentDescription = "Delete post" },
+                )
+            }
         }
-        if (onDelete != null) {
-            Text(
-                text = "Delete",
-                color = ClimbPalette.liveSendCta,
-                fontWeight = FontWeight.Bold,
-                fontSize = 12.sp,
-                modifier = Modifier
-                    .heightIn(min = 44.dp)
-                    .clickable(onClick = onDelete)
-                    .semantics { role = Role.Button; contentDescription = "Delete post" },
+        if (activity.photoUrl != null) {
+            Spacer(Modifier.height(10.dp))
+            AsyncImage(
+                model = activity.photoUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().heightIn(max = 240.dp).clip(RoundedCornerShape(10.dp)),
             )
         }
     }

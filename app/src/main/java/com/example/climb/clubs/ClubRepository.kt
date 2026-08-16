@@ -1,5 +1,6 @@
 package com.example.climb.clubs
 
+import android.graphics.Bitmap
 import android.net.Uri
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import java.io.ByteArrayOutputStream
 import java.util.Locale
 
 class OrganizationNameTakenException : Exception("An organization with that name already exists")
@@ -149,13 +151,35 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         observeCollection(firestore.collection(CLUB_UPDATES).whereEqualTo("organizationId", organizationId)) { it.toClubUpdate() }
             .map { updates -> updates.sortedByDescending { it.createdAt } }
 
-    suspend fun postUpdate(organizationId: Long, staffUserId: String, text: String): Result<Unit> = runCatching {
+    suspend fun postUpdate(organizationId: Long, staffUserId: String, text: String, photoUrl: String? = null): Result<Unit> = runCatching {
         requireStaffAccess(organizationId, staffUserId)
         val trimmed = text.trim()
         require(trimmed.isNotEmpty()) { "Update can't be empty" }
         val id = nextId(CLUB_UPDATES)
         firestore.collection(CLUB_UPDATES).document(id.toString())
-            .set(mapOf("organizationId" to organizationId, "authorUid" to staffUserId, "text" to trimmed, "createdAt" to System.currentTimeMillis())).await()
+            .set(
+                mapOf(
+                    "organizationId" to organizationId,
+                    "authorUid" to staffUserId,
+                    "text" to trimmed,
+                    "createdAt" to System.currentTimeMillis(),
+                    "photoUrl" to photoUrl,
+                ),
+            ).await()
+    }
+
+    /** Uploads an already-annotated photo (see `PhotoAnnotationEditor` — markup is flattened onto
+     * the bitmap client-side before this is ever called, so what's uploaded is exactly what the
+     * poster drew) for a post. JPEG at a fixed quality: these are gym-wall photos with markup on
+     * top, not something that needs lossless fidelity, and keeping the upload small matters more
+     * for a chat-adjacent feed every member's phone downloads. */
+    suspend fun uploadUpdatePhoto(organizationId: Long, userId: String, bitmap: Bitmap): Result<String> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        val bytes = ByteArrayOutputStream().apply { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, this) }.toByteArray()
+        val ref = storage.reference.child("club_update_photos/$organizationId/${System.currentTimeMillis()}.jpg")
+        val metadata = StorageMetadata.Builder().setContentType("image/jpeg").build()
+        ref.putBytes(bytes, metadata).await()
+        ref.downloadUrl.await().toString()
     }
 
     /** Any staff member can delete any post — moderation, same trust level as posting itself
@@ -653,6 +677,7 @@ private fun DocumentSnapshot.toClubUpdate(): ClubUpdateEntity? {
         authorUid = getString("authorUid") ?: return null,
         text = text,
         createdAt = getLong("createdAt") ?: 0L,
+        photoUrl = getString("photoUrl"),
     )
 }
 

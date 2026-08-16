@@ -51,7 +51,7 @@ import java.util.concurrent.TimeUnit
 /** Promoted out of `private` (was file-local mock data) so real call sites — see
  * [com.example.climb.navigation.ClubNavHost] — can build real rows from
  * [com.example.climb.clubs.ClubUpdateEntity]. */
-data class ActivityItem(val initial: String, val text: String, val timeAgo: String)
+data class ActivityItem(val initial: String, val text: String, val timeAgo: String, val photoUrl: String? = null)
 
 /** Coarse, locale-agnostic "N min/hr/day ago" — this project has no existing relative-time
  * formatter to reuse ([com.example.climb.util.DateUtils] only has day/week boundary math). */

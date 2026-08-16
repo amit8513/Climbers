@@ -44,5 +44,13 @@ service firebase.storage {
       allow read: if request.auth != null;
       allow write: if request.auth != null;
     }
+
+    // Staff-uploaded, hand-annotated update photos, read by any member — same trade-off as
+    // club_beta_videos above: the real staff gate is ClubRepository.uploadUpdatePhoto/postUpdate,
+    // not this rule.
+    match /club_update_photos/{organizationId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
   }
 }
