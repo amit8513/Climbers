@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.climb.clubs.ClubRepository
@@ -162,6 +164,15 @@ fun LiveSendClubExploreHost(
     // Which section the Dashboard's Routes vs Venues tile should land on — see [ExploreSection].
     // Member context (no tile distinction exists there) always uses the default.
     initialSection: ExploreSection = ExploreSection.ROUTES,
+    // Reports whether this host's OWN nested NavHost is sitting at its root (Browse) or has
+    // pushed a sub-destination (RouteDetail/AddVenue/AddRoute steps) — the caller's outer NavHost
+    // has no visibility into this inner back stack otherwise, since from its perspective this
+    // whole host is always just one destination. MemberClubNavHost uses this to show its own
+    // shared "← Back" only on Browse (where there's no other back control) and hide it once a
+    // sub-destination with its own back control is pushed — previously it hid that link for the
+    // entire host regardless of which inner screen was showing, stranding Browse with no back
+    // affordance at all (a real reported regression).
+    onAtRootChanged: (Boolean) -> Unit = {},
 ) {
     val routes by clubRepository.observeActiveRoutesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val venueEntities by clubRepository.observeVenuesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -185,6 +196,10 @@ fun LiveSendClubExploreHost(
     }
 
     val navController = rememberNavController()
+    val innerCurrentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    LaunchedEffect(innerCurrentRoute) {
+        onAtRootChanged(innerCurrentRoute == null || innerCurrentRoute == ExploreRoutes.BROWSE)
+    }
 
     NavHost(navController = navController, startDestination = ExploreRoutes.BROWSE) {
         composable(ExploreRoutes.BROWSE) {

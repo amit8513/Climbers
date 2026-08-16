@@ -14,6 +14,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -29,13 +32,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.climb.AppContainer
 import com.example.climb.ui.clubs.ClubAttemptVideoScreen
-import com.example.climb.ui.clubs.ClubChatScreen
 import com.example.climb.ui.clubs.ClubLeaderboardScreen
 import com.example.climb.ui.clubs.ClubOverviewScreen
 import com.example.climb.ui.clubs.ClubVideosScreen
 import com.example.climb.ui.livesend.components.LiveSendBottomBar
 import com.example.climb.ui.livesend.components.LiveSendNavTab
-import com.example.climb.ui.livesend.real.LiveSendBroadcastScreen
 import com.example.climb.ui.livesend.real.LiveSendClubExploreHost
 import com.example.climb.ui.livesend.real.LiveSendSocialScreen
 import com.example.climb.ui.progress.ProgressScreen
@@ -45,11 +46,10 @@ import com.example.climb.ui.theme.wallTexture
 private object MemberClubRoutes {
     const val OVERVIEW = "member_club_overview"
     const val ROUTES = "member_club_routes"
-    // Social's own landing tab — Updates and Chat are no longer separate tabs, just pushed
-    // destinations reached from here (see SOCIAL_PUSHED_ROUTES below).
+    // Social's own landing tab — Updates/Shared videos/Chat are an in-place segmented bar inside
+    // this one screen (see LiveSendSocialScreen), not separate pushed destinations, per user
+    // request that navigating between them never leave this screen.
     const val SOCIAL = "member_club_social"
-    const val UPDATES = "member_club_updates"
-    const val CHAT = "member_club_chat"
     const val VIDEOS = "member_club_videos"
     const val LEADERBOARD = "member_club_leaderboard"
     // Same real push/pop destination pattern as the staff shell's Home/Progress previews — the
@@ -70,10 +70,10 @@ private val MEMBER_CLUB_TAB_ROUTES = setOf(
 )
 
 // Pushed (non-tab) destinations that render their own back control, so the shared topBar's
-// "← Back" text is hidden for them — same reasoning as ATTEMPT_VIDEO, now extended to Updates/Chat
-// now that they're reached from Social rather than being tabs themselves.
+// "← Back" text is hidden for them. ROUTES is handled separately (see routesAtRoot below) since
+// it's a tab on Browse but has its own back control once a sub-destination is pushed.
 private val ROUTES_WITH_OWN_BACK = setOf(
-    MemberClubRoutes.ATTEMPT_VIDEO, MemberClubRoutes.UPDATES, MemberClubRoutes.CHAT,
+    MemberClubRoutes.ATTEMPT_VIDEO,
 )
 
 private fun navigateToMemberClubTab(navController: NavHostController, route: String) {
@@ -89,8 +89,8 @@ private fun navigateToMemberClubTab(navController: NavHostController, route: Str
  * climber shell and the staff Club Mode shell. Reached from "Your gyms" in
  * [com.example.climb.ui.clubs.ClubsScreen]. Overview is the landing tab — "what's happening at my
  * gym today". Social replaced separate Updates/Chat tabs with one hub (see
- * [com.example.climb.ui.livesend.real.LiveSendSocialScreen]) that pushes into either as a
- * sub-destination, plus a club-wide feed of publicly shared member videos.
+ * [com.example.climb.ui.livesend.real.LiveSendSocialScreen]) — an in-place segmented bar
+ * (Updates/Shared videos/Chat) within that same screen, not separate pushed destinations.
  */
 @Composable
 fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUsername: String, organizationId: Long, onBack: () -> Unit) {
@@ -106,6 +106,12 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
 
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
+    // Tracks whether the Routes tab's OWN nested NavHost (see LiveSendClubExploreHost) is sitting
+    // at its root (Browse) or has pushed a sub-destination (RouteDetail/AddVenue/AddRoute steps,
+    // which each render their own back control) — this outer NavHost only ever sees "ROUTES" as
+    // currentRoute regardless of which inner screen is showing, so this is the only way to tell
+    // the two apart and hide the shared topBar's back link solely when it would actually double up.
+    var routesAtRoot by remember { mutableStateOf(true) }
 
     // containerColor matches whichever palette the current route actually shows — every route here
     // is liveSend-styled EXCEPT PROGRESS_PREVIEW, which intentionally shows the real app's own
@@ -114,10 +120,12 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
     Scaffold(
         containerColor = if (currentRoute == MemberClubRoutes.PROGRESS_PREVIEW) ClimbPalette.bg else ClimbPalette.liveSendBg,
         topBar = {
-            // Hidden on ATTEMPT_VIDEO/UPDATES/CHAT — each renders its own "← Back" control, and
-            // showing both at once was a real reported bug (two back rows stacked on the video
-            // screen). PROGRESS_PREVIEW has no back control of its own, so it keeps this one.
-            if (currentRoute !in ROUTES_WITH_OWN_BACK) {
+            // Hidden on ATTEMPT_VIDEO, and on ROUTES specifically once its inner nav has pushed a
+            // sub-destination with its own back control (routesAtRoot false) — showing both at
+            // once was a real reported bug (two back rows stacked at once). Browse (ROUTES at its
+            // root) and PROGRESS_PREVIEW have no back control of their own, so they keep this one.
+            val hideTopBar = currentRoute in ROUTES_WITH_OWN_BACK || (currentRoute == MemberClubRoutes.ROUTES && !routesAtRoot)
+            if (!hideTopBar) {
                 // Every screen's back goes to Overview, the shell's own landing tab — only
                 // Overview's back exits the shell entirely, back to the Clubs list.
                 val backTarget = if (currentRoute == MemberClubRoutes.OVERVIEW) {
@@ -165,6 +173,7 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
                     onGoHome = onBack,
                     onProgressTab = { navController.navigate(MemberClubRoutes.PROGRESS_PREVIEW) },
                     onRanksTab = { navigateToMemberClubTab(navController, MemberClubRoutes.LEADERBOARD) },
+                    onAtRootChanged = { routesAtRoot = it },
                 )
             }
             composable(MemberClubRoutes.PROGRESS_PREVIEW) {
@@ -173,20 +182,9 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
             composable(MemberClubRoutes.SOCIAL) {
                 LiveSendSocialScreen(
                     currentUid = currentUid,
+                    currentUsername = currentUsername,
                     clubRepository = container.clubRepository,
                     organization = org,
-                    onOpenUpdates = { navController.navigate(MemberClubRoutes.UPDATES) },
-                    onOpenChat = { navController.navigate(MemberClubRoutes.CHAT) },
-                )
-            }
-            composable(MemberClubRoutes.UPDATES) {
-                LiveSendBroadcastScreen(
-                    currentUid = currentUid,
-                    clubRepository = container.clubRepository,
-                    organization = org,
-                    isStaff = false,
-                    onGoHome = { navController.popBackStack() },
-                    onBack = { navController.popBackStack() },
                 )
             }
             composable(MemberClubRoutes.VIDEOS) {
@@ -217,15 +215,6 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
                         currentUsername = currentUsername,
                     )
                 }
-            }
-            composable(MemberClubRoutes.CHAT) {
-                ClubChatScreen(
-                    currentUid = currentUid,
-                    currentUsername = currentUsername,
-                    clubRepository = container.clubRepository,
-                    organization = org,
-                    onBack = { navController.popBackStack() },
-                )
             }
             composable(MemberClubRoutes.LEADERBOARD) {
                 ClubLeaderboardScreen(clubRepository = container.clubRepository, organization = org)

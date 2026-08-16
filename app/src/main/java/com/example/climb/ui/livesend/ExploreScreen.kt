@@ -199,6 +199,44 @@ fun ExploreScreen(
                 Text(text = "🔍  Search routes", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
             }
 
+            // Venues moved above Popular routes — this page's fixed, non-scrolling layout meant a
+            // long enough route list (even bounded to 230dp) could still push Venues far enough
+            // down to sit outside the available height, hiding it entirely with no way to scroll
+            // to it. Putting Venues first guarantees it's always visible.
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    LiveSendSectionLabel(text = "Venues", modifier = Modifier.weight(1f))
+                    if (onAddVenueClick != null) {
+                        Text(
+                            text = "+ Add",
+                            color = ClimbPalette.liveSendAccent,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clickable(onClick = onAddVenueClick)
+                                .semantics {
+                                    role = Role.Button
+                                    contentDescription = "Add venue"
+                                },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                if (venues.isEmpty()) {
+                    EmptyState(title = "No venues yet.", message = "Venues staff add will show up here.")
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
+                        venues.forEach { venue ->
+                            LiveSendTile(
+                                label = venue.name,
+                                sublabel = venue.routesLabel.ifBlank { null },
+                                onClick = { onVenueClick(venue) },
+                            )
+                        }
+                    }
+                }
+            }
+
             Column {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     LiveSendSectionLabel(
@@ -253,40 +291,6 @@ fun ExploreScreen(
                     ) {
                         routes.forEach { route ->
                             PopularRouteRow(route = route, onClick = { onRouteClick(route) })
-                        }
-                    }
-                }
-            }
-
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    LiveSendSectionLabel(text = "Venues", modifier = Modifier.weight(1f))
-                    if (onAddVenueClick != null) {
-                        Text(
-                            text = "+ Add",
-                            color = ClimbPalette.liveSendAccent,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .clickable(onClick = onAddVenueClick)
-                                .semantics {
-                                    role = Role.Button
-                                    contentDescription = "Add venue"
-                                },
-                        )
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-                if (venues.isEmpty()) {
-                    EmptyState(title = "No venues yet.", message = "Venues staff add will show up here.")
-                } else {
-                    Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
-                        venues.forEach { venue ->
-                            LiveSendTile(
-                                label = venue.name,
-                                sublabel = venue.routesLabel.ifBlank { null },
-                                onClick = { onVenueClick(venue) },
-                            )
                         }
                     }
                 }
