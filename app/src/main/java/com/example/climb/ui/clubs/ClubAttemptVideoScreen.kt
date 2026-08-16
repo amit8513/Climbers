@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -63,7 +65,17 @@ fun ClubAttemptVideoScreen(
     var shared by remember(attempt.id) { mutableStateOf(false) }
     var shareError by remember(attempt.id) { mutableStateOf<String?>(null) }
 
-    Column(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f)).padding(horizontal = 16.dp)) {
+    // Without its own scroll, this screen's 9:16 video alone is nearly as tall as the whole
+    // viewport on most phones, pushing the route name/outcome/date/notes/Share-with-club action
+    // entirely below the fold with no way to reach them — a real reported bug (tapping "Share"
+    // wasn't possible because it was never actually on screen).
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+    ) {
         Text(
             text = "← Back",
             color = ClimbPalette.liveSendTextMuted,
