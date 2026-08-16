@@ -1,6 +1,7 @@
 package com.example.climb.ui.clubs
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,7 +49,8 @@ import kotlinx.coroutines.launch
  * The club's single group chat thread — every member, staff or not, can read and post here
  * (unlike the staff-only "Updates" broadcast). Real-time via
  * [ClubRepository.observeMessagesForOrganization]'s Firestore snapshot listener, so a message
- * from any member's phone appears on everyone else's without a manual refresh.
+ * from any member's phone appears on everyone else's without a manual refresh. Styled with the
+ * fixed liveSend palette to match the rest of the member club shell and the staff Club Mode shell.
  */
 @Composable
 fun ClubChatScreen(
@@ -86,11 +89,11 @@ fun ClubChatScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize().wallTexture()) {
+    Column(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         if (onBack != null) {
             Text(
                 text = "← Back",
-                color = ClimbPalette.textSecondary,
+                color = ClimbPalette.liveSendTextMuted,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 20.dp, start = 20.dp, bottom = 4.dp).clickable(onClick = onBack),
@@ -98,7 +101,7 @@ fun ClubChatScreen(
         }
         Text(
             text = "${organization.name} chat",
-            color = ClimbPalette.textPrimary,
+            color = ClimbPalette.liveSendTextPrimary,
             fontWeight = FontWeight.Black,
             fontSize = 22.sp,
             modifier = Modifier.padding(top = 20.dp, start = 20.dp, end = 20.dp, bottom = 12.dp),
@@ -108,7 +111,7 @@ fun ClubChatScreen(
             Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
                 Text(
                     text = "No messages yet — say hi to the club.",
-                    color = ClimbPalette.textMuted,
+                    color = ClimbPalette.liveSendTextMuted,
                     fontSize = 13.sp,
                 )
             }
@@ -128,7 +131,7 @@ fun ClubChatScreen(
         if (errorMessage != null) {
             Text(
                 text = errorMessage.orEmpty(),
-                color = ClimbPalette.fell,
+                color = ClimbPalette.liveSendCta,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp),
             )
@@ -146,18 +149,27 @@ fun ClubChatScreen(
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it; errorMessage = null },
-                placeholder = { Text("Message the club…") },
+                placeholder = { Text("Message the club…", color = ClimbPalette.liveSendTextMuted) },
                 singleLine = true,
+                colors = TextFieldDefaults.colors(
+                    focusedTextColor = ClimbPalette.liveSendTextPrimary,
+                    unfocusedTextColor = ClimbPalette.liveSendTextPrimary,
+                    focusedContainerColor = ClimbPalette.liveSendSurface,
+                    unfocusedContainerColor = ClimbPalette.liveSendSurface,
+                    focusedIndicatorColor = ClimbPalette.liveSendAccent,
+                    unfocusedIndicatorColor = ClimbPalette.liveSendBorder,
+                    cursorColor = ClimbPalette.liveSendAccent,
+                ),
                 modifier = Modifier.weight(1f),
             )
             Text(
                 text = "Send",
-                color = if (canSend) ClimbPalette.chalkText else ClimbPalette.textMuted,
+                color = if (canSend) ClimbPalette.liveSendAccentText else ClimbPalette.liveSendTextMuted,
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(if (canSend) ClimbPalette.chalk else ClimbPalette.surfaceRaised)
+                    .background(if (canSend) ClimbPalette.liveSendAccent else ClimbPalette.liveSendSurfaceRaised)
                     .clickable(enabled = canSend) { send() }
                     .padding(horizontal = 16.dp, vertical = 10.dp),
             )
@@ -172,13 +184,14 @@ private fun ChatMessageBubble(message: ClubMessageEntity, isOwnMessage: Boolean)
             modifier = Modifier
                 .widthIn(max = 280.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(if (isOwnMessage) ClimbPalette.chalk else ClimbPalette.surfaceRaised)
+                .background(if (isOwnMessage) ClimbPalette.liveSendAccent else ClimbPalette.liveSendSurfaceRaised)
+                .border(1.dp, if (isOwnMessage) ClimbPalette.liveSendAccent else ClimbPalette.liveSendBorder, RoundedCornerShape(14.dp))
                 .padding(horizontal = 14.dp, vertical = 10.dp),
         ) {
             if (!isOwnMessage) {
                 Text(
                     text = message.senderDisplayName,
-                    color = ClimbPalette.textMuted,
+                    color = ClimbPalette.liveSendTextMuted,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                 )
@@ -186,14 +199,14 @@ private fun ChatMessageBubble(message: ClubMessageEntity, isOwnMessage: Boolean)
             }
             Text(
                 text = message.text,
-                color = if (isOwnMessage) ClimbPalette.chalkText else ClimbPalette.textPrimary,
+                color = if (isOwnMessage) ClimbPalette.liveSendAccentText else ClimbPalette.liveSendTextPrimary,
                 fontSize = 14.sp,
                 lineHeight = 19.sp,
             )
             Spacer(Modifier.height(4.dp))
             Text(
                 text = formatRelativeTime(message.sentAt),
-                color = if (isOwnMessage) ClimbPalette.chalkText.copy(alpha = 0.6f) else ClimbPalette.textMuted,
+                color = if (isOwnMessage) ClimbPalette.liveSendAccentText.copy(alpha = 0.6f) else ClimbPalette.liveSendTextMuted,
                 fontSize = 10.sp,
             )
         }

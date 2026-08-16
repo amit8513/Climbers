@@ -36,13 +36,14 @@ import java.util.Locale
 private val attemptVideoDateFormatter = SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.US)
 
 /** Plays one club attempt's own local video file directly (no Storage download needed — see
- * [ClubVideosScreen]'s doc comment on why this data never left the device). */
+ * [ClubVideosScreen]'s doc comment on why this data never left the device). Styled with the fixed
+ * liveSend palette to match the rest of the member club shell. */
 @Composable
 fun ClubAttemptVideoScreen(attempt: ClimbAttemptEntity, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxSize().wallTexture().padding(horizontal = 16.dp)) {
+    Column(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f)).padding(horizontal = 16.dp)) {
         Text(
             text = "← Back",
-            color = ClimbPalette.textSecondary,
+            color = ClimbPalette.liveSendTextMuted,
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(top = 20.dp, bottom = 12.dp).clickable(onClick = onBack),
@@ -54,7 +55,7 @@ fun ClubAttemptVideoScreen(attempt: ClimbAttemptEntity, onBack: () -> Unit, modi
 
         Text(
             text = attempt.routeName ?: "Untitled route",
-            color = ClimbPalette.textPrimary,
+            color = ClimbPalette.liveSendTextPrimary,
             fontWeight = FontWeight.Black,
             fontSize = 20.sp,
         )
@@ -68,12 +69,12 @@ fun ClubAttemptVideoScreen(attempt: ClimbAttemptEntity, onBack: () -> Unit, modi
         Spacer(Modifier.height(6.dp))
         Text(
             text = attemptVideoDateFormatter.format(Date(attempt.createdAt)),
-            color = ClimbPalette.textMuted,
+            color = ClimbPalette.liveSendTextMuted,
             fontSize = 12.sp,
         )
         if (attempt.notes.isNotBlank()) {
             Spacer(Modifier.height(12.dp))
-            Text(text = attempt.notes, color = ClimbPalette.textSecondary, fontSize = 13.sp, lineHeight = 18.sp)
+            Text(text = attempt.notes, color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp, lineHeight = 18.sp)
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -97,6 +98,6 @@ private fun LocalAttemptVideoPlayer(videoPath: String) {
             .fillMaxWidth()
             .aspectRatio(9f / 16f)
             .clip(RoundedCornerShape(16.dp))
-            .background(ClimbPalette.wall),
+            .background(ClimbPalette.liveSendSurface),
     )
 }

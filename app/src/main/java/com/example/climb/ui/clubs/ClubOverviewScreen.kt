@@ -30,7 +30,7 @@ import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.ClubStatsEntity
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.clubs.RouteEntity
-import com.example.climb.ui.components.SectionCard
+import com.example.climb.ui.livesend.components.LiveSendSectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 
@@ -43,7 +43,8 @@ import com.example.climb.ui.theme.wallTexture
  * and [ClubRepository.observeUpdatesForOrganization] (updates preview). There's no "current
  * project" section — the data model has no per-user-per-route attempt state to detect one from.
  * Cards here are read-only for now; deep-linking into a specific route's detail needs
- * zoneId → venue resolution that isn't wired up yet.
+ * zoneId → venue resolution that isn't wired up yet. Styled with the fixed liveSend palette to
+ * match the rest of the member club shell (Routes/Updates/the shell's own nav bar).
  */
 @Composable
 fun ClubOverviewScreen(
@@ -60,10 +61,10 @@ fun ClubOverviewScreen(
     val betaRoutes = remember(activeRoutes) { activeRoutes.filter { it.betaVideoUrl != null } }
     val myStats = remember(leaderboard, currentUid) { leaderboard.firstOrNull { it.userId == currentUid } }
 
-    Box(modifier = modifier.fillMaxSize().wallTexture()) {
+    Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-            Text(text = "Overview", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 22.sp, modifier = Modifier.padding(top = 20.dp, bottom = 2.dp))
-            Text(text = organization.name, color = ClimbPalette.textMuted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 20.dp))
+            Text(text = "Overview", color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Black, fontSize = 22.sp, modifier = Modifier.padding(top = 20.dp, bottom = 2.dp))
+            Text(text = organization.name, color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 20.dp))
 
             NewThisWeekCard(newRoutes)
             Spacer(Modifier.height(16.dp))
@@ -78,9 +79,9 @@ fun ClubOverviewScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            SectionCard(title = "Club updates") {
+            LiveSendSectionCard(title = "Club updates") {
                 if (updates.isEmpty()) {
-                    Text(text = "No updates yet.", color = ClimbPalette.textMuted, fontSize = 13.sp)
+                    Text(text = "No updates yet.", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
                 } else {
                     Column {
                         updates.take(2).forEachIndexed { index, update ->
@@ -98,9 +99,9 @@ fun ClubOverviewScreen(
 
 @Composable
 private fun NewThisWeekCard(newRoutes: List<RouteEntity>) {
-    SectionCard(title = "New this week") {
+    LiveSendSectionCard(title = "New this week") {
         if (newRoutes.isEmpty()) {
-            Text(text = "Nothing new set this week.", color = ClimbPalette.textMuted, fontSize = 13.sp)
+            Text(text = "Nothing new set this week.", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
         } else {
             Text(
                 text = "${newRoutes.size} NEW ${if (newRoutes.size == 1) "ROUTE" else "ROUTES"}",
@@ -122,16 +123,16 @@ private fun NewThisWeekCard(newRoutes: List<RouteEntity>) {
 @Composable
 private fun GradeChip(vGrade: Int?) {
     Box(
-        modifier = Modifier.size(width = 44.dp, height = 40.dp).clip(RoundedCornerShape(10.dp)).background(ClimbPalette.wall),
+        modifier = Modifier.size(width = 44.dp, height = 40.dp).clip(RoundedCornerShape(10.dp)).background(ClimbPalette.liveSendSurface),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = vGrade?.let { "V$it" } ?: "?", color = ClimbPalette.chalk, fontWeight = FontWeight.Black, fontSize = 13.sp)
+        Text(text = vGrade?.let { "V$it" } ?: "?", color = ClimbPalette.liveSendAccent, fontWeight = FontWeight.Black, fontSize = 13.sp)
     }
 }
 
 @Composable
 private fun YourActivityCard(stats: ClubStatsEntity) {
-    SectionCard(title = "Your activity here") {
+    LiveSendSectionCard(title = "Your activity here") {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             StatBlock(value = stats.totalAttempts.toString(), label = "Attempts")
             StatBlock(value = stats.totalSends.toString(), label = "Sends")
@@ -143,14 +144,14 @@ private fun YourActivityCard(stats: ClubStatsEntity) {
 @Composable
 private fun StatBlock(value: String, label: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(text = value, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 22.sp)
-        Text(text = label, color = ClimbPalette.textMuted, fontSize = 11.sp)
+        Text(text = value, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Black, fontSize = 22.sp)
+        Text(text = label, color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp)
     }
 }
 
 @Composable
 private fun LatestBetaCard(betaRoutes: List<RouteEntity>) {
-    SectionCard(title = "Latest beta") {
+    LiveSendSectionCard(title = "Latest beta") {
         Column {
             betaRoutes.take(3).forEachIndexed { index, route ->
                 if (index > 0) Spacer(Modifier.height(12.dp))
@@ -158,8 +159,8 @@ private fun LatestBetaCard(betaRoutes: List<RouteEntity>) {
                     GradeChip(route.vGrade)
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text(text = route.name, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                        Text(text = "▶ Beta available", color = ClimbPalette.chalk, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Text(text = route.name, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(text = "▶ Beta available", color = ClimbPalette.liveSendAccent, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                     }
                 }
             }

@@ -40,7 +40,7 @@ import com.example.climb.analysis.AnalysisRepository
 import com.example.climb.analysis.ClimbAttemptEntity
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.playback.HoldHighlightPipeline
-import com.example.climb.ui.components.SectionCard
+import com.example.climb.ui.livesend.components.LiveSendSectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 import kotlinx.coroutines.Dispatchers
@@ -55,7 +55,8 @@ import java.util.Locale
  * else in Club Mode this never needed to move to Firestore: it's always just the viewer's own
  * data, so there's no cross-device visibility problem to solve here. Each attempt shows a real
  * thumbnail pulled from its own video file (not just a text row) and taps through to
- * [ClubAttemptVideoScreen] to actually watch it.
+ * [ClubAttemptVideoScreen] to actually watch it. Styled with the fixed liveSend palette to match
+ * the rest of the member club shell.
  */
 @Composable
 fun ClubVideosScreen(
@@ -67,21 +68,21 @@ fun ClubVideosScreen(
 ) {
     val attempts by analysisRepository.observeClubAttempts(currentUid, organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
 
-    Box(modifier = modifier.fillMaxSize().wallTexture()) {
+    Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Text(
                 text = "My club videos",
-                color = ClimbPalette.textPrimary,
+                color = ClimbPalette.liveSendTextPrimary,
                 fontWeight = FontWeight.Black,
                 fontSize = 22.sp,
                 modifier = Modifier.padding(top = 20.dp, bottom = 16.dp),
             )
 
-            SectionCard(title = "${organization.name} (${attempts.size})") {
+            LiveSendSectionCard(title = "${organization.name} (${attempts.size})") {
                 if (attempts.isEmpty()) {
                     Text(
                         text = "Nothing yet — link a video to a route from this club when you analyze a climb.",
-                        color = ClimbPalette.textMuted,
+                        color = ClimbPalette.liveSendTextMuted,
                         fontSize = 13.sp,
                     )
                 } else {
@@ -112,11 +113,11 @@ private fun AttemptVideoRow(attempt: ClimbAttemptEntity, onClick: () -> Unit) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = attempt.routeName ?: "Untitled route",
-                color = ClimbPalette.textPrimary,
+                color = ClimbPalette.liveSendTextPrimary,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
             )
-            Text(text = dateFormat.format(Date(attempt.createdAt)), color = ClimbPalette.textMuted, fontSize = 11.sp)
+            Text(text = dateFormat.format(Date(attempt.createdAt)), color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp)
             Spacer(Modifier.height(2.dp))
             Text(
                 text = if (attempt.flash) "Flash" else if (attempt.completed) "Sent" else "Fell",
@@ -145,7 +146,7 @@ private fun AttemptThumbnail(videoPath: String) {
             .width(96.dp)
             .aspectRatio(9f / 16f)
             .clip(RoundedCornerShape(10.dp))
-            .background(ClimbPalette.wall),
+            .background(ClimbPalette.liveSendSurface),
         contentAlignment = Alignment.Center,
     ) {
         if (bitmap != null) {
@@ -160,10 +161,10 @@ private fun AttemptThumbnail(videoPath: String) {
             modifier = Modifier
                 .size(26.dp)
                 .clip(CircleShape)
-                .background(ClimbPalette.bg.copy(alpha = 0.55f)),
+                .background(ClimbPalette.mediaScrim),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = "Play", tint = ClimbPalette.textPrimary, modifier = Modifier.size(16.dp))
+            Icon(imageVector = Icons.Filled.PlayArrow, contentDescription = "Play", tint = ClimbPalette.liveSendTextPrimary, modifier = Modifier.size(16.dp))
         }
     }
 }

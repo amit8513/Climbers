@@ -34,10 +34,10 @@ import com.example.climb.ui.clubs.ClubChatScreen
 import com.example.climb.ui.clubs.ClubLeaderboardScreen
 import com.example.climb.ui.clubs.ClubOverviewScreen
 import com.example.climb.ui.clubs.ClubVideosScreen
+import com.example.climb.ui.livesend.components.LiveSendBottomBar
+import com.example.climb.ui.livesend.components.LiveSendNavTab
 import com.example.climb.ui.livesend.real.LiveSendBroadcastScreen
 import com.example.climb.ui.livesend.real.LiveSendClubExploreHost
-import com.example.climb.ui.nav.ClubBarTab
-import com.example.climb.ui.nav.ClubBottomBar
 import com.example.climb.ui.progress.ProgressScreen
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
@@ -83,8 +83,8 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
     val org = organization
 
     if (org == null) {
-        Box(modifier = Modifier.fillMaxSize().wallTexture(), contentAlignment = Alignment.Center) {
-            Text("Loading…", color = ClimbPalette.textSecondary)
+        Box(modifier = Modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f)), contentAlignment = Alignment.Center) {
+            Text("Loading…", color = ClimbPalette.liveSendTextMuted)
         }
         return
     }
@@ -92,27 +92,36 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
+    // containerColor matches whichever palette the current route actually shows — every route here
+    // is liveSend-styled EXCEPT PROGRESS_PREVIEW, which intentionally shows the real app's own
+    // theme-reactive ProgressScreen chrome — so nothing mismatched ever peeks through behind the
+    // system bar insets.
     Scaffold(
-        containerColor = ClimbPalette.bg,
+        containerColor = if (currentRoute == MemberClubRoutes.PROGRESS_PREVIEW) ClimbPalette.bg else ClimbPalette.liveSendBg,
         topBar = {
-            Text(
-                text = "← Back",
-                color = ClimbPalette.textSecondary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 4.dp).clickable(onClick = onBack),
-            )
+            // Hidden only on ATTEMPT_VIDEO — that screen renders its own "← Back" control, and
+            // showing both at once was a real reported bug (two back rows stacked on the video
+            // screen). PROGRESS_PREVIEW has no back control of its own, so it keeps this one.
+            if (currentRoute != MemberClubRoutes.ATTEMPT_VIDEO) {
+                Text(
+                    text = "← Back",
+                    color = ClimbPalette.liveSendTextMuted,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 4.dp).clickable(onClick = onBack),
+                )
+            }
         },
         bottomBar = {
             if (currentRoute in MEMBER_CLUB_TAB_ROUTES) {
-                ClubBottomBar(
+                LiveSendBottomBar(
                     tabs = listOf(
-                        ClubBarTab(Icons.Filled.Home, "Overview", currentRoute == MemberClubRoutes.OVERVIEW) { navigateToMemberClubTab(navController, MemberClubRoutes.OVERVIEW) },
-                        ClubBarTab(Icons.Filled.Terrain, "Routes", currentRoute == MemberClubRoutes.ROUTES) { navigateToMemberClubTab(navController, MemberClubRoutes.ROUTES) },
-                        ClubBarTab(Icons.Filled.Campaign, "Updates", currentRoute == MemberClubRoutes.UPDATES) { navigateToMemberClubTab(navController, MemberClubRoutes.UPDATES) },
-                        ClubBarTab(Icons.Filled.VideoLibrary, "My club videos", currentRoute == MemberClubRoutes.VIDEOS) { navigateToMemberClubTab(navController, MemberClubRoutes.VIDEOS) },
-                        ClubBarTab(Icons.AutoMirrored.Filled.Chat, "Club chat", currentRoute == MemberClubRoutes.CHAT) { navigateToMemberClubTab(navController, MemberClubRoutes.CHAT) },
-                        ClubBarTab(Icons.Filled.EmojiEvents, "Club leaderboard", currentRoute == MemberClubRoutes.LEADERBOARD) { navigateToMemberClubTab(navController, MemberClubRoutes.LEADERBOARD) },
+                        LiveSendNavTab(Icons.Filled.Home, "Overview", currentRoute == MemberClubRoutes.OVERVIEW) { navigateToMemberClubTab(navController, MemberClubRoutes.OVERVIEW) },
+                        LiveSendNavTab(Icons.Filled.Terrain, "Routes", currentRoute == MemberClubRoutes.ROUTES) { navigateToMemberClubTab(navController, MemberClubRoutes.ROUTES) },
+                        LiveSendNavTab(Icons.Filled.Campaign, "Updates", currentRoute == MemberClubRoutes.UPDATES) { navigateToMemberClubTab(navController, MemberClubRoutes.UPDATES) },
+                        LiveSendNavTab(Icons.Filled.VideoLibrary, "Videos", currentRoute == MemberClubRoutes.VIDEOS) { navigateToMemberClubTab(navController, MemberClubRoutes.VIDEOS) },
+                        LiveSendNavTab(Icons.AutoMirrored.Filled.Chat, "Chat", currentRoute == MemberClubRoutes.CHAT) { navigateToMemberClubTab(navController, MemberClubRoutes.CHAT) },
+                        LiveSendNavTab(Icons.Filled.EmojiEvents, "Ranks", currentRoute == MemberClubRoutes.LEADERBOARD) { navigateToMemberClubTab(navController, MemberClubRoutes.LEADERBOARD) },
                     ),
                 )
             }
@@ -165,8 +174,8 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
                 val attempt by container.analysisRepository.observeAttempt(attemptId).collectAsStateWithLifecycle(initialValue = null)
                 val currentAttempt = attempt
                 if (currentAttempt == null) {
-                    Box(modifier = Modifier.fillMaxSize().wallTexture(), contentAlignment = Alignment.Center) {
-                        Text("Loading…", color = ClimbPalette.textSecondary)
+                    Box(modifier = Modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f)), contentAlignment = Alignment.Center) {
+                        Text("Loading…", color = ClimbPalette.liveSendTextMuted)
                     }
                 } else {
                     ClubAttemptVideoScreen(attempt = currentAttempt, onBack = { navController.popBackStack() })

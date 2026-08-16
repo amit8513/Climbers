@@ -24,7 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.ClubStatsEntity
 import com.example.climb.clubs.OrganizationEntity
-import com.example.climb.ui.components.SectionCard
+import com.example.climb.ui.livesend.components.LiveSendSectionCard
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 
@@ -34,6 +34,7 @@ import com.example.climb.ui.theme.wallTexture
  * built entirely around the friends graph and [com.example.climb.data.ClimbEntity] — neither
  * applies here, since this ranks members of one club by their club-linked analysis attempts.
  * Display names come straight off [ClubStatsEntity.userDisplayName], denormalized at write time.
+ * Styled with the fixed liveSend palette to match the rest of the member club shell.
  */
 @Composable
 fun ClubLeaderboardScreen(
@@ -43,21 +44,21 @@ fun ClubLeaderboardScreen(
 ) {
     val stats by clubRepository.observeClubLeaderboard(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
 
-    Box(modifier = modifier.fillMaxSize().wallTexture()) {
+    Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Text(
                 text = "Club leaderboard",
-                color = ClimbPalette.textPrimary,
+                color = ClimbPalette.liveSendTextPrimary,
                 fontWeight = FontWeight.Black,
                 fontSize = 22.sp,
                 modifier = Modifier.padding(top = 20.dp, bottom = 16.dp),
             )
 
-            SectionCard(title = organization.name) {
+            LiveSendSectionCard(title = organization.name) {
                 if (stats.isEmpty()) {
                     Text(
                         text = "No club-linked attempts yet — the first member to link a video to a route here shows up.",
-                        color = ClimbPalette.textMuted,
+                        color = ClimbPalette.liveSendTextMuted,
                         fontSize = 13.sp,
                     )
                 } else {
@@ -79,14 +80,14 @@ fun ClubLeaderboardScreen(
 private fun LeaderboardRow(rank: Int, entry: ClubStatsEntity, displayName: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(text = "#$rank", color = ClimbPalette.textMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
+            Text(text = "#$rank", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(28.dp))
             Column {
-                Text(text = displayName, color = ClimbPalette.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                Text(text = "${entry.totalSends} sends · ${entry.totalAttempts} attempts", color = ClimbPalette.textMuted, fontSize = 11.sp)
+                Text(text = displayName, color = ClimbPalette.liveSendTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(text = "${entry.totalSends} sends · ${entry.totalAttempts} attempts", color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp)
             }
         }
         entry.bestVGradeSent?.let { grade ->
-            Text(text = "V$grade", color = ClimbPalette.chalk, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(text = "V$grade", color = ClimbPalette.liveSendAccent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

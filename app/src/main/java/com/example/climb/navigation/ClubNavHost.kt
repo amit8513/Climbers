@@ -10,6 +10,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.climb.AppContainer
@@ -75,6 +76,7 @@ private fun navigateToClubTab(navController: NavHostController, route: String) {
 @Composable
 fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfile, organization: OrganizationEntity, onExitClub: () -> Unit) {
     val navController = rememberNavController()
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     // Every "Home" control in this shell means Club Home — the Dashboard itself.
     val backToClubHome = { navigateToClubTab(navController, ClubRoutes.MANAGE) }
     // Same real push/pop pattern as HOME_PREVIEW — Explore/RouteDetail's Progress/Ranks tabs had
@@ -83,7 +85,12 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
     val goProgress = { navController.navigate(ClubRoutes.PROGRESS_PREVIEW) }
     val goRanks = { navController.navigate(ClubRoutes.RANKS_PREVIEW) }
 
-    Scaffold(containerColor = ClimbPalette.bg) { padding ->
+    // Every route here renders its own full-bleed liveSend-styled chrome EXCEPT the three real-app
+    // previews (Settings/Progress/Ranks), which intentionally show the real app's own theme-reactive
+    // chrome instead (see the doc comment above) — matching containerColor to whichever palette is
+    // actually on screen keeps a mismatched color sliver from showing behind the system bars.
+    val usesRealAppChrome = currentRoute == ClubRoutes.SETTINGS_PREVIEW || currentRoute == ClubRoutes.PROGRESS_PREVIEW || currentRoute == ClubRoutes.RANKS_PREVIEW
+    Scaffold(containerColor = if (usesRealAppChrome) ClimbPalette.bg else ClimbPalette.liveSendBg) { padding ->
         NavHost(
             navController = navController,
             startDestination = ClubRoutes.MANAGE,
