@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Home
@@ -29,6 +30,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.climb.AppContainer
 import com.example.climb.ui.clubs.ClubAttemptVideoScreen
+import com.example.climb.ui.clubs.ClubChatScreen
 import com.example.climb.ui.clubs.ClubLeaderboardScreen
 import com.example.climb.ui.clubs.ClubOverviewScreen
 import com.example.climb.ui.clubs.ClubVideosScreen
@@ -45,6 +47,7 @@ private object MemberClubRoutes {
     const val ROUTES = "member_club_routes"
     const val UPDATES = "member_club_updates"
     const val VIDEOS = "member_club_videos"
+    const val CHAT = "member_club_chat"
     const val LEADERBOARD = "member_club_leaderboard"
     // Same real push/pop destination pattern as the staff shell's Home/Progress previews — the
     // Routes tab's "Progress" bottom-bar tab had no real destination before.
@@ -57,7 +60,7 @@ private object MemberClubRoutes {
 // bottom bar baked in) rather than using this Scaffold's bottomBar slot, so they're deliberately
 // excluded here — including either would double up two bottom bars on screen at once.
 private val MEMBER_CLUB_TAB_ROUTES = setOf(
-    MemberClubRoutes.OVERVIEW, MemberClubRoutes.VIDEOS, MemberClubRoutes.LEADERBOARD,
+    MemberClubRoutes.OVERVIEW, MemberClubRoutes.VIDEOS, MemberClubRoutes.CHAT, MemberClubRoutes.LEADERBOARD,
 )
 
 private fun navigateToMemberClubTab(navController: NavHostController, route: String) {
@@ -75,7 +78,7 @@ private fun navigateToMemberClubTab(navController: NavHostController, route: Str
  * gym today" — added as the smallest addition to this bar's existing four tabs.
  */
 @Composable
-fun MemberClubNavHost(container: AppContainer, currentUid: String, organizationId: Long, onBack: () -> Unit) {
+fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUsername: String, organizationId: Long, onBack: () -> Unit) {
     val organization by container.clubRepository.observeOrganization(organizationId).collectAsStateWithLifecycle(initialValue = null)
     val org = organization
 
@@ -108,6 +111,7 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, organizationI
                         ClubBarTab(Icons.Filled.Terrain, "Routes", currentRoute == MemberClubRoutes.ROUTES) { navigateToMemberClubTab(navController, MemberClubRoutes.ROUTES) },
                         ClubBarTab(Icons.Filled.Campaign, "Updates", currentRoute == MemberClubRoutes.UPDATES) { navigateToMemberClubTab(navController, MemberClubRoutes.UPDATES) },
                         ClubBarTab(Icons.Filled.VideoLibrary, "My club videos", currentRoute == MemberClubRoutes.VIDEOS) { navigateToMemberClubTab(navController, MemberClubRoutes.VIDEOS) },
+                        ClubBarTab(Icons.AutoMirrored.Filled.Chat, "Club chat", currentRoute == MemberClubRoutes.CHAT) { navigateToMemberClubTab(navController, MemberClubRoutes.CHAT) },
                         ClubBarTab(Icons.Filled.EmojiEvents, "Club leaderboard", currentRoute == MemberClubRoutes.LEADERBOARD) { navigateToMemberClubTab(navController, MemberClubRoutes.LEADERBOARD) },
                     ),
                 )
@@ -167,6 +171,14 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, organizationI
                 } else {
                     ClubAttemptVideoScreen(attempt = currentAttempt, onBack = { navController.popBackStack() })
                 }
+            }
+            composable(MemberClubRoutes.CHAT) {
+                ClubChatScreen(
+                    currentUid = currentUid,
+                    currentUsername = currentUsername,
+                    clubRepository = container.clubRepository,
+                    organization = org,
+                )
             }
             composable(MemberClubRoutes.LEADERBOARD) {
                 ClubLeaderboardScreen(clubRepository = container.clubRepository, organization = org)

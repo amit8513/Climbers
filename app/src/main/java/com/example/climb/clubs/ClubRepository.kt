@@ -28,6 +28,7 @@ private const val CAMERAS = "cameras"
 private const val JOIN_REQUESTS = "organizationJoinRequests"
 private const val COUNTERS = "counters"
 private const val CLUB_UPDATES = "clubUpdates"
+private const val CLUB_MESSAGES = "clubMessages"
 private const val CLUB_STATS = "clubStats"
 private const val ROUTE_STATS = "routeStats"
 private const val ROUTE_COMPLETIONS = "routeCompletions"
@@ -162,6 +163,31 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
     suspend fun deleteUpdate(organizationId: Long, userId: String, update: ClubUpdateEntity): Result<Unit> = runCatching {
         requireStaffAccess(organizationId, userId)
         firestore.collection(CLUB_UPDATES).document(update.id.toString()).delete().await()
+    }
+
+    /** The club's single group chat thread — every member (staff or not) can read and post, unlike
+     * [observeUpdatesForOrganization]/[postUpdate] which are staff-only. Sorted client-side by
+     * [ClubMessageEntity.sentAt] for the same reason as [observeUpdatesForOrganization]: no
+     * Firestore CLI here to deploy a composite index for an equality filter plus orderBy. */
+    fun observeMessagesForOrganization(organizationId: Long): Flow<List<ClubMessageEntity>> =
+        observeCollection(firestore.collection(CLUB_MESSAGES).whereEqualTo("organizationId", organizationId)) { it.toClubMessage() }
+            .map { messages -> messages.sortedBy { it.sentAt } }
+
+    suspend fun sendMessage(organizationId: Long, senderUid: String, senderDisplayName: String, text: String): Result<Unit> = runCatching {
+        requireMembership(organizationId, senderUid)
+        val trimmed = text.trim()
+        require(trimmed.isNotEmpty()) { "Message can't be empty" }
+        val id = nextId(CLUB_MESSAGES)
+        firestore.collection(CLUB_MESSAGES).document(id.toString())
+            .set(
+                mapOf(
+                    "organizationId" to organizationId,
+                    "senderUid" to senderUid,
+                    "senderDisplayName" to senderDisplayName,
+                    "text" to trimmed,
+                    "sentAt" to System.currentTimeMillis(),
+                ),
+            ).await()
     }
 
     /** Any member records their own attempt stats — this is participation bookkeeping, not a
@@ -359,6 +385,12 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         val membership = getMembership(organizationId, userId)
         val allowed = membership != null && (membership.role == OrganizationRole.STAFF || membership.role == OrganizationRole.ADMIN)
         if (!allowed) throw SecurityException("Not authorized to manage this organization")
+    }
+
+    /** Any real membership (member, staff, or admin) qualifies — unlike [requireStaffAccess],
+     * used for actions any club member should be able to do, like posting in the group chat. */
+    private suspend fun requireMembership(organizationId: Long, userId: String) {
+        if (getMembership(organizationId, userId) == null) throw SecurityException("Not a member of this organization")
     }
 
     suspend fun createVenue(organizationId: Long, userId: String, name: String, address: String?): Result<VenueEntity> = runCatching {
@@ -621,6 +653,20 @@ private fun DocumentSnapshot.toClubUpdate(): ClubUpdateEntity? {
         authorUid = getString("authorUid") ?: return null,
         text = text,
         createdAt = getLong("createdAt") ?: 0L,
+    )
+}
+
+private fun DocumentSnapshot.toClubMessage(): ClubMessageEntity? {
+    if (!exists()) return null
+    val text = getString("text") ?: return null
+    val senderUid = getString("senderUid") ?: return null
+    return ClubMessageEntity(
+        id = id.toLong(),
+        organizationId = getLong("organizationId") ?: return null,
+        senderUid = senderUid,
+        senderDisplayName = getString("senderDisplayName") ?: senderUid,
+        text = text,
+        sentAt = getLong("sentAt") ?: 0L,
     )
 }
 

@@ -134,6 +134,19 @@ data class ClubUpdateEntity(
     val createdAt: Long,
 )
 
+/** One message in a club's single group chat thread — any member (staff or not) can post, unlike
+ * [ClubUpdateEntity] which is staff-only. [senderDisplayName] is denormalized at write time, same
+ * reasoning as [OrganizationMembershipEntity.userDisplayName] — a chat history shouldn't change
+ * whose name is attached to an old message just because that user later renames themself. */
+data class ClubMessageEntity(
+    val id: Long,
+    val organizationId: Long,
+    val senderUid: String,
+    val senderDisplayName: String,
+    val text: String,
+    val sentAt: Long,
+)
+
 /**
  * A lightweight, cross-member aggregate for the "Club leaderboard" tab — deliberately not the
  * full grade/consistency/session scoring engine the main app-wide Leaderboard uses (that's built

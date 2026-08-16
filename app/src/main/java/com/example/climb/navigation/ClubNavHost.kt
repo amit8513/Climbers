@@ -15,6 +15,7 @@ import androidx.navigation.navArgument
 import com.example.climb.AppContainer
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.data.social.UserProfile
+import com.example.climb.ui.clubs.ClubChatScreen
 import com.example.climb.ui.leaderboard.LeaderboardScreen
 import com.example.climb.ui.livesend.ActivityItem
 import com.example.climb.ui.livesend.ClubDashboardScreen
@@ -35,6 +36,7 @@ private object ClubRoutes {
     const val EXPLORE = "club_explore/{section}"
     fun explore(section: String) = "club_explore/$section"
     const val CAMERAS = "club_cameras"
+    const val CHAT = "club_chat"
     // Real destinations inside THIS NavHost's own back stack (not an AppMode switch) — see the
     // doc comment below for why that distinction matters.
     const val SETTINGS_PREVIEW = "club_settings_preview"
@@ -116,6 +118,7 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onManageMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
                     onManageVenues = { navController.navigate(ClubRoutes.CAMERAS) },
                     onManageBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
+                    onManageChat = { navController.navigate(ClubRoutes.CHAT) },
                     onNavRoutes = { navController.navigate(ClubRoutes.explore("routes")) },
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
@@ -170,6 +173,15 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onExitClub = onExitClub,
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
+                )
+            }
+            composable(ClubRoutes.CHAT) {
+                ClubChatScreen(
+                    currentUid = currentUid,
+                    currentUsername = profile.username,
+                    clubRepository = container.clubRepository,
+                    organization = organization,
+                    onBack = backToClubHome,
                 )
             }
             composable(ClubRoutes.SETTINGS_PREVIEW) {

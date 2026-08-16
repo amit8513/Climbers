@@ -73,6 +73,12 @@ service cloud.firestore {
         get(/databases/$(database)/documents/organizationMemberships/$(string(organizationId) + '_' + request.auth.uid)).data.role in ['STAFF', 'ADMIN'];
     }
 
+    // Any real membership qualifies (member, staff, or admin) — unlike isStaffOf, used for actions
+    // any club member should be able to do, like posting in the group chat.
+    function isMemberOf(organizationId) {
+      return exists(/databases/$(database)/documents/organizationMemberships/$(string(organizationId) + '_' + request.auth.uid));
+    }
+
     // Shared, monotonically-increasing id counters (one per entity type) so organization/venue/
     // zone/route ids stay plain Longs — see ClubRepository.nextId.
     match /counters/{counterName} {
@@ -168,6 +174,16 @@ service cloud.firestore {
       // Any staff member can delete any post (moderation), not just the original author — same
       // trust level as creating one, just without the author-must-match-self restriction create has.
       allow delete: if signedIn() && isStaffOf(resource.data.organizationId);
+    }
+
+    // The club's single group chat thread — unlike clubUpdates, any real member (not just staff)
+    // can post, and messages are never edited or deleted (a plain append-only log).
+    match /clubMessages/{messageId} {
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        isMemberOf(request.resource.data.organizationId) &&
+        request.resource.data.senderUid == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // Attempt-count bookkeeping for the member-facing club leaderboard — any member can record

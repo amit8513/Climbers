@@ -281,6 +281,7 @@ private fun NormalNavHost(
                 MemberClubNavHost(
                     container = container,
                     currentUid = currentUid,
+                    currentUsername = profile.username,
                     organizationId = organizationId,
                     onBack = { navController.popBackStack() },
                 )
