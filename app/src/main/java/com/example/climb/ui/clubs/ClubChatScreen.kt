@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,11 +65,58 @@ fun ClubChatScreen(
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    Column(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
+        if (onBack != null) {
+            Text(
+                text = "← Back",
+                color = ClimbPalette.liveSendTextMuted,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 20.dp, start = 20.dp, bottom = 4.dp).clickable(onClick = onBack),
+            )
+        }
+        Text(
+            text = "${organization.name} chat",
+            color = ClimbPalette.liveSendTextPrimary,
+            fontWeight = FontWeight.Black,
+            fontSize = 22.sp,
+            modifier = Modifier.padding(top = 20.dp, start = 20.dp, end = 20.dp, bottom = 12.dp),
+        )
+        ClubChatContent(
+            currentUid = currentUid,
+            currentUsername = currentUsername,
+            clubRepository = clubRepository,
+            organization = organization,
+            // ClubChatContent has neither horizontal padding nor navigationBarsPadding of its own
+            // (so the Social tab — whose Scaffold already reserves real nav-bar-height space via
+            // its own bottom island — can embed it flush, without a redundant second reservation
+            // stacking on top and pushing the composer up too far). This standalone route has no
+            // such Scaffold bottomBar, so it adds both back itself.
+            modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding(),
+        )
+    }
+}
+
+/** The message list + composer, with no outer chrome (background/header/back) of its own — split
+ * out of [ClubChatScreen] so the Social tab's in-place "Chat" tab can embed exactly the same real
+ * chat (same data, same send action) inline within its own page shell, instead of navigating to a
+ * separate screen for it. [ClubChatScreen] itself is now a thin wrapper around this for the staff
+ * shell's standalone Chat route, which still needs its own header/back. */
+@Composable
+fun ClubChatContent(
+    currentUid: String,
+    currentUsername: String,
+    clubRepository: ClubRepository,
+    organization: OrganizationEntity,
+    modifier: Modifier = Modifier,
+) {
     val messages by clubRepository.observeMessagesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
 
-    var draft by remember { mutableStateOf("") }
+    // Saveable (not just remember) so an in-progress draft survives Social's tab-switch, which
+    // fully disposes and later recreates this composable's subtree via SaveableStateHolder.
+    var draft by rememberSaveable { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
 
@@ -89,24 +137,7 @@ fun ClubChatScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
-        if (onBack != null) {
-            Text(
-                text = "← Back",
-                color = ClimbPalette.liveSendTextMuted,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 20.dp, start = 20.dp, bottom = 4.dp).clickable(onClick = onBack),
-            )
-        }
-        Text(
-            text = "${organization.name} chat",
-            color = ClimbPalette.liveSendTextPrimary,
-            fontWeight = FontWeight.Black,
-            fontSize = 22.sp,
-            modifier = Modifier.padding(top = 20.dp, start = 20.dp, end = 20.dp, bottom = 12.dp),
-        )
-
+    Column(modifier = modifier) {
         if (messages.isEmpty()) {
             Box(modifier = Modifier.weight(1f).fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
                 Text(
@@ -119,7 +150,7 @@ fun ClubChatScreen(
             LazyColumn(
                 state = listState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(messages, key = { it.id }) { message ->
@@ -133,16 +164,15 @@ fun ClubChatScreen(
                 text = errorMessage.orEmpty(),
                 color = ClimbPalette.liveSendCta,
                 fontSize = 12.sp,
-                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp),
+                modifier = Modifier.padding(top = 4.dp),
             )
         }
 
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .navigationBarsPadding()
                 .imePadding()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
+                .padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
