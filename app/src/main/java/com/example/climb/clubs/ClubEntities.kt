@@ -194,6 +194,40 @@ data class RouteCompletionEntity(
     val completedAt: Long,
 )
 
+/**
+ * A member's own sent/flashed attempt video, shared publicly for other members of the same club
+ * to watch on that route's detail page — alongside, not instead of, the staff-provided beta video
+ * (see [RouteEntity.betaVideoUrl]). Unlike [com.example.climb.analysis.ClimbAttemptEntity] (local
+ * Room only, private to the device that recorded it), sharing uploads the video file itself to
+ * Storage so every other member's phone can actually play it. A member can share the same local
+ * attempt more than once — there's no dedup guard, matching the trust level of every other
+ * create-only action in this repository (posting an update, sending a chat message).
+ */
+data class SharedAttemptEntity(
+    val id: Long,
+    val organizationId: Long,
+    val routeId: Long,
+    val userId: String,
+    /** Denormalized at write time — same reasoning as [OrganizationMembershipEntity.userDisplayName]. */
+    val userDisplayName: String,
+    val videoUrl: String,
+    val vGrade: Int?,
+    val completed: Boolean,
+    val flash: Boolean,
+    val createdAt: Long,
+)
+
+/** One row per (shared attempt, user) who liked it — doc id `"${sharedAttemptId}_$userId"`, same
+ * at-most-one-per-pair shape as [RouteCompletionEntity], so liking twice just no-ops rather than
+ * piling up duplicate likes. Deliberately a real list observed live (not a denormalized counter
+ * field) — this project's Firestore usage stays at gym scale, so counting a small live list is
+ * cheaper to keep correct than a transactional counter would be to keep in sync. */
+data class SharedAttemptLikeEntity(
+    val sharedAttemptId: Long,
+    val userId: String,
+    val likedAt: Long,
+)
+
 fun hasStaffAccess(memberships: List<OrganizationMembershipEntity>): Boolean =
     memberships.any { it.role == OrganizationRole.STAFF || it.role == OrganizationRole.ADMIN }
 

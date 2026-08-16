@@ -19,12 +19,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,6 +60,7 @@ import com.example.climb.ui.livesend.ExploreVenue
 import com.example.climb.ui.livesend.PopularRoute
 import com.example.climb.ui.livesend.RouteCompletionRow
 import com.example.climb.ui.livesend.RouteDetailScreen
+import com.example.climb.ui.livesend.SharedAttemptRow
 import com.example.climb.ui.livesend.components.LiveSendCard
 import com.example.climb.ui.livesend.components.LiveSendPrimaryButton
 import com.example.climb.ui.livesend.components.LiveSendSectionLabel
@@ -207,7 +208,6 @@ fun LiveSendClubExploreHost(
             }
 
             ExploreScreen(
-                organizationName = organization.name,
                 routes = visibleRoutes.mapIndexed { index, route -> route.toPopularRoute(index) },
                 venues = venueEntities.map { venue -> ExploreVenue(name = venue.name, routesLabel = "", id = venue.id) },
                 venueFilterLabel = selectedVenue?.name,
@@ -230,6 +230,9 @@ fun LiveSendClubExploreHost(
                 // Member context relies on MemberClubNavHost's own shared floating island instead —
                 // see ExploreScreen's showOwnBottomBar doc comment.
                 showOwnBottomBar = isStaff,
+                // Always false here — the enclosing Scaffold (staff or member) already reserves
+                // this inset. See ExploreScreen's own doc comment.
+                applyStatusBarPadding = false,
             )
         }
 
@@ -242,6 +245,24 @@ fun LiveSendClubExploreHost(
             val stats by clubRepository.observeRouteStats(routeId).collectAsStateWithLifecycle(initialValue = null)
             val latestVersion by clubRepository.observeLatestRouteVersion(routeId).collectAsStateWithLifecycle(initialValue = null)
             val routeCompletions by clubRepository.observeRouteCompletions(routeId).collectAsStateWithLifecycle(initialValue = emptyList())
+            val sharedAttempts by clubRepository.observeSharedAttemptsForRoute(routeId).collectAsStateWithLifecycle(initialValue = emptyList())
+            // Each shared attempt observes its own live like list — key() gives every item a
+            // stable composition slot as the list's size/order changes, since collectAsStateWithLifecycle
+            // is itself a composable call made inside this loop.
+            val sharedAttemptRows = sharedAttempts.map { shared ->
+                key(shared.id) {
+                    val likes by clubRepository.observeLikesForSharedAttempt(shared.id).collectAsStateWithLifecycle(initialValue = emptyList())
+                    SharedAttemptRow(
+                        id = shared.id,
+                        userDisplayName = shared.userDisplayName,
+                        videoUrl = shared.videoUrl,
+                        completed = shared.completed,
+                        flash = shared.flash,
+                        likeCount = likes.size,
+                        likedByViewer = likes.any { it.userId == currentUid },
+                    )
+                }
+            }
             val attempts = stats?.totalAttempts ?: 0
             val sends = stats?.totalSends ?: 0
             if (route != null) {
@@ -255,6 +276,8 @@ fun LiveSendClubExploreHost(
                     betaVideoAvailable = route.betaVideoUrl != null,
                     betaVideoUrl = route.betaVideoUrl,
                     completions = routeCompletions.map { RouteCompletionRow(userDisplayName = it.userDisplayName, completedAt = it.completedAt) },
+                    sharedAttempts = sharedAttemptRows,
+                    onToggleLike = { row -> scope.launch { clubRepository.setSharedAttemptLiked(row.id, currentUid, liked = !row.likedByViewer) } },
                     onBack = { navController.popBackStack() },
                     onPlayVideo = { /* no-op: real playback is now inline in RouteDetailScreen's beta card via betaVideoUrl */ },
                     onLogAttempt = { /* TODO(live-send-real): needs the full attempt-logging form (ClimbDetailsInputScreen) */ },
@@ -354,7 +377,7 @@ private fun AddVenueForm(clubRepository: ClubRepository, organizationId: Long, c
     val scope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp, vertical = 20.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 20.dp)) {
             BackLink(onClick = onCancel)
             Spacer(Modifier.height(16.dp))
             Text2("Add Venue")
@@ -389,7 +412,7 @@ private fun AddVenueForm(clubRepository: ClubRepository, organizationId: Long, c
 @Composable
 private fun AddRouteStepScaffold(onBack: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     Box(modifier = Modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
-        Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 20.dp, vertical = 20.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 20.dp)) {
             BackLink(onClick = onBack)
             Spacer(Modifier.height(16.dp))
             content()

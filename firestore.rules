@@ -211,5 +211,25 @@ service cloud.firestore {
       allow create, update: if signedIn();
       allow delete: if false;
     }
+
+    // A member's own sent-attempt video, shared publicly for other members to watch on that
+    // route's page — any member can share (participation, not a staff mutation), never edited or
+    // deleted (a plain append-only log, same as clubMessages).
+    match /sharedAttempts/{sharedAttemptId} {
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        isMemberOf(request.resource.data.organizationId) &&
+        request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Who has liked a shared attempt video — doc id "{sharedAttemptId}_{uid}" means a user can
+    // only ever create/delete their OWN like, never anyone else's (same shape as routeCompletions).
+    match /sharedAttemptLikes/{likeId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if signedIn() && (resource == null || resource.data.userId == request.auth.uid);
+      allow update: if false;
+    }
   }
 }

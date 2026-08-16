@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -77,7 +76,9 @@ fun LiveSendMembersScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
+                // No statusBarsPadding here — the enclosing staff Scaffold already reserves top
+                // system-bar inset space; applying it again pushed this headline visibly lower
+                // than the rest of Club Mode.
                 .padding(horizontal = 20.dp, vertical = 20.dp)
                 .padding(bottom = 90.dp),
         ) {

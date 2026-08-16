@@ -129,6 +129,7 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
                     onExit = onExitClub,
+                    applyStatusBarPadding = false,
                 )
             }
             composable(

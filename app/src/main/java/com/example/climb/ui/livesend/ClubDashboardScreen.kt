@@ -118,6 +118,11 @@ fun ClubDashboardScreen(
     pendingJoinRequestCount: Int = 4,
     totalSends: Int = 27,
     recentUpdates: List<ActivityItem> = MOCK_ACTIVITY,
+    // False for the real call site (ClubNavHost) — its Scaffold already reserves top system-bar
+    // inset space, so applying this a second time pushed this screen's headline visibly lower
+    // than the real app's own screens. True only for the untouched standalone design-exploration
+    // preview (LiveSendNavHost), which has no Scaffold at all and needs this screen's own inset.
+    applyStatusBarPadding: Boolean = true,
 ) {
     Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         // Plain fixed Column, not LazyColumn — the user asked for no whole-page scrolling
@@ -128,7 +133,7 @@ fun ClubDashboardScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
+                .then(if (applyStatusBarPadding) Modifier.statusBarsPadding() else Modifier)
                 .padding(horizontal = 20.dp, vertical = 20.dp)
                 .padding(bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),

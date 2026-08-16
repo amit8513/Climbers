@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.Locale
 
 class OrganizationNameTakenException : Exception("An organization with that name already exists")
@@ -34,6 +35,8 @@ private const val CLUB_MESSAGES = "clubMessages"
 private const val CLUB_STATS = "clubStats"
 private const val ROUTE_STATS = "routeStats"
 private const val ROUTE_COMPLETIONS = "routeCompletions"
+private const val SHARED_ATTEMPTS = "sharedAttempts"
+private const val SHARED_ATTEMPT_LIKES = "sharedAttemptLikes"
 
 private fun membershipDocId(organizationId: Long, userId: String) = "${organizationId}_$userId"
 
@@ -314,6 +317,66 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
     fun observeRouteCompletions(routeId: Long): Flow<List<RouteCompletionEntity>> =
         observeCollection(firestore.collection(ROUTE_COMPLETIONS).whereEqualTo("routeId", routeId)) { it.toRouteCompletion() }
             .map { completions -> completions.sortedByDescending { it.completedAt } }
+
+    /** Every member-shared attempt video for one route, most-recent-first — what a route's
+     * RouteDetail screen shows alongside the staff beta video (see [uploadBetaVideo]) so a member
+     * can watch how other real members climbed it, not just the one official beta take. */
+    fun observeSharedAttemptsForRoute(routeId: Long): Flow<List<SharedAttemptEntity>> =
+        observeCollection(firestore.collection(SHARED_ATTEMPTS).whereEqualTo("routeId", routeId)) { it.toSharedAttempt() }
+            .map { attempts -> attempts.sortedByDescending { it.createdAt } }
+
+    /** Uploads a member's own local attempt video (see [com.example.climb.analysis.ClimbAttemptEntity.videoPath]
+     * — this is the one case a Club Mode video upload starts from a file already on disk rather
+     * than a picker Uri, since the attempt was already recorded earlier through the normal analysis
+     * flow) and publishes it for every other member of the route's club to watch. Any member can
+     * share their own attempt — participation, not a staff mutation, same as [recordClubAttempt]. */
+    suspend fun shareAttemptVideo(
+        organizationId: Long,
+        routeId: Long,
+        userId: String,
+        userDisplayName: String,
+        localVideoPath: String,
+        vGrade: Int?,
+        completed: Boolean,
+        flash: Boolean,
+    ): Result<Unit> = runCatching {
+        requireMembership(organizationId, userId)
+        val id = nextId(SHARED_ATTEMPTS)
+        val ref = storage.reference.child("club_shared_attempt_videos/$organizationId/$id.mp4")
+        ref.putFile(Uri.fromFile(File(localVideoPath))).await()
+        val videoUrl = ref.downloadUrl.await().toString()
+        firestore.collection(SHARED_ATTEMPTS).document(id.toString())
+            .set(
+                mapOf(
+                    "organizationId" to organizationId,
+                    "routeId" to routeId,
+                    "userId" to userId,
+                    "userDisplayName" to userDisplayName,
+                    "videoUrl" to videoUrl,
+                    "vGrade" to vGrade,
+                    "completed" to completed,
+                    "flash" to flash,
+                    "createdAt" to System.currentTimeMillis(),
+                ),
+            ).await()
+    }
+
+    /** Who has liked one shared attempt video — see [SharedAttemptLikeEntity] for why this is a
+     * real observed list rather than a denormalized counter. */
+    fun observeLikesForSharedAttempt(sharedAttemptId: Long): Flow<List<SharedAttemptLikeEntity>> =
+        observeCollection(firestore.collection(SHARED_ATTEMPT_LIKES).whereEqualTo("sharedAttemptId", sharedAttemptId)) { it.toSharedAttemptLike() }
+
+    /** Toggles the caller's own like — the deterministic `"${sharedAttemptId}_$userId"` doc id
+     * means liking twice just overwrites the same doc rather than creating a duplicate, and
+     * unliking is a plain delete of that same doc. */
+    suspend fun setSharedAttemptLiked(sharedAttemptId: Long, userId: String, liked: Boolean): Result<Unit> = runCatching {
+        val ref = firestore.collection(SHARED_ATTEMPT_LIKES).document("${sharedAttemptId}_$userId")
+        if (liked) {
+            ref.set(mapOf("sharedAttemptId" to sharedAttemptId, "userId" to userId, "likedAt" to System.currentTimeMillis())).await()
+        } else {
+            ref.delete().await()
+        }
+    }
 
     /** Creating an organization makes the creator its ADMIN immediately. There is no self-serve
      * "create a club" UI anywhere in the app — this only runs via [ensureSeedOrganization], the
@@ -730,5 +793,32 @@ private fun DocumentSnapshot.toRouteCompletion(): RouteCompletionEntity? {
         userId = userId,
         userDisplayName = getString("userDisplayName") ?: userId,
         completedAt = getLong("completedAt") ?: 0L,
+    )
+}
+
+private fun DocumentSnapshot.toSharedAttempt(): SharedAttemptEntity? {
+    if (!exists()) return null
+    val videoUrl = getString("videoUrl") ?: return null
+    val userId = getString("userId") ?: return null
+    return SharedAttemptEntity(
+        id = id.toLong(),
+        organizationId = getLong("organizationId") ?: return null,
+        routeId = getLong("routeId") ?: return null,
+        userId = userId,
+        userDisplayName = getString("userDisplayName") ?: userId,
+        videoUrl = videoUrl,
+        vGrade = getLong("vGrade")?.toInt(),
+        completed = getBoolean("completed") ?: false,
+        flash = getBoolean("flash") ?: false,
+        createdAt = getLong("createdAt") ?: 0L,
+    )
+}
+
+private fun DocumentSnapshot.toSharedAttemptLike(): SharedAttemptLikeEntity? {
+    if (!exists()) return null
+    return SharedAttemptLikeEntity(
+        sharedAttemptId = getLong("sharedAttemptId") ?: return null,
+        userId = getString("userId") ?: return null,
+        likedAt = getLong("likedAt") ?: 0L,
     )
 }

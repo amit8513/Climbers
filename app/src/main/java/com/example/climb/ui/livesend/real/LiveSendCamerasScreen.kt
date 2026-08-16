@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -103,7 +102,9 @@ fun LiveSendCamerasScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .statusBarsPadding()
+                        // No statusBarsPadding here — the enclosing staff Scaffold already
+                        // reserves top system-bar inset space; applying it again pushed this
+                        // headline visibly lower than the rest of Club Mode.
                         .padding(horizontal = 20.dp, vertical = 20.dp)
                         .padding(bottom = 90.dp),
                 ) {
@@ -217,7 +218,6 @@ private fun VenuePicker(camera: CameraEntity, venues: List<VenueEntity>, onGoHom
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .statusBarsPadding()
             .padding(horizontal = 20.dp, vertical = 20.dp),
     ) {
         LiveSendPageHeader(title = "Assign \"${camera.name}\"", onGoHome = onGoHome)

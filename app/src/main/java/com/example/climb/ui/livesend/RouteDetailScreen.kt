@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -21,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
@@ -119,6 +122,12 @@ fun RouteDetailScreen(
     // most-recent-first — see RouteCompletionRow's doc comment for why this is a plain chronological
     // list rather than a fabricated ranking score. Empty default keeps the mock preview unaffected.
     completions: List<RouteCompletionRow> = emptyList(),
+    // Real member-shared attempt videos for this route (com.example.climb.clubs.ClubRepository.observeSharedAttemptsForRoute),
+    // shown below the staff beta video so a member can watch how other real members climbed it,
+    // not just the one official beta take — see SharedAttemptRow. Empty default keeps the mock
+    // preview unaffected.
+    sharedAttempts: List<SharedAttemptRow> = emptyList(),
+    onToggleLike: (SharedAttemptRow) -> Unit = {},
     // False in the member shell, where the outer MemberClubNavHost's own shared floating island
     // already shows for this tab (per user request that every floating island in Club Mode stay
     // consistent, rather than this screen's own distinct Home/Progress/Ranks/Club bar). Staff
@@ -194,6 +203,10 @@ fun RouteDetailScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             SentByRow(completions = completions)
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            SharedAttemptsSection(attempts = sharedAttempts, onToggleLike = onToggleLike)
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -428,6 +441,112 @@ private fun SentByRow(completions: List<RouteCompletionRow>) {
                             Text(text = formatRelativeTime(completion.completedAt), color = ClimbPalette.liveSendTextMuted, fontSize = 12.sp)
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/** One member-shared attempt video plus its live like state — see
+ * [com.example.climb.clubs.ClubRepository.observeSharedAttemptsForRoute]/[com.example.climb.clubs.ClubRepository.observeLikesForSharedAttempt].
+ * [likeCount]/[likedByViewer] are derived from a real observed list of likes, not a denormalized
+ * counter (see [com.example.climb.clubs.SharedAttemptLikeEntity]'s doc comment for why). */
+data class SharedAttemptRow(
+    val id: Long,
+    val userDisplayName: String,
+    val videoUrl: String,
+    val completed: Boolean,
+    val flash: Boolean,
+    val likeCount: Int,
+    val likedByViewer: Boolean,
+)
+
+/** "Member sends" — real videos other members shared of their own attempts on this exact route,
+ * alongside (not instead of) the staff beta video above. Same bounded-height internal scroll
+ * convention as [SentByRow]. Each card plays inline on tap (same [BetaVideoPlayer] reuse as
+ * [BetaVideoCard]) rather than a separate screen, and carries its own like button. */
+@Composable
+private fun SharedAttemptsSection(attempts: List<SharedAttemptRow>, onToggleLike: (SharedAttemptRow) -> Unit) {
+    Column {
+        Text(
+            text = "Member sends (${attempts.size})",
+            color = ClimbPalette.liveSendTextMuted,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(bottom = 10.dp),
+        )
+        if (attempts.isEmpty()) {
+            Text(
+                text = "No member videos shared for this route yet.",
+                color = ClimbPalette.liveSendTextMuted,
+                fontSize = 13.sp,
+            )
+        } else {
+            Column(
+                modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                attempts.forEach { row -> SharedAttemptCard(row = row, onToggleLike = { onToggleLike(row) }) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SharedAttemptCard(row: SharedAttemptRow, onToggleLike: () -> Unit) {
+    var isPlaying by remember(row.id) { mutableStateOf(false) }
+    LiveSendCard(cornerRadius = 16, padding = 14) {
+        Column {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text(text = row.userDisplayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text(
+                        text = if (row.flash) "Flash" else if (row.completed) "Sent" else "Fell",
+                        color = if (row.completed) ClimbPalette.sent else ClimbPalette.fell,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable(onClick = onToggleLike)
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = if (row.likedByViewer) "Unlike" else "Like"
+                        },
+                ) {
+                    Icon(
+                        imageVector = if (row.likedByViewer) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = null,
+                        tint = if (row.likedByViewer) ClimbPalette.liveSendCta else ClimbPalette.liveSendTextMuted,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(text = "${row.likeCount}", color = ClimbPalette.liveSendTextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+            if (isPlaying) {
+                Box(modifier = Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(12.dp))) {
+                    BetaVideoPlayer(videoUrl = row.videoUrl)
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(ClimbPalette.liveSendSurface)
+                        .clickable { isPlaying = true }
+                        .semantics { role = Role.Button; contentDescription = "Watch video" },
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = ClimbPalette.liveSendTextPrimary, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(text = "Watch", color = ClimbPalette.liveSendTextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

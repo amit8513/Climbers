@@ -120,7 +120,6 @@ fun ExploreScreen(
     onNavigateClub: () -> Unit,
     onFabClick: () -> Unit,
     modifier: Modifier = Modifier,
-    organizationName: String = "Golomb Club",
     routes: List<PopularRoute> = MOCK_ROUTES,
     venues: List<ExploreVenue> = MOCK_VENUES,
     // Set when the route list below is filtered down to one venue (see
@@ -144,6 +143,13 @@ fun ExploreScreen(
     // Club Mode has no such shared chrome, so it keeps rendering its own bar (default true, also
     // preserving the untouched mock preview).
     showOwnBottomBar: Boolean = true,
+    // False in every real Club Mode call site — the enclosing Scaffold (staff ClubNavHost or
+    // MemberClubNavHost) already reserves top system-bar inset space in the padding it hands its
+    // NavHost, so applying this a second time here pushed this screen's headline visibly lower
+    // than Overview/Videos/Chat (which never had their own statusBarsPadding). True only for the
+    // untouched standalone design-exploration preview (LiveSendNavHost), which has no Scaffold at
+    // all and needs this screen to handle its own inset.
+    applyStatusBarPadding: Boolean = true,
 ) {
     // initialSection is intentionally unused now — see the ExploreSection doc comment above.
     Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
@@ -153,14 +159,17 @@ fun ExploreScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
+                .then(if (applyStatusBarPadding) Modifier.statusBarsPadding() else Modifier)
                 .padding(horizontal = 20.dp, vertical = 20.dp)
                 .padding(bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Column {
+                // Was the org name (e.g. "Golomb Club") — already shown on Overview, so this
+                // tab's own headline instead names what it actually shows: routes plus every
+                // route's beta video.
                 Text(
-                    text = organizationName,
+                    text = "Club betas",
                     color = ClimbPalette.liveSendTextPrimary,
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 22.sp,

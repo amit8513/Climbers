@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -115,7 +114,9 @@ fun LiveSendBroadcastScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
+                // No statusBarsPadding here — the enclosing Scaffold (staff or member) already
+                // reserves top system-bar inset space; applying it again pushed this headline
+                // visibly lower than Overview/Videos/Chat, which never had one either.
                 .padding(horizontal = 20.dp, vertical = 20.dp)
                 // A bit taller than the island's own footprint (56dp bar + 14dp*2 vertical margin)
                 // so it never overlaps this page's content even with a larger system navigation

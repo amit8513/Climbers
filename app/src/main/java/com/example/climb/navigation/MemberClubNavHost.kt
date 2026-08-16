@@ -188,7 +188,13 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
                         Text("Loading…", color = ClimbPalette.liveSendTextMuted)
                     }
                 } else {
-                    ClubAttemptVideoScreen(attempt = currentAttempt, onBack = { navController.popBackStack() })
+                    ClubAttemptVideoScreen(
+                        attempt = currentAttempt,
+                        onBack = { navController.popBackStack() },
+                        clubRepository = container.clubRepository,
+                        currentUid = currentUid,
+                        currentUsername = currentUsername,
+                    )
                 }
             }
             composable(MemberClubRoutes.CHAT) {
