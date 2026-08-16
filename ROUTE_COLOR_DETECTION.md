@@ -79,38 +79,44 @@ discarding the calibration).
 
 ## What's NOT confirmed working — the actual next step
 
-**The "Calibrate on this hold" tap gesture has not been confirmed to work reliably on-device.**
-Manual on-device testing hit repeated, hard-to-diagnose interaction issues:
+**The "Calibrate on this hold" tap gesture has a real, now-fixed bug, but the fix has not yet been
+confirmed with a real finger on the device.** A 4-way independent investigation (each agent reading
+the actual decompiled Compose UI source and/or the app's own code, not guessing) converged on the
+same root cause from three different angles:
 
-- The picker dialog (`CalibrationPickerDialog` in `DetailScreen.kt`) sometimes rendered a
-  double-exposed/stale-looking frame instead of a clean static image.
-- Taps inside the displayed image frequently did not trigger `onTap` at all — the dialog should
-  close immediately and synchronously on any registered tap (`calibrationPickerState` flips to
-  `Hidden` before any async work starts), but it was observed staying open through several tap
-  attempts at coordinates that should have been well within the image bounds (cross-checked via
-  `uiautomator dump`, not guessed).
-- One tap appears to have fallen through to whatever was behind the dialog (the app navigated back
-  to the Home screen), suggesting the dialog's tap/dismiss handling may not be fully isolating touch
-  events from the screen behind it.
-
-A static read of `CalibrationPickerDialog`'s code (`Dialog` + `Image` with
-`Modifier.pointerInput(Unit) { detectTapGestures { ... } }`, gated on `onSizeChanged` reporting a
-non-zero size) didn't reveal an obvious logic bug — the `offset`/`displayedSize` plumbing into
-`DebugCoordinateMapper.unmapPoint` looks correct. So either this is a real, subtler bug (touch
-consumption/z-order, a race between `onSizeChanged` and the first tap, or something specific to
-`Dialog`'s default window behavior) or it's a device/interaction artifact from scripted `adb input
-tap` testing rather than a real finger. **This needs to be tested with an actual finger on the
-device**, not just adb-scripted taps, before trusting or further debugging the reported symptoms.
+- **The bug**: `CalibrationPickerDialog` used a plain `Dialog(onDismissRequest = onCancel)` with no
+  `DialogProperties` override, so both `usePlatformDefaultWidth = true` and
+  `dismissOnClickOutside = true` (the library defaults) were in effect. A `usePlatformDefaultWidth`
+  dialog window is sized `WRAP_CONTENT` and only converges to its final bounds across the first
+  frame(s) after showing (confirmed directly in `androidx.compose.ui:ui-android`'s own source and
+  its own code comments). With `dismissOnClickOutside = true`, a tap arriving during that
+  still-settling window gets measured against not-yet-final bounds and can be misclassified as an
+  "outside" click — silently dismissing the dialog. Separately, the tap handler had its own dead
+  zone: `if (displayedSize.width > 0 && displayedSize.height > 0) { onTap(...) }` silently
+  no-opped, with zero feedback, for any tap landing before the image's own first `onSizeChanged`
+  fired. Between the two, this plausibly explains all three reported symptoms — the coordinate math
+  itself was independently checked and ruled out as a cause (correct inverse of the mapping,
+  correct axis conventions, no letterboxing-assumption error).
+- **The fix** (already applied in `DetailScreen.kt`): `DialogProperties(dismissOnClickOutside =
+  false, usePlatformDefaultWidth = false)`, plus the dialog now shows a loading spinner instead of
+  a tappable-looking image until `displayedSize` is actually known (no more silent no-op window),
+  plus the background video is paused for the picker's duration (a live GL-effect video under a
+  freshly-added dialog window is a separate, known source of visible bleed-through, and was flagged
+  as the likely cause of the "double-exposed" look).
+- **Still needed**: this has only been verified by static/source-level analysis, unit tests, and a
+  clean compile — **it has not yet been confirmed with a real finger on the device**. If the
+  symptoms (dialog not closing, stale frame, unexpected dismissal) persist after this fix, that
+  would falsify this root-cause theory and point back to something coordinate/pipeline-specific
+  instead.
 
 ### Next steps, in priority order
 
-1. **Manually test "Calibrate on this hold" with real touch input** on the device. If it reproduces
-   there too, instrument `CalibrationPickerDialog` (e.g. temporary logging in the `detectTapGestures`
-   block) to confirm whether `onTap` is even being invoked, then work backward from there — possible
-   real culprits worth checking first: whether `Dialog`'s default `usePlatformDefaultWidth` is
-   clipping/offsetting the actual touchable region relative to what's rendered, or whether
-   `onSizeChanged` fires late enough that early taps land before `displayedSize` is set (the current
-   code silently no-ops in that case rather than surfacing it — that's a plausible dead-air cause).
+1. **Manually test "Calibrate on this hold" with real touch input** on the device, now that the
+   Dialog-property/dead-zone fix above has landed. If symptoms persist, instrument
+   `CalibrationPickerDialog` (e.g. temporary logging of `System.nanoTime()` around `dialog.show()`,
+   the first `onSizeChanged`, and the tap callback) to see whether failing taps still cluster in the
+   first frame(s) after showing — that would mean a further, deeper timing issue remains beyond
+   what this fix addresses.
 2. **Get more real calibration data points** — this project has exactly one real calibrated
    measurement (the PINK video). More real footage across different gyms/lighting would validate
    whether `ColorCalibrator`'s median/MAD approach is actually robust in practice, and whether the

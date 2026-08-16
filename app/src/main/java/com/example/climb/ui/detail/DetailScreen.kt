@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -308,6 +309,11 @@ fun DetailScreen(
     var isPreparingCalibrationFrame by remember(currentClimb.videoPath) { mutableStateOf(false) }
 
     fun openCalibrationPicker() {
+        // Paused for the picker's duration: a live GL-effect video underneath a newly-added
+        // Dialog window is a known source of visible bleed-through/ghosting during the window's
+        // first frame(s), which is the most likely explanation for calibration testing reporting
+        // a "double-exposed/stale-looking frame" on open.
+        exoPlayer.pause()
         scope.launch {
             isPreparingCalibrationFrame = true
             val frame = referenceFrame ?: withContext(Dispatchers.Default) {
@@ -322,6 +328,7 @@ fun DetailScreen(
     fun onCalibrationTap(tapX: Float, tapY: Float, displayedSize: IntSize) {
         val frame = referenceFrame ?: return
         calibrationPickerState = CalibrationPickerState.Hidden
+        exoPlayer.play()
         scope.launch {
             bonusState = DetectionBonusState.Loading
             val (result, targetModel) = withContext(Dispatchers.Default) {
@@ -820,65 +827,97 @@ fun DetailScreen(
     if (calibrationPickerState is CalibrationPickerState.PickingPoint && pickerFrame != null) {
         CalibrationPickerDialog(
             frame = pickerFrame,
-            onCancel = { calibrationPickerState = CalibrationPickerState.Hidden },
+            onCancel = {
+                calibrationPickerState = CalibrationPickerState.Hidden
+                exoPlayer.play()
+            },
             onTap = { tapX, tapY, displayedSize -> onCalibrationTap(tapX, tapY, displayedSize) },
         )
     }
 }
 
 /**
- * Full-screen(-ish) dialog showing the reference frame at its own aspect ratio, tappable to pick
- * the hold to calibrate on. A plain [Dialog] (not inline in [DetailScreen]'s own scrollable
- * Column) so its own tap-target sizing/positioning is independent of the surrounding screen's
- * scroll state and layout — the frame is shown at whatever size Compose lays it out at here, and
- * [onTap] reports both the tap offset and that exact laid-out size so the caller can map back to
- * the frame's native pixel coordinates via [DebugCoordinateMapper.unmapPoint].
+ * Full-screen dialog showing the reference frame at its own aspect ratio, tappable to pick the
+ * hold to calibrate on. [onTap] reports both the tap offset and the image's exact laid-out size
+ * so the caller can map back to the frame's native pixel coordinates via
+ * [DebugCoordinateMapper.unmapPoint].
+ *
+ * `dismissOnClickOutside = false` and `usePlatformDefaultWidth = false` are both deliberate, not
+ * defaults left alone: on-device calibration testing reported taps silently failing to register,
+ * a stale/double-exposed first frame, and one tap that dismissed the dialog outright. A
+ * `usePlatformDefaultWidth = true` (the default) dialog window is sized WRAP_CONTENT and only
+ * converges to its final bounds across the first frame(s) after showing; with
+ * `dismissOnClickOutside = true` (also the default) a tap arriving during that window can be
+ * measured against not-yet-settled bounds and get misclassified as an outside click, silently
+ * dismissing the dialog. Forcing a stable, full-screen window from the first frame removes that
+ * race entirely — only the explicit Cancel text or system back can dismiss it now. Separately,
+ * the tap handler no longer has a silent no-op path for a tap that beats the image's own first
+ * layout pass: the image simply isn't shown as tappable (a loading spinner covers it instead)
+ * until [displayedSize] is known, rather than rendering a tap target that quietly eats input.
  */
 @Composable
 private fun CalibrationPickerDialog(frame: Bitmap, onCancel: () -> Unit, onTap: (Float, Float, IntSize) -> Unit) {
-    Dialog(onDismissRequest = onCancel) {
+    Dialog(
+        onDismissRequest = onCancel,
+        properties = DialogProperties(dismissOnClickOutside = false, usePlatformDefaultWidth = false),
+    ) {
         var displayedSize by remember { mutableStateOf(IntSize.Zero) }
         val imageBitmap = remember(frame) { frame.asImageBitmap() }
+        val isReady = displayedSize.width > 0 && displayedSize.height > 0
 
-        Column(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(ClimbPalette.surfaceRaised)
-                .padding(16.dp),
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.7f))
+                .padding(24.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "Tap the hold you want to highlight",
-                color = ClimbPalette.textPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp,
-            )
-            Spacer(Modifier.height(12.dp))
-            Image(
-                bitmap = imageBitmap,
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .aspectRatio(frame.width.toFloat() / frame.height.toFloat())
-                    .clip(RoundedCornerShape(10.dp))
-                    .onSizeChanged { displayedSize = it }
-                    .pointerInput(Unit) {
-                        detectTapGestures { offset ->
-                            if (displayedSize.width > 0 && displayedSize.height > 0) {
-                                onTap(offset.x, offset.y, displayedSize)
-                            }
-                        }
-                    },
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Cancel",
-                color = ClimbPalette.textMuted,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-                modifier = Modifier.clickable(onClick = onCancel),
-            )
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(ClimbPalette.surfaceRaised)
+                    .padding(16.dp),
+            ) {
+                Text(
+                    text = "Tap the hold you want to highlight",
+                    color = ClimbPalette.textPrimary,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                )
+                Spacer(Modifier.height(12.dp))
+                Box(modifier = Modifier.fillMaxWidth().aspectRatio(frame.width.toFloat() / frame.height.toFloat())) {
+                    Image(
+                        bitmap = imageBitmap,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(10.dp))
+                            .onSizeChanged { displayedSize = it }
+                            .then(
+                                if (isReady) {
+                                    Modifier.pointerInput(Unit) {
+                                        detectTapGestures { offset -> onTap(offset.x, offset.y, displayedSize) }
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            ),
+                    )
+                    if (!isReady) {
+                        CircularProgressIndicator(color = ClimbPalette.chalk, modifier = Modifier.align(Alignment.Center))
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Cancel",
+                    color = ClimbPalette.textMuted,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.clickable(onClick = onCancel),
+                )
+            }
         }
     }
 }
