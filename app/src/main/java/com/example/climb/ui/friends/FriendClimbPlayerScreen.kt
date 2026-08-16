@@ -11,10 +11,14 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -65,14 +69,18 @@ fun FriendClimbPlayerScreen(climb: SharedClimb, firebaseStorage: FirebaseStorage
             .onFailure { loadError = it.message ?: "Couldn't load this video" }
     }
 
-    Box(modifier = modifier.fillMaxSize().wallTexture()) {
+    Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
             Text(
                 text = "← Back",
-                color = ClimbPalette.textSecondary,
+                color = ClimbPalette.liveSendTextMuted,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 20.dp, bottom = 16.dp).clickable(onClick = onBack),
+                modifier = Modifier
+                    .heightIn(min = 44.dp)
+                    .padding(top = 20.dp)
+                    .clickable(onClick = onBack)
+                    .semantics { role = Role.Button },
             )
 
             val currentUrl = downloadUrl
@@ -82,13 +90,13 @@ fun FriendClimbPlayerScreen(climb: SharedClimb, firebaseStorage: FirebaseStorage
                     .fillMaxWidth()
                     .aspectRatio(9f / 13f)
                     .clip(RoundedCornerShape(16.dp))
-                    .background(ClimbPalette.wall),
+                    .background(ClimbPalette.liveSendSurfaceRaised),
                 contentAlignment = Alignment.Center,
             ) {
                 when {
                     currentUrl != null -> RemoteVideoPlayer(url = currentUrl)
-                    currentError != null -> Text(text = currentError, color = ClimbPalette.textSecondary, fontSize = 13.sp)
-                    else -> CircularProgressIndicator(color = ClimbPalette.chalk, strokeWidth = 2.dp, modifier = Modifier.height(28.dp))
+                    currentError != null -> Text(text = currentError, color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
+                    else -> CircularProgressIndicator(color = ClimbPalette.liveSendAccent, strokeWidth = 2.dp, modifier = Modifier.height(28.dp))
                 }
             }
 
@@ -97,13 +105,13 @@ fun FriendClimbPlayerScreen(climb: SharedClimb, firebaseStorage: FirebaseStorage
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 HoldBadge(grade = climb.vGrade, routeColor = climb.routeColor)
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "@${climb.ownerUsername}", color = ClimbPalette.textPrimary, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text(text = "@${climb.ownerUsername}", color = ClimbPalette.liveSendTextPrimary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(4.dp))
                     OutcomePill(outcome = climb.outcome)
                 }
                 Text(
                     text = playerDateFormatter.format(Date(climb.createdAt)),
-                    color = ClimbPalette.textMuted,
+                    color = ClimbPalette.liveSendTextMuted,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                 )
@@ -111,7 +119,7 @@ fun FriendClimbPlayerScreen(climb: SharedClimb, firebaseStorage: FirebaseStorage
 
             if (climb.notes.isNotBlank()) {
                 Spacer(Modifier.height(16.dp))
-                Text(text = climb.notes, color = ClimbPalette.textSecondary, fontSize = 13.sp, lineHeight = 19.sp)
+                Text(text = climb.notes, color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp, lineHeight = 19.sp)
             }
 
             Spacer(Modifier.height(24.dp))

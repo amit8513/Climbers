@@ -15,7 +15,7 @@ import androidx.navigation.navArgument
 import com.example.climb.AppContainer
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.data.social.UserProfile
-import com.example.climb.ui.home.HomeScreen
+import com.example.climb.ui.leaderboard.LeaderboardScreen
 import com.example.climb.ui.livesend.ActivityItem
 import com.example.climb.ui.livesend.ClubDashboardScreen
 import com.example.climb.ui.livesend.ExploreSection
@@ -24,6 +24,7 @@ import com.example.climb.ui.livesend.real.LiveSendBroadcastScreen
 import com.example.climb.ui.livesend.real.LiveSendCamerasScreen
 import com.example.climb.ui.livesend.real.LiveSendClubExploreHost
 import com.example.climb.ui.livesend.real.LiveSendMembersScreen
+import com.example.climb.ui.progress.ProgressScreen
 import com.example.climb.ui.settings.SettingsScreen
 import com.example.climb.ui.theme.ClimbPalette
 
@@ -34,10 +35,11 @@ private object ClubRoutes {
     const val EXPLORE = "club_explore/{section}"
     fun explore(section: String) = "club_explore/$section"
     const val CAMERAS = "club_cameras"
-    // A real destination inside THIS NavHost's own back stack (not an AppMode switch) — see the
+    // Real destinations inside THIS NavHost's own back stack (not an AppMode switch) — see the
     // doc comment below for why that distinction matters.
-    const val HOME_PREVIEW = "club_home_preview"
     const val SETTINGS_PREVIEW = "club_settings_preview"
+    const val PROGRESS_PREVIEW = "club_progress_preview"
+    const val RANKS_PREVIEW = "club_ranks_preview"
 }
 
 private fun navigateToClubTab(navController: NavHostController, route: String) {
@@ -52,25 +54,32 @@ private fun navigateToClubTab(navController: NavHostController, route: String) {
  * only via the post-login mode switcher or Settings' "Club Mode" section, and only ever reachable
  * by a STAFF/ADMIN member of [organization]. [onExitClub] is a real `AppMode` switch back to
  * Normal Mode — a one-way jump with no back stack connecting the two, since Club/Normal are two
- * separate top-level NavHost compositions, not part of one shared NavController. That's the right
- * behavior for an explicit "Exit Club Mode"/"Switch" action, but every plain "Home" tab/icon in
- * this shell used to call it too, which meant tapping Home was ALSO a one-way exit — there was no
- * way to see Home and come back to the Dashboard. Home now instead navigates to [ClubRoutes.HOME_PREVIEW],
- * a real composable destination inside THIS NavHost's own back stack, so it behaves like normal
- * in-app navigation: showing the real Home screen, poppable straight back to the Dashboard by
- * system Back (since [ClubRoutes.MANAGE] is the start destination, popping HOME_PREVIEW lands
- * there automatically) — [onExitClub] itself stays wired only to the screens' explicit
- * "Exit"/"Switch" affordances, which remain genuine, permanent exits.
+ * separate top-level NavHost compositions, not part of one shared NavController. That stays wired
+ * only to each screen's explicit "Exit"/"Switch" affordance.
  *
- * All 6 destinations render their own full-screen "Live Send" chrome (their own floating bottom
- * bar baked in per screen, except the two real-screen previews below, which use the real app's own
- * chrome) rather than a shared Scaffold bottomBar — per user request, no Club Mode screen shows the
- * old-style bottom bar anymore, so there's no outer Scaffold bottomBar slot left to gate by route.
+ * Every plain "Home" tab/icon anywhere in this shell — including the Dashboard's own — means
+ * "Club Home," i.e. [ClubRoutes.MANAGE] itself (real in-app back/tab navigation via
+ * [backToClubHome], not an `AppMode` switch): tapping it from the Dashboard is a harmless
+ * self-navigate, and from anywhere else it's a real pop/tab-switch back to the Dashboard. The one
+ * real screen still worth reaching from inside this shell without leaving it — Settings — has its
+ * own dedicated icon on the Dashboard (there's no more "visit personal Home" detour to hang it
+ * off of), navigating straight to [ClubRoutes.SETTINGS_PREVIEW].
+ *
+ * Most destinations render their own full-screen "Live Send" chrome (their own floating bottom
+ * bar baked in per screen); the real-screen previews (Settings/Progress/Ranks) use the real app's
+ * own chrome instead — there's no shared Scaffold bottomBar here at all anymore, per user request
+ * that no Club Mode screen show the old-style bottom bar.
  */
 @Composable
 fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfile, organization: OrganizationEntity, onExitClub: () -> Unit) {
     val navController = rememberNavController()
-    val goHome = { navController.navigate(ClubRoutes.HOME_PREVIEW) }
+    // Every "Home" control in this shell means Club Home — the Dashboard itself.
+    val backToClubHome = { navigateToClubTab(navController, ClubRoutes.MANAGE) }
+    // Same real push/pop pattern as HOME_PREVIEW — Explore/RouteDetail's Progress/Ranks tabs had
+    // no real destination at all before (a TODO no-op), now they show the app's own real,
+    // club-palette-restyled Progress/Leaderboard screens, poppable straight back.
+    val goProgress = { navController.navigate(ClubRoutes.PROGRESS_PREVIEW) }
+    val goRanks = { navController.navigate(ClubRoutes.RANKS_PREVIEW) }
 
     Scaffold(containerColor = ClimbPalette.bg) { padding ->
         NavHost(
@@ -98,7 +107,11 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                         ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt))
                     },
                     onSwitchToNormalMode = onExitClub,
-                    onGoHome = goHome,
+                    // A real no-op, not a self-navigate — this screen already IS Club Home, and
+                    // navigating to the destination you're already on still visibly flashed a
+                    // transition for going nowhere.
+                    onGoHome = {},
+                    onOpenSettings = { navController.navigate(ClubRoutes.SETTINGS_PREVIEW) },
                     onManageRoutes = { navController.navigate(ClubRoutes.explore("routes")) },
                     onManageMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
                     onManageVenues = { navController.navigate(ClubRoutes.CAMERAS) },
@@ -119,7 +132,9 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     clubRepository = container.clubRepository,
                     organization = organization,
                     onClubTab = { navController.popBackStack(ClubRoutes.MANAGE, inclusive = false) },
-                    onGoHome = goHome,
+                    onGoHome = backToClubHome,
+                    onProgressTab = goProgress,
+                    onRanksTab = goRanks,
                     isStaff = true,
                     initialSection = if (section == "venues") ExploreSection.VENUES else ExploreSection.ROUTES,
                 )
@@ -130,7 +145,7 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     clubRepository = container.clubRepository,
                     organization = organization,
                     isStaff = true,
-                    onGoHome = goHome,
+                    onGoHome = backToClubHome,
                     onExitClub = onExitClub,
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
@@ -141,7 +156,7 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     currentUid = currentUid,
                     clubRepository = container.clubRepository,
                     organization = organization,
-                    onGoHome = goHome,
+                    onGoHome = backToClubHome,
                     onExitClub = onExitClub,
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                 )
@@ -151,25 +166,10 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     currentUid = currentUid,
                     clubRepository = container.clubRepository,
                     organization = organization,
-                    onGoHome = goHome,
+                    onGoHome = backToClubHome,
                     onExitClub = onExitClub,
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
-                )
-            }
-            composable(ClubRoutes.HOME_PREVIEW) {
-                HomeScreen(
-                    repository = container.climbRepository,
-                    currentUid = currentUid,
-                    profile = profile,
-                    settingsStore = container.settingsStore,
-                    // Opening a clicked climb's real DetailScreen (ExoPlayer playback, color-
-                    // isolation editing, sharing, the pose-analysis section) needs its own
-                    // destination + several more container dependencies — a bigger addition than
-                    // this fix's scope (making Home itself reachable-and-poppable). Left a no-op
-                    // rather than a shallow partial implementation.
-                    onClimbClick = { /* TODO(live-send-real): real climb detail from inside Club Mode's Home preview */ },
-                    onSettingsClick = { navController.navigate(ClubRoutes.SETTINGS_PREVIEW) },
                 )
             }
             composable(ClubRoutes.SETTINGS_PREVIEW) {
@@ -190,6 +190,19 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     // No-op: selecting this org here would mean "enter Club Mode for it," which is
                     // already exactly where we are.
                     onEnterClubMode = { },
+                )
+            }
+            composable(ClubRoutes.PROGRESS_PREVIEW) {
+                ProgressScreen(repository = container.climbRepository, currentUid = currentUid)
+            }
+            composable(ClubRoutes.RANKS_PREVIEW) {
+                LeaderboardScreen(
+                    currentUid = currentUid,
+                    leaderboardRepository = container.leaderboardRepositoryFor(currentUid, profile.username),
+                    // Opening a friend's shared-climb player from inside Club Mode needs its own
+                    // destination + FirebaseStorage dependency — same "don't go deeper than this
+                    // fix's scope" call as Home preview's onClimbClick no-op above.
+                    onOpenFriendClimbs = { /* TODO(live-send-real): friend-climb playback from inside Club Mode */ },
                 )
             }
         }

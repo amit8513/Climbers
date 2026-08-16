@@ -47,11 +47,11 @@ fun InitialsAvatar(name: String, size: androidx.compose.ui.unit.Dp, photoUrl: St
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(ClimbPalette.surfaceRaised)
-            .border(1.dp, ClimbPalette.border, CircleShape),
+            .background(ClimbPalette.liveSendSurfaceRaised)
+            .border(1.dp, ClimbPalette.liveSendBorder, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = letter, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = (size.value * 0.4f).sp)
+        Text(text = letter, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Black, fontSize = (size.value * 0.4f).sp)
         if (!photoUrl.isNullOrBlank()) {
             AsyncImage(
                 model = photoUrl,
@@ -68,9 +68,9 @@ fun RankMovementChip(entry: LeaderboardEntry, modifier: Modifier = Modifier) {
     val (glyph, color) = when (entry.rankMovementType) {
         RankMovementType.UP -> "▲" to ClimbPalette.positive
         RankMovementType.DOWN -> "▼" to ClimbPalette.negative
-        RankMovementType.UNCHANGED -> "–" to ClimbPalette.textMuted
-        RankMovementType.NEW -> "★" to ClimbPalette.chalk
-        RankMovementType.UNRANKED -> "–" to ClimbPalette.textMuted
+        RankMovementType.UNCHANGED -> "–" to ClimbPalette.liveSendTextMuted
+        RankMovementType.NEW -> "★" to ClimbPalette.liveSendAccent
+        RankMovementType.UNRANKED -> "–" to ClimbPalette.liveSendTextMuted
     }
     Row(
         modifier = modifier.semantics { contentDescription = rankMovementAccessibilityLabel(entry) },
@@ -95,8 +95,8 @@ fun VideoStatusIndicator(entry: LeaderboardEntry, onOpenVideos: () -> Unit, modi
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(text = "▶", color = ClimbPalette.chalk, fontSize = 13.sp)
-            Text(text = "${entry.sharedVideoCount}", color = ClimbPalette.textSecondary, fontSize = 12.sp)
+            Text(text = "▶", color = ClimbPalette.liveSendAccent, fontSize = 13.sp)
+            Text(text = "${entry.sharedVideoCount}", color = ClimbPalette.liveSendTextMuted, fontSize = 12.sp)
         }
         entry.hasPrivateVideo -> Box(
             modifier = modifier
@@ -104,7 +104,7 @@ fun VideoStatusIndicator(entry: LeaderboardEntry, onOpenVideos: () -> Unit, modi
                 .semantics { contentDescription = "This video is private" },
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = "🔒", color = ClimbPalette.textMuted, fontSize = 14.sp)
+            Text(text = "🔒", color = ClimbPalette.liveSendTextMuted, fontSize = 14.sp)
         }
         else -> Spacer(modifier.size(MinTouchTarget))
     }
@@ -118,14 +118,14 @@ fun LeaderboardRow(
     onOpenVideos: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val background = if (entry.isCurrentUser) ClimbPalette.surfaceRaised else ClimbPalette.surface
+    val background = if (entry.isCurrentUser) ClimbPalette.liveSendSurfaceRaised else ClimbPalette.liveSendSurface
     Row(
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 72.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(background)
-            .border(1.dp, if (entry.isCurrentUser) ClimbPalette.borderStrong else ClimbPalette.border, RoundedCornerShape(14.dp))
+            .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp)
             .testTag("leaderboard_row_${entry.userId}"),
@@ -134,7 +134,7 @@ fun LeaderboardRow(
     ) {
         Text(
             text = "${entry.rank}",
-            color = ClimbPalette.textMuted,
+            color = ClimbPalette.liveSendTextMuted,
             fontWeight = FontWeight.Black,
             fontSize = 14.sp,
             modifier = Modifier.width(24.dp),
@@ -142,20 +142,20 @@ fun LeaderboardRow(
         InitialsAvatar(entry.displayName, 44.dp)
         Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(text = entry.displayName, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text(text = entry.displayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 if (entry.isCurrentUser) {
-                    Text(text = "YOU", color = ClimbPalette.chalk, fontWeight = FontWeight.Black, fontSize = 9.sp, letterSpacing = 0.5.sp)
+                    Text(text = "YOU", color = ClimbPalette.liveSendAccent, fontWeight = FontWeight.Black, fontSize = 9.sp, letterSpacing = 0.5.sp)
                 }
             }
             Text(
                 text = rowSupportingLines(category, entry).joinToString(" · "),
-                color = ClimbPalette.textSecondary,
+                color = ClimbPalette.liveSendTextMuted,
                 fontSize = 11.sp,
                 maxLines = 2,
             )
         }
         Column(horizontalAlignment = Alignment.End) {
-            Text(text = primaryValue(category, entry), color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
+            Text(text = primaryValue(category, entry), color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Black, fontSize = 16.sp)
             RankMovementChip(entry)
         }
         VideoStatusIndicator(entry, onOpenVideos)
@@ -167,12 +167,12 @@ fun StickyCurrentUserRow(entry: LeaderboardEntry, category: LeaderboardCategory,
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(ClimbPalette.bg)
+            .background(ClimbPalette.liveSendBg)
             .padding(top = 8.dp),
     ) {
         Text(
             text = "YOUR RANK",
-            color = ClimbPalette.textMuted,
+            color = ClimbPalette.liveSendTextMuted,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.6.sp,
@@ -183,13 +183,13 @@ fun StickyCurrentUserRow(entry: LeaderboardEntry, category: LeaderboardCategory,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(14.dp))
-                    .background(ClimbPalette.surfaceRaised)
-                    .border(1.dp, ClimbPalette.borderStrong, RoundedCornerShape(14.dp))
+                    .background(ClimbPalette.liveSendSurfaceRaised)
+                    .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(14.dp))
                     .padding(horizontal = 14.dp, vertical = 14.dp),
             ) {
                 Text(
                     text = entry.eligibilityReason ?: "Not eligible this week",
-                    color = ClimbPalette.textSecondary,
+                    color = ClimbPalette.liveSendTextMuted,
                     fontSize = 13.sp,
                 )
             }

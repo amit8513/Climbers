@@ -61,8 +61,8 @@ fun ClimbBottomBar(
             .height(BAR_HEIGHT)
             .shadow(elevation = 12.dp, shape = shape, clip = false)
             .clip(shape)
-            .background(ClimbPalette.surfaceRaised)
-            .border(1.dp, ClimbPalette.borderStrong, shape)
+            .background(ClimbPalette.liveSendSurfaceRaised)
+            .border(1.dp, ClimbPalette.liveSendBorder, shape)
             .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -110,7 +110,7 @@ private fun NavTab(icon: ImageVector, contentDescription: String, selected: Bool
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (selected) ClimbPalette.chalk else ClimbPalette.textMuted,
+            tint = if (selected) ClimbPalette.liveSendAccent else ClimbPalette.liveSendTextMuted,
             modifier = Modifier.size(if (selected) 26.dp else 22.dp),
         )
     }
@@ -122,11 +122,11 @@ private fun RecordButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
         modifier = modifier
             .size(48.dp)
             .clip(CircleShape)
-            .background(ClimbPalette.chalk)
+            .background(ClimbPalette.liveSendAccent)
             .clickable(onClick = onClick)
             .semantics { contentDescription = "Record a climb" },
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = "+", color = ClimbPalette.chalkText, fontSize = 24.sp)
+        Text(text = "+", color = ClimbPalette.liveSendAccentText, fontSize = 24.sp)
     }
 }

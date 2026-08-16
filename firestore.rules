@@ -164,7 +164,10 @@ service cloud.firestore {
       allow create: if signedIn() &&
         isStaffOf(request.resource.data.organizationId) &&
         request.resource.data.authorUid == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if false;
+      // Any staff member can delete any post (moderation), not just the original author — same
+      // trust level as creating one, just without the author-must-match-self restriction create has.
+      allow delete: if signedIn() && isStaffOf(resource.data.organizationId);
     }
 
     // Attempt-count bookkeeping for the member-facing club leaderboard — any member can record

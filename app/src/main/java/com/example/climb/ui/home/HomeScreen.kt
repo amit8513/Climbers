@@ -53,6 +53,8 @@ import com.example.climb.data.social.UserProfile
 import com.example.climb.ui.components.HoldBadge
 import com.example.climb.ui.components.OutcomePill
 import com.example.climb.ui.leaderboard.InitialsAvatar
+import com.example.climb.ui.livesend.components.LiveSendSectionLabel
+import com.example.climb.ui.livesend.components.LiveSendStatCard
 import com.example.climb.ui.progress.averageSentGrade
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
@@ -103,7 +105,7 @@ fun HomeScreen(
     val now = remember { System.currentTimeMillis() }
     val averageGrade = remember(climbs) { averageSentGrade(climbs) }
 
-    Box(modifier = modifier.fillMaxSize().wallTexture()) {
+    Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         if (settingsStore.homeVideoBackgroundEnabled) {
             HomeVideoBackground(
                 climbs = climbs,
@@ -121,7 +123,7 @@ fun HomeScreen(
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Text(
                         text = "CLIMBERS",
-                        color = ClimbPalette.textPrimary,
+                        color = ClimbPalette.liveSendTextPrimary,
                         fontWeight = FontWeight.Black,
                         fontSize = 22.sp,
                         letterSpacing = 1.sp,
@@ -131,30 +133,35 @@ fun HomeScreen(
                     Icon(
                         imageVector = Icons.Filled.Settings,
                         contentDescription = "Settings",
-                        tint = ClimbPalette.textSecondary,
+                        tint = ClimbPalette.liveSendTextMuted,
                     )
                 }
             }
 
             Spacer(Modifier.height(18.dp))
 
-            StatsStrip(
-                sends = remember(climbs) { sendsThisWeek(climbs, now) },
-                streak = remember(climbs) { dayStreak(climbs, now) },
+            Row(
                 modifier = Modifier
+                    .fillMaxWidth()
                     .padding(horizontal = 20.dp)
                     .height(IntrinsicSize.Min),
-            )
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                LiveSendStatCard(
+                    value = remember(climbs) { sendsThisWeek(climbs, now) }.toString(),
+                    label = "Sends this week",
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+                LiveSendStatCard(
+                    value = remember(climbs) { dayStreak(climbs, now) }.toString(),
+                    label = "Day streak",
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+            }
 
             Spacer(Modifier.height(22.dp))
 
-            Text(
-                text = "RECENT CLIMBS",
-                color = ClimbPalette.textMuted,
-                fontSize = 11.sp,
-                letterSpacing = 1.sp,
-                modifier = Modifier.padding(horizontal = 20.dp),
-            )
+            LiveSendSectionLabel(text = "Recent Climbs", modifier = Modifier.padding(horizontal = 20.dp))
 
             Spacer(Modifier.height(10.dp))
 
@@ -163,22 +170,22 @@ fun HomeScreen(
                     modifier = Modifier.fillMaxWidth().padding(20.dp),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("No climbs yet — tap + to record one.", color = ClimbPalette.textSecondary)
+                    Text("No climbs yet — tap + to record one.", color = ClimbPalette.liveSendTextMuted)
                 }
             } else {
-                HorizontalDivider(color = ClimbPalette.border, modifier = Modifier.padding(horizontal = 20.dp))
+                HorizontalDivider(color = ClimbPalette.liveSendBorder, modifier = Modifier.padding(horizontal = 20.dp))
                 LazyColumn(
                     modifier = Modifier.weight(1f).padding(horizontal = 20.dp),
                     contentPadding = PaddingValues(bottom = 16.dp),
                 ) {
                     items(climbs, key = { it.id }) { climb ->
                         ClimbRow(climb = climb, now = now, onClick = { onClimbClick(climb.id) })
-                        HorizontalDivider(color = ClimbPalette.border)
+                        HorizontalDivider(color = ClimbPalette.liveSendBorder)
                     }
                     item {
                         Text(
                             text = "Tap a climb to watch it back. Tap + to record one.",
-                            color = ClimbPalette.textMuted,
+                            color = ClimbPalette.liveSendTextMuted,
                             fontSize = 11.sp,
                             modifier = Modifier.padding(vertical = 8.dp),
                         )
@@ -194,7 +201,7 @@ fun HomeScreen(
  * any sends to average yet, since a fabricated grade would be worse than no badge. */
 @Composable
 private fun ProfileAvatarWithGrade(profile: UserProfile, averageGrade: Double?, size: Dp, modifier: Modifier = Modifier) {
-    val accent = ClimbPalette.chalk
+    val accent = ClimbPalette.liveSendAccent
     val ringWidth = 1.5.dp
     Box(modifier = modifier.size(size)) {
         Box(
@@ -217,7 +224,7 @@ private fun ProfileAvatarWithGrade(profile: UserProfile, averageGrade: Double?, 
             ) {
                 Text(
                     text = "V${averageGrade.roundToNearestInt()}",
-                    color = ClimbPalette.chalkText,
+                    color = ClimbPalette.liveSendAccentText,
                     fontWeight = FontWeight.Black,
                     fontSize = (size.value * 0.24f).sp,
                 )
@@ -227,52 +234,6 @@ private fun ProfileAvatarWithGrade(profile: UserProfile, averageGrade: Double?, 
 }
 
 private fun Double.roundToNearestInt(): Int = Math.round(this).toInt()
-
-@Composable
-private fun StatsStrip(sends: Int, streak: Int, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(10.dp)
-    Row(
-        modifier = modifier
-            .clip(shape)
-            .border(1.dp, ClimbPalette.border, shape),
-    ) {
-        StatCell(value = sends, label = "sends this week", modifier = Modifier.weight(1f))
-        Box(
-            modifier = Modifier
-                .width(1.dp)
-                .fillMaxHeight()
-                .background(ClimbPalette.border),
-        )
-        StatCell(value = streak, label = "day streak", modifier = Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun StatCell(value: Int, label: String, modifier: Modifier = Modifier) {
-    // Value and label on one line — stacking them made the strip tall and the uppercase
-    // letter-spaced label wrapped awkwardly at "SENDS THIS / WEEK".
-    Row(
-        modifier = modifier
-            .background(ClimbPalette.surface)
-            .padding(horizontal = 14.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            text = value.toString(),
-            color = ClimbPalette.textPrimary,
-            fontWeight = FontWeight.Black,
-            fontSize = 22.sp,
-        )
-        Text(
-            text = label,
-            color = ClimbPalette.textSecondary,
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
 
 @Composable
 private fun ClimbRow(climb: ClimbEntity, now: Long, onClick: () -> Unit) {
@@ -292,13 +253,13 @@ private fun ClimbRow(climb: ClimbEntity, now: Long, onClick: () -> Unit) {
             ) {
                 Text(
                     text = climb.routeColor.name.lowercase(Locale.US).replaceFirstChar { it.uppercase() },
-                    color = ClimbPalette.textPrimary,
+                    color = ClimbPalette.liveSendTextPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
                     text = formatClimbDate(climb.createdAt, now),
-                    color = ClimbPalette.textMuted,
+                    color = ClimbPalette.liveSendTextMuted,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                 )
@@ -309,7 +270,7 @@ private fun ClimbRow(climb: ClimbEntity, now: Long, onClick: () -> Unit) {
                 if (climb.notes.isNotBlank()) {
                     Text(
                         text = climb.notes,
-                        color = ClimbPalette.textSecondary,
+                        color = ClimbPalette.liveSendTextMuted,
                         fontSize = 12.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,

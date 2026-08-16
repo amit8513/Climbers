@@ -157,6 +157,13 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
             .set(mapOf("organizationId" to organizationId, "authorUid" to staffUserId, "text" to trimmed, "createdAt" to System.currentTimeMillis())).await()
     }
 
+    /** Any staff member can delete any post — moderation, same trust level as posting itself
+     * ([postUpdate] already requires [requireStaffAccess]), not limited to the original author. */
+    suspend fun deleteUpdate(organizationId: Long, userId: String, update: ClubUpdateEntity): Result<Unit> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        firestore.collection(CLUB_UPDATES).document(update.id.toString()).delete().await()
+    }
+
     /** Any member records their own attempt stats — this is participation bookkeeping, not a
      * staff mutation, so unlike [createVenue]/[createRoute]/etc. it doesn't call
      * [requireStaffAccess]. Called once per saved club-linked attempt (see

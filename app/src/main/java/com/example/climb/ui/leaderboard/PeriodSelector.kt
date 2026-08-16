@@ -33,8 +33,8 @@ fun PeriodSelector(selected: PeriodFilter, onSelect: (PeriodFilter) -> Unit, mod
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(50))
-                .background(ClimbPalette.surface)
-                .border(1.dp, ClimbPalette.border, RoundedCornerShape(50))
+                .background(ClimbPalette.liveSendSurface)
+                .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(50))
                 .clickable(onClick = { expanded = true })
                 .padding(horizontal = 14.dp, vertical = 10.dp)
                 .semantics {
@@ -42,7 +42,7 @@ fun PeriodSelector(selected: PeriodFilter, onSelect: (PeriodFilter) -> Unit, mod
                     contentDescription = "Period: ${selected.label}. Tap to change."
                 },
         ) {
-            Text(text = "${selected.label} ▾", color = ClimbPalette.textPrimary, fontSize = 12.sp)
+            Text(text = "${selected.label} ▾", color = ClimbPalette.liveSendTextPrimary, fontSize = 12.sp)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             PeriodFilter.entries.forEach { filter ->

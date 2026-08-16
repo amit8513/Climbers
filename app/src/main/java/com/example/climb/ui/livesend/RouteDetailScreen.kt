@@ -23,8 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -308,11 +310,11 @@ private fun BetaVideoCard(onPlayVideo: () -> Unit, videoUrl: String?) {
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = ">",
-                color = ClimbPalette.liveSendTextPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 32.sp,
+            Icon(
+                imageVector = Icons.Filled.PlayArrow,
+                contentDescription = null,
+                tint = ClimbPalette.liveSendTextPrimary,
+                modifier = Modifier.size(36.dp),
             )
         }
     }

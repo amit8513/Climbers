@@ -24,7 +24,6 @@ import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -113,6 +112,7 @@ fun ClubDashboardScreen(
     // com.example.climb.ui.livesend.LiveSendNavHost (the untouched preview) keeps compiling and
     // rendering identically without passing any of these explicitly.
     onGoHome: () -> Unit = onExit,
+    onOpenSettings: () -> Unit = {},
     clubName: String = "Golomb Club",
     memberCount: Int = 12,
     pendingJoinRequestCount: Int = 4,
@@ -133,7 +133,7 @@ fun ClubDashboardScreen(
                 .padding(bottom = 90.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            DashboardHeader(clubName = clubName, onSwitchToNormalMode = onSwitchToNormalMode, onGoHome = onGoHome)
+            DashboardHeader(clubName = clubName, onSwitchToNormalMode = onSwitchToNormalMode, onOpenSettings = onOpenSettings)
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 LiveSendStatCard(value = "$memberCount", label = "Members", modifier = Modifier.weight(1f))
@@ -162,9 +162,9 @@ fun ClubDashboardScreen(
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                LiveSendSectionLabel(text = "Manage")
-                Column(verticalArrangement = Arrangement.spacedBy(15.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                LiveSendSectionLabel(text = "Manage", modifier = Modifier.fillMaxWidth(), forceUppercase = true)
+                Column(verticalArrangement = Arrangement.spacedBy(15.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
                         LiveSendTile(label = "Routes", emoji = "🧗", onClick = onManageRoutes)
                         LiveSendTile(label = "Members", emoji = "👥", onClick = onManageMembers)
@@ -181,7 +181,10 @@ fun ClubDashboardScreen(
             tabs = listOf(
                 // Was a "Routes" tab (Explore is still reachable via the Manage grid's Routes
                 // tile above) — replaced with an explicit Home tab per user request.
-                LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
+                // selected=true — this screen IS Club Home, unlike every other screen's Home tab.
+                // onGoHome is a real no-op here (see ClubNavHost) rather than a self-navigate,
+                // which used to cause a visible transition flash for going nowhere.
+                LiveSendNavTab(Icons.Filled.Home, "Home", selected = true, onClick = onGoHome),
                 LiveSendNavTab(Icons.Filled.Campaign, "Broadcast", selected = false, onClick = onNavBroadcast),
                 LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
                 LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExit),
@@ -192,24 +195,13 @@ fun ClubDashboardScreen(
 }
 
 @Composable
-private fun DashboardHeader(clubName: String, onSwitchToNormalMode: () -> Unit, onGoHome: () -> Unit) {
+@Suppress("UNUSED_PARAMETER")
+private fun DashboardHeader(clubName: String, onSwitchToNormalMode: () -> Unit, onOpenSettings: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(ClimbPalette.liveSendSurface)
-                .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(18.dp))
-                .clickable(onClick = onGoHome)
-                .semantics {
-                    role = Role.Button
-                    contentDescription = "Go to Home"
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(Icons.Filled.Home, contentDescription = null, tint = ClimbPalette.liveSendTextPrimary, modifier = Modifier.size(18.dp))
-        }
-        Spacer(Modifier.width(10.dp))
+        // Settings-from-Club-Mode is disabled for now per user request — the icon/button is
+        // removed rather than left clickable-but-dead. onOpenSettings/the SETTINGS_PREVIEW
+        // destination in ClubNavHost are both still wired and intact, so re-enabling this later
+        // is just restoring this Box (see git history for the exact prior version).
         Text(
             text = clubName,
             color = ClimbPalette.liveSendTextPrimary,

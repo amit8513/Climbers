@@ -32,6 +32,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.example.climb.clubs.CameraEntity
 import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.OrganizationEntity
@@ -46,6 +51,12 @@ import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 import kotlinx.coroutines.launch
 
+private object CamerasRoutes {
+    const val LIST = "list"
+    const val PICK_VENUE = "pick_venue/{cameraId}"
+    fun pickVenue(cameraId: Long) = "pick_venue/$cameraId"
+}
+
 /**
  * Real, Live-Send-styled "Cameras" screen — replaces the Dashboard's former "Venues" browsing
  * entry point (see [com.example.climb.navigation.ClubNavHost]'s `club_cameras` route and
@@ -57,6 +68,11 @@ import kotlinx.coroutines.launch
  * the real route-creation flow in [LiveSendClubExploreHost], only this Dashboard entry point's
  * destination changed. Same fixed, non-scrolling page + bounded-internal-scroll-list + own
  * floating bottom bar conventions as the rest of real Club Mode.
+ *
+ * The list <-> venue-picker swap is a real, local nested NavHost (same reasoning as
+ * [LiveSendClubExploreHost]'s own nested NavHost) rather than local composable state, so it
+ * inherits Navigation Compose's real default transition automatically instead of approximating
+ * one with a hand-picked crossfade.
  */
 @Composable
 fun LiveSendCamerasScreen(
@@ -75,95 +91,105 @@ fun LiveSendCamerasScreen(
     val venues by clubRepository.observeVenuesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
 
-    var pickingVenueForCameraId by remember { mutableStateOf<Long?>(null) }
-    var newCameraName by remember { mutableStateOf("") }
-    var addErrorMessage by remember { mutableStateOf<String?>(null) }
-    var saving by remember { mutableStateOf(false) }
-
-    val pickingCamera = cameras.find { it.id == pickingVenueForCameraId }
+    val navController = rememberNavController()
 
     Box(modifier = Modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
-        if (pickingCamera != null) {
-            VenuePicker(
-                camera = pickingCamera,
-                venues = venues,
-                onGoHome = onGoHome,
-                onPick = { venueId ->
-                    scope.launch { clubRepository.assignCameraToVenue(organization.id, currentUid, pickingCamera.id, venueId) }
-                    pickingVenueForCameraId = null
-                },
-                onCancel = { pickingVenueForCameraId = null },
-            )
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 20.dp)
-                    .padding(bottom = 90.dp),
-            ) {
-                LiveSendPageHeader(title = "Cameras", onGoHome = onGoHome)
-                Spacer(Modifier.height(20.dp))
+        NavHost(navController = navController, startDestination = CamerasRoutes.LIST) {
+            composable(CamerasRoutes.LIST) {
+                var newCameraName by remember { mutableStateOf("") }
+                var addErrorMessage by remember { mutableStateOf<String?>(null) }
+                var saving by remember { mutableStateOf(false) }
 
-                LiveSendSectionLabel(text = "Cameras (${cameras.size})")
-                Spacer(Modifier.height(10.dp))
-                if (cameras.isEmpty()) {
-                    Text(text = "No cameras yet — add one below.", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
-                } else {
-                    // Fixed-height + its own scroll (~3 rows) so a growing real camera list
-                    // scrolls in place rather than stretching this fixed page.
-                    Column(
-                        modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        cameras.forEach { camera ->
-                            CameraRow(
-                                camera = camera,
-                                venueName = venues.find { it.id == camera.assignedVenueId }?.name,
-                                onClick = { pickingVenueForCameraId = camera.id },
-                            )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 20.dp)
+                        .padding(bottom = 90.dp),
+                ) {
+                    LiveSendPageHeader(title = "Cameras", onGoHome = onGoHome)
+                    Spacer(Modifier.height(20.dp))
+
+                    LiveSendSectionLabel(text = "Cameras (${cameras.size})")
+                    Spacer(Modifier.height(10.dp))
+                    if (cameras.isEmpty()) {
+                        Text(text = "No cameras yet — add one below.", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
+                    } else {
+                        // Fixed-height + its own scroll (~3 rows) so a growing real camera list
+                        // scrolls in place rather than stretching this fixed page.
+                        Column(
+                            modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            cameras.forEach { camera ->
+                                CameraRow(
+                                    camera = camera,
+                                    venueName = venues.find { it.id == camera.assignedVenueId }?.name,
+                                    onClick = { navController.navigate(CamerasRoutes.pickVenue(camera.id)) },
+                                )
+                            }
                         }
                     }
-                }
-                Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(20.dp))
 
-                LiveSendSectionLabel(text = "Add a camera")
-                Spacer(Modifier.height(10.dp))
-                LiveSendTextField(
-                    value = newCameraName,
-                    onValueChange = { newCameraName = it; addErrorMessage = null },
-                    placeholder = "Camera name",
-                )
-                addErrorMessage?.let { message ->
-                    Text(text = message, color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                    LiveSendSectionLabel(text = "Add a camera")
+                    Spacer(Modifier.height(10.dp))
+                    LiveSendTextField(
+                        value = newCameraName,
+                        onValueChange = { newCameraName = it; addErrorMessage = null },
+                        placeholder = "Camera name",
+                    )
+                    addErrorMessage?.let { message ->
+                        Text(text = message, color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                    }
+                    LiveSendPrimaryButton(
+                        text = "Add Camera",
+                        enabled = newCameraName.isNotBlank() && !saving,
+                        loading = saving,
+                        onClick = {
+                            saving = true
+                            addErrorMessage = null
+                            scope.launch {
+                                val result = clubRepository.createCamera(organization.id, currentUid, newCameraName)
+                                saving = false
+                                result.onSuccess { newCameraName = "" }
+                                result.onFailure { addErrorMessage = it.message ?: "Something went wrong" }
+                            }
+                        },
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
                 }
-                LiveSendPrimaryButton(
-                    text = "Add Camera",
-                    enabled = newCameraName.isNotBlank() && !saving,
-                    loading = saving,
-                    onClick = {
-                        saving = true
-                        addErrorMessage = null
-                        scope.launch {
-                            val result = clubRepository.createCamera(organization.id, currentUid, newCameraName)
-                            saving = false
-                            result.onSuccess { newCameraName = "" }
-                            result.onFailure { addErrorMessage = it.message ?: "Something went wrong" }
-                        }
-                    },
-                    modifier = Modifier.padding(top = 12.dp),
+
+                LiveSendBottomBar(
+                    tabs = listOf(
+                        LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
+                        LiveSendNavTab(Icons.Filled.Campaign, "Broadcast", selected = false, onClick = onNavBroadcast),
+                        LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
+                        LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
+                    ),
+                    modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
 
-            LiveSendBottomBar(
-                tabs = listOf(
-                    LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
-                    LiveSendNavTab(Icons.Filled.Campaign, "Broadcast", selected = false, onClick = onNavBroadcast),
-                    LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
-                    LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
-                ),
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
+            composable(
+                route = CamerasRoutes.PICK_VENUE,
+                arguments = listOf(navArgument("cameraId") { type = NavType.LongType }),
+            ) { backStackEntry ->
+                val cameraId = backStackEntry.arguments?.getLong("cameraId") ?: return@composable
+                val camera = cameras.find { it.id == cameraId }
+                if (camera != null) {
+                    VenuePicker(
+                        camera = camera,
+                        venues = venues,
+                        onGoHome = onGoHome,
+                        onPick = { venueId ->
+                            scope.launch { clubRepository.assignCameraToVenue(organization.id, currentUid, camera.id, venueId) }
+                            navController.popBackStack()
+                        },
+                        onCancel = { navController.popBackStack() },
+                    )
+                }
+            }
         }
     }
 }
@@ -184,8 +210,8 @@ private fun CameraRow(camera: CameraEntity, venueName: String?, onClick: () -> U
 
 /** Real venue picker for one camera — a plain venue name list plus an explicit "Unassign" option,
  * matching [ClubRepository.assignCameraToVenue]'s nullable-clear shape. Shown full-screen (this
- * host's own selection-state pattern, same shape as [LiveSendClubExploreHost]'s add-route flow)
- * rather than a dialog, so it keeps the same fixed, non-scrolling page conventions. */
+ * host's own real nested-NavHost destination, same shape as [LiveSendClubExploreHost]'s add-route
+ * flow) rather than a dialog, so it keeps the same fixed, non-scrolling page conventions. */
 @Composable
 private fun VenuePicker(camera: CameraEntity, venues: List<VenueEntity>, onGoHome: () -> Unit, onPick: (Long?) -> Unit, onCancel: () -> Unit) {
     Column(

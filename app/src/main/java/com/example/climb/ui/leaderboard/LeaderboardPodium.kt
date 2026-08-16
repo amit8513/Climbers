@@ -77,14 +77,14 @@ private fun PodiumEntry(
                     .background(accent)
                     .padding(horizontal = 8.dp, vertical = 2.dp),
             ) {
-                Text(text = "$place", color = ClimbPalette.chalkText, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                Text(text = "$place", color = ClimbPalette.liveSendBg, fontWeight = FontWeight.Black, fontSize = 12.sp)
             }
         }
         Spacer(Modifier.height(14.dp))
-        Text(text = entry.displayName, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Text(text = entry.displayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         Text(text = primaryValue(category, entry), color = accent, fontWeight = FontWeight.Black, fontSize = 20.sp)
         podiumSupportingLines(category, entry).forEach { line ->
-            Text(text = line, color = ClimbPalette.textSecondary, fontSize = 10.sp)
+            Text(text = line, color = ClimbPalette.liveSendTextMuted, fontSize = 10.sp)
         }
     }
 }

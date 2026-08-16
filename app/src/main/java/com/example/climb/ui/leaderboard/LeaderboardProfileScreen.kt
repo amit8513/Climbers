@@ -22,7 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.climb.leaderboard.model.LeaderboardCategory
 import com.example.climb.leaderboard.model.LeaderboardEntry
-import com.example.climb.ui.components.SectionCard
+import com.example.climb.ui.livesend.components.LiveSendCard
+import com.example.climb.ui.livesend.components.LiveSendSectionLabel
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 
@@ -40,11 +41,11 @@ fun LeaderboardProfileScreen(
     onOpenFriendClimbs: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxSize().wallTexture()) {
+    Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Text(
                 text = "← Back",
-                color = ClimbPalette.textSecondary,
+                color = ClimbPalette.liveSendTextMuted,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 20.dp, bottom = 16.dp).clickable(onClick = onBack),
@@ -53,35 +54,43 @@ fun LeaderboardProfileScreen(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 InitialsAvatar(entry.displayName, 64.dp)
                 Column {
-                    Text(text = entry.displayName, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 20.sp)
-                    Text(text = "Rank #${entry.rank} · ${category.tabTitle}", color = ClimbPalette.textSecondary, fontSize = 13.sp)
+                    Text(text = entry.displayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Black, fontSize = 20.sp)
+                    Text(text = "Rank #${entry.rank} · ${category.tabTitle}", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
                 }
             }
 
             Spacer(Modifier.height(18.dp))
 
-            SectionCard(title = "This week") {
-                Text(text = primaryValue(category, entry), color = ClimbPalette.chalk, fontWeight = FontWeight.Black, fontSize = 26.sp)
-                rowSupportingLines(category, entry).forEach { line ->
-                    Text(text = line, color = ClimbPalette.textSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+            Column {
+                LiveSendSectionLabel(text = "This week")
+                Spacer(Modifier.height(10.dp))
+                LiveSendCard {
+                    Text(text = primaryValue(category, entry), color = ClimbPalette.liveSendAccent, fontWeight = FontWeight.Black, fontSize = 26.sp)
+                    rowSupportingLines(category, entry).forEach { line ->
+                        Text(text = line, color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    RankMovementChip(entry)
                 }
-                Spacer(Modifier.height(8.dp))
-                RankMovementChip(entry)
             }
 
             Spacer(Modifier.height(14.dp))
 
-            SectionCard(title = "Shared videos") {
-                when {
-                    entry.hasViewableVideo -> Text(
-                        text = "${entry.sharedVideoCount} viewable shared video${if (entry.sharedVideoCount == 1) "" else "s"} this week — tap to view →",
-                        color = ClimbPalette.chalk,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        modifier = Modifier.clickable(onClick = onOpenFriendClimbs),
-                    )
-                    entry.hasPrivateVideo -> Text(text = "🔒 This climber's videos are private.", color = ClimbPalette.textMuted, fontSize = 13.sp)
-                    else -> Text(text = "No shared videos this week.", color = ClimbPalette.textMuted, fontSize = 13.sp)
+            Column {
+                LiveSendSectionLabel(text = "Shared videos")
+                Spacer(Modifier.height(10.dp))
+                LiveSendCard {
+                    when {
+                        entry.hasViewableVideo -> Text(
+                            text = "${entry.sharedVideoCount} viewable shared video${if (entry.sharedVideoCount == 1) "" else "s"} this week — tap to view →",
+                            color = ClimbPalette.liveSendAccent,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            modifier = Modifier.clickable(onClick = onOpenFriendClimbs),
+                        )
+                        entry.hasPrivateVideo -> Text(text = "🔒 This climber's videos are private.", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
+                        else -> Text(text = "No shared videos this week.", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
+                    }
                 }
             }
 

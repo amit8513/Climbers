@@ -39,7 +39,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.data.ClimbRepository
-import com.example.climb.ui.components.SectionCard
+import com.example.climb.ui.livesend.components.LiveSendCard
+import com.example.climb.ui.livesend.components.LiveSendProgressBar
+import com.example.climb.ui.livesend.components.LiveSendSectionLabel
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 import java.util.Locale
@@ -56,6 +58,14 @@ private val heroHoldShape = RoundedCornerShape(
     bottomStart = 19.dp,
 )
 
+/**
+ * Styled to match Club Mode's fixed dark/neon-lime "Live Send" look (per user request, applied
+ * app-wide rather than only inside Club Mode) — every color here is a fixed `ClimbPalette.liveSend*`
+ * token rather than the theme-reactive ones, so this screen no longer shifts with the user's
+ * selected app theme (DarkStone/NightAscent/Volcanic). All real data/computations below
+ * (headline stats, grade pyramid, send rates, progression, consistency grid) are unchanged from
+ * before this restyle — only colors, card shells, and typography changed.
+ */
 @Composable
 fun ProgressScreen(repository: ClimbRepository, currentUid: String, modifier: Modifier = Modifier) {
     val climbs by repository.observeAll(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -68,7 +78,7 @@ fun ProgressScreen(repository: ClimbRepository, currentUid: String, modifier: Mo
     val progression = remember(climbs) { gradeProgression(climbs, now) }
     val heatmap = remember(climbs) { consistencyGrid(climbs, now) }
 
-    Box(modifier = modifier.fillMaxSize().wallTexture()) {
+    Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -84,14 +94,14 @@ fun ProgressScreen(repository: ClimbRepository, currentUid: String, modifier: Mo
             ) {
                 Text(
                     text = "PROGRESS",
-                    color = ClimbPalette.textPrimary,
+                    color = ClimbPalette.liveSendTextPrimary,
                     fontWeight = FontWeight.Black,
                     fontSize = 22.sp,
                     letterSpacing = 1.sp,
                 )
                 Text(
                     text = "${headline.sessions} sessions",
-                    color = ClimbPalette.textMuted,
+                    color = ClimbPalette.liveSendTextMuted,
                     fontSize = 12.sp,
                     fontFamily = FontFamily.Monospace,
                 )
@@ -103,7 +113,7 @@ fun ProgressScreen(repository: ClimbRepository, currentUid: String, modifier: Mo
 
             Spacer(Modifier.height(16.dp))
 
-            SectionCard(title = "Hardest send by week") {
+            LiveSendSectionCard(title = "Hardest send by week") {
                 if (progression.all { it == null }) {
                     EmptyHint("Your weekly high point will chart here.")
                 } else {
@@ -113,7 +123,7 @@ fun ProgressScreen(repository: ClimbRepository, currentUid: String, modifier: Mo
 
             Spacer(Modifier.height(16.dp))
 
-            SectionCard(title = "Send rate by grade") {
+            LiveSendSectionCard(title = "Send rate by grade") {
                 if (sendRates.isEmpty()) {
                     EmptyHint("Log a graded climb to see which grades you're consolidating.")
                 } else {
@@ -124,7 +134,7 @@ fun ProgressScreen(repository: ClimbRepository, currentUid: String, modifier: Mo
 
             Spacer(Modifier.height(16.dp))
 
-            SectionCard(title = "Grade pyramid · last 90 days") {
+            LiveSendSectionCard(title = "Grade pyramid · last 90 days") {
                 if (pyramid.isEmpty()) {
                     EmptyHint("Send a graded climb to start your pyramid.")
                 } else {
@@ -144,12 +154,22 @@ fun ProgressScreen(repository: ClimbRepository, currentUid: String, modifier: Mo
 
             Spacer(Modifier.height(16.dp))
 
-            SectionCard(title = "Consistency · last $WEEKS_IN_HEATMAP weeks") {
+            LiveSendSectionCard(title = "Consistency · last $WEEKS_IN_HEATMAP weeks") {
                 ConsistencyHeatmap(heatmap)
             }
 
             Spacer(Modifier.height(24.dp))
         }
+    }
+}
+
+/** [LiveSendCard] plus the small uppercase [LiveSendSectionLabel] header every card here needs —
+ * same shell every card on this screen shares, factored out once rather than repeated five times. */
+@Composable
+private fun LiveSendSectionCard(title: String, content: @Composable () -> Unit) {
+    LiveSendCard(cornerRadius = 12, padding = 16) {
+        LiveSendSectionLabel(text = title, modifier = Modifier.padding(bottom = 12.dp))
+        content()
     }
 }
 
@@ -160,15 +180,7 @@ fun ProgressScreen(repository: ClimbRepository, currentUid: String, modifier: Mo
  */
 @Composable
 private fun HeroCard(stats: HeadlineStats, averageGrade: Double?, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(12.dp)
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(shape)
-            .background(ClimbPalette.surface)
-            .border(1.dp, ClimbPalette.border, shape)
-            .padding(16.dp),
-    ) {
+    LiveSendCard(modifier = modifier, cornerRadius = 12, padding = 16) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
@@ -177,14 +189,14 @@ private fun HeroCard(stats: HeadlineStats, averageGrade: Double?, modifier: Modi
                 modifier = Modifier
                     .size(width = 64.dp, height = 60.dp)
                     .clip(heroHoldShape)
-                    .background(ClimbPalette.chalk)
-                    .background(Brush.radialGradient(colors = listOf(ClimbPalette.holdSheen, Color.Transparent)))
-                    .border(1.dp, ClimbPalette.borderStrong, heroHoldShape),
+                    .background(ClimbPalette.liveSendAccent)
+                    .background(Brush.radialGradient(colors = listOf(Color.White.copy(alpha = 0.22f), Color.Transparent)))
+                    .border(1.dp, ClimbPalette.liveSendBorder, heroHoldShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = stats.peakGrade?.let { "V$it" } ?: "—",
-                    color = ClimbPalette.chalkText,
+                    color = ClimbPalette.liveSendAccentText,
                     fontWeight = FontWeight.Black,
                     fontSize = 24.sp,
                 )
@@ -192,7 +204,7 @@ private fun HeroCard(stats: HeadlineStats, averageGrade: Double?, modifier: Modi
             Column {
                 Text(
                     text = "PEAK GRADE",
-                    color = ClimbPalette.textMuted,
+                    color = ClimbPalette.liveSendTextMuted,
                     fontSize = 11.sp,
                     letterSpacing = 1.sp,
                 )
@@ -203,14 +215,14 @@ private fun HeroCard(stats: HeadlineStats, averageGrade: Double?, modifier: Modi
                     } else {
                         "Hardest grade you've sent."
                     },
-                    color = ClimbPalette.textSecondary,
+                    color = ClimbPalette.liveSendTextMuted,
                     fontSize = 13.sp,
                 )
             }
         }
 
         Spacer(Modifier.height(16.dp))
-        HorizontalDivider(color = ClimbPalette.border)
+        HorizontalDivider(color = ClimbPalette.liveSendBorder)
         Spacer(Modifier.height(14.dp))
 
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -238,14 +250,14 @@ private fun HeroStat(value: String, label: String, modifier: Modifier = Modifier
     Column(modifier = modifier) {
         Text(
             text = value,
-            color = ClimbPalette.textPrimary,
+            color = ClimbPalette.liveSendTextPrimary,
             fontWeight = FontWeight.Black,
             fontSize = 20.sp,
         )
         Spacer(Modifier.height(3.dp))
         Text(
             text = label.uppercase(Locale.US),
-            color = ClimbPalette.textSecondary,
+            color = ClimbPalette.liveSendTextMuted,
             fontSize = 11.sp,
             letterSpacing = 0.6.sp,
         )
@@ -254,14 +266,14 @@ private fun HeroStat(value: String, label: String, modifier: Modifier = Modifier
 
 @Composable
 private fun EmptyHint(text: String) {
-    Text(text = text, color = ClimbPalette.textSecondary, fontSize = 13.sp)
+    Text(text = text, color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
 }
 
 @Composable
 private fun Caption(text: String) {
     Text(
         text = text,
-        color = ClimbPalette.textMuted,
+        color = ClimbPalette.liveSendTextMuted,
         fontSize = 11.sp,
         modifier = Modifier.padding(top = 6.dp),
     )
@@ -275,30 +287,22 @@ private fun SendRateRow(rate: GradeSendRate) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         GradeLabel("V${rate.grade}")
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(16.dp)
-                .clip(RoundedCornerShape(50))
-                .background(ClimbPalette.border),
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(fraction = rate.percent / 100f)
-                    .background(sendRateColor(rate.percent), RoundedCornerShape(50)),
-            )
-        }
+        LiveSendProgressBar(
+            progress = rate.percent / 100f,
+            fillColor = sendRateColor(rate.percent),
+            height = 16,
+            modifier = Modifier.weight(1f),
+        )
         Text(
             text = "${rate.percent}%",
-            color = ClimbPalette.textPrimary,
+            color = ClimbPalette.liveSendTextPrimary,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
             modifier = Modifier.width(36.dp),
         )
         Text(
             text = "${rate.sends}/${rate.attempts}",
-            color = ClimbPalette.textMuted,
+            color = ClimbPalette.liveSendTextMuted,
             fontFamily = FontFamily.Monospace,
             fontSize = 11.sp,
             modifier = Modifier.width(34.dp),
@@ -307,7 +311,9 @@ private fun SendRateRow(rate: GradeSendRate) {
 }
 
 // Green where you're consolidating, amber mid, rust where it's still a project — so the
-// grade you're working on reads at a glance instead of needing the numbers.
+// grade you're working on reads at a glance instead of needing the numbers. These three stay the
+// theme-independent status colors they already were (sent/project/fell are fixed, never
+// remapped between themes, same as the rest of this fixed-palette restyle).
 @Composable
 @ReadOnlyComposable
 private fun sendRateColor(percent: Int) = when {
@@ -326,9 +332,9 @@ private fun ProgressionChart(progression: List<Int?>) {
     val sent = progression.filterNotNull()
     val topGrade = sent.maxOrNull() ?: 0
     val bottomGrade = sent.minOrNull() ?: 0
-    val chalk = ClimbPalette.chalk
-    val track = ClimbPalette.border
-    val surface = ClimbPalette.surface
+    val chalk = ClimbPalette.liveSendAccent
+    val track = ClimbPalette.liveSendBorder
+    val surface = ClimbPalette.liveSendSurface
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(
@@ -405,7 +411,7 @@ private fun ProgressionChart(progression: List<Int?>) {
 private fun AxisLabel(text: String) {
     Text(
         text = text,
-        color = ClimbPalette.textMuted,
+        color = ClimbPalette.liveSendTextMuted,
         fontFamily = FontFamily.Monospace,
         fontSize = 11.sp,
     )
@@ -424,7 +430,7 @@ private fun PyramidRow(grade: Int, count: Int, maxCount: Int, isPeak: Boolean) {
     ) {
         Text(
             text = "V$grade",
-            color = if (isPeak) ClimbPalette.textPrimary else ClimbPalette.textSecondary,
+            color = if (isPeak) ClimbPalette.liveSendTextPrimary else ClimbPalette.liveSendTextMuted,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
             modifier = Modifier.width(26.dp),
@@ -435,12 +441,12 @@ private fun PyramidRow(grade: Int, count: Int, maxCount: Int, isPeak: Boolean) {
                     .fillMaxWidth(fraction = count.toFloat() / maxCount)
                     .height(16.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(if (isPeak) ClimbPalette.chalk else ClimbPalette.chalk.copy(alpha = 0.62f)),
+                    .background(if (isPeak) ClimbPalette.liveSendAccent else ClimbPalette.liveSendAccent.copy(alpha = 0.62f)),
             )
         }
         Text(
             text = count.toString(),
-            color = ClimbPalette.textMuted,
+            color = ClimbPalette.liveSendTextMuted,
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
             modifier = Modifier.width(18.dp),
@@ -452,7 +458,7 @@ private fun PyramidRow(grade: Int, count: Int, maxCount: Int, isPeak: Boolean) {
 private fun GradeLabel(text: String) {
     Text(
         text = text,
-        color = ClimbPalette.textSecondary,
+        color = ClimbPalette.liveSendTextMuted,
         fontFamily = FontFamily.Monospace,
         fontSize = 12.sp,
         modifier = Modifier.width(26.dp),
@@ -473,7 +479,7 @@ private fun ConsistencyHeatmap(grid: List<List<Int>>) {
                     Box(modifier = Modifier.height(14.dp), contentAlignment = Alignment.CenterStart) {
                         Text(
                             text = label,
-                            color = ClimbPalette.textMuted,
+                            color = ClimbPalette.liveSendTextMuted,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 11.sp,
                         )
@@ -498,7 +504,7 @@ private fun ConsistencyHeatmap(grid: List<List<Int>>) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text("Less", color = ClimbPalette.textMuted, fontSize = 11.sp)
+            Text("Less", color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp)
             for (level in 0..4) {
                 Box(
                     modifier = Modifier
@@ -507,7 +513,7 @@ private fun ConsistencyHeatmap(grid: List<List<Int>>) {
                         .background(heatColor(level)),
                 )
             }
-            Text("More", color = ClimbPalette.textMuted, fontSize = 11.sp)
+            Text("More", color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp)
         }
     }
 }
@@ -515,9 +521,9 @@ private fun ConsistencyHeatmap(grid: List<List<Int>>) {
 @Composable
 @ReadOnlyComposable
 private fun heatColor(count: Int) = when {
-    count <= 0 -> ClimbPalette.border
-    count == 1 -> ClimbPalette.textPrimary.copy(alpha = 0.14f)
-    count == 2 -> ClimbPalette.textPrimary.copy(alpha = 0.32f)
-    count == 3 -> ClimbPalette.textPrimary.copy(alpha = 0.55f)
-    else -> ClimbPalette.textPrimary.copy(alpha = 0.85f)
+    count <= 0 -> ClimbPalette.liveSendBorder
+    count == 1 -> ClimbPalette.liveSendTextPrimary.copy(alpha = 0.14f)
+    count == 2 -> ClimbPalette.liveSendTextPrimary.copy(alpha = 0.32f)
+    count == 3 -> ClimbPalette.liveSendTextPrimary.copy(alpha = 0.55f)
+    else -> ClimbPalette.liveSendTextPrimary.copy(alpha = 0.85f)
 }

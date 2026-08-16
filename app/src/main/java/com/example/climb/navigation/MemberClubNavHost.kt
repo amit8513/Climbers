@@ -33,6 +33,7 @@ import com.example.climb.ui.livesend.real.LiveSendBroadcastScreen
 import com.example.climb.ui.livesend.real.LiveSendClubExploreHost
 import com.example.climb.ui.nav.ClubBarTab
 import com.example.climb.ui.nav.ClubBottomBar
+import com.example.climb.ui.progress.ProgressScreen
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 
@@ -42,6 +43,9 @@ private object MemberClubRoutes {
     const val UPDATES = "member_club_updates"
     const val VIDEOS = "member_club_videos"
     const val LEADERBOARD = "member_club_leaderboard"
+    // Same real push/pop destination pattern as the staff shell's Home/Progress previews — the
+    // Routes tab's "Progress" bottom-bar tab had no real destination before.
+    const val PROGRESS_PREVIEW = "member_club_progress_preview"
 }
 
 // ROUTES and UPDATES each render their own full-screen "Live Send" chrome (their own floating
@@ -120,8 +124,12 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, organizationI
                     organization = org,
                     onClubTab = { navigateToMemberClubTab(navController, MemberClubRoutes.OVERVIEW) },
                     onGoHome = onBack,
+                    onProgressTab = { navController.navigate(MemberClubRoutes.PROGRESS_PREVIEW) },
                     onRanksTab = { navigateToMemberClubTab(navController, MemberClubRoutes.LEADERBOARD) },
                 )
+            }
+            composable(MemberClubRoutes.PROGRESS_PREVIEW) {
+                ProgressScreen(repository = container.climbRepository, currentUid = currentUid)
             }
             composable(MemberClubRoutes.UPDATES) {
                 LiveSendBroadcastScreen(

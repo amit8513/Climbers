@@ -21,11 +21,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,7 +40,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -52,7 +50,10 @@ import com.example.climb.data.settings.SettingsStore
 import com.example.climb.data.social.AuthRepository
 import com.example.climb.data.social.SocialRepository
 import com.example.climb.data.social.UserProfile
-import com.example.climb.ui.components.SectionCard
+import com.example.climb.ui.livesend.components.LiveSendCard
+import com.example.climb.ui.livesend.components.LiveSendPrimaryButton
+import com.example.climb.ui.livesend.components.LiveSendSectionLabel
+import com.example.climb.ui.livesend.components.LiveSendTextField
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.palette
 import com.example.climb.ui.theme.wallTexture
@@ -75,44 +76,54 @@ fun SettingsScreen(
     onEnterClubMode: (OrganizationEntity) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    Box(modifier = modifier.fillMaxSize().wallTexture()) {
+    Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Text(
                 text = "← Back",
-                color = ClimbPalette.textSecondary,
+                color = ClimbPalette.liveSendTextMuted,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 20.dp, bottom = 8.dp).clickable(onClick = onBack),
             )
             Text(
                 text = "Settings",
-                color = ClimbPalette.textPrimary,
+                color = ClimbPalette.liveSendTextPrimary,
                 fontWeight = FontWeight.Black,
                 fontSize = 22.sp,
                 modifier = Modifier.padding(bottom = 20.dp),
             )
 
-            SectionCard(title = "Profile") {
-                ProfileSection(uid = uid, profile = profile, socialRepository = socialRepository)
-            }
-            Spacer(Modifier.height(16.dp))
-
-            SectionCard(title = "Password") {
-                PasswordSection(authRepository = authRepository)
-            }
-            Spacer(Modifier.height(16.dp))
-
-            SectionCard(title = "Clubs") {
+            LiveSendCard {
                 Column {
+                    LiveSendSectionLabel(text = "Profile")
+                    Spacer(Modifier.height(10.dp))
+                    ProfileSection(uid = uid, profile = profile, socialRepository = socialRepository)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+
+            LiveSendCard {
+                Column {
+                    LiveSendSectionLabel(text = "Password")
+                    Spacer(Modifier.height(10.dp))
+                    PasswordSection(authRepository = authRepository)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+
+            LiveSendCard {
+                Column {
+                    LiveSendSectionLabel(text = "Clubs")
+                    Spacer(Modifier.height(10.dp))
                     Text(
                         text = "Follow a gym to select routes for your climbs and get evidence-based analysis enhanced with route context.",
-                        color = ClimbPalette.textSecondary,
+                        color = ClimbPalette.liveSendTextMuted,
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
                     )
                     Text(
                         text = "Open Clubs →",
-                        color = ClimbPalette.chalk,
+                        color = ClimbPalette.liveSendAccent,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(top = 10.dp).clickable(onClick = onOpenClubs),
@@ -122,11 +133,13 @@ fun SettingsScreen(
             Spacer(Modifier.height(16.dp))
 
             if (staffOrganizations.isNotEmpty()) {
-                SectionCard(title = "Club Mode") {
+                LiveSendCard {
                     Column {
+                        LiveSendSectionLabel(text = "Club Mode")
+                        Spacer(Modifier.height(10.dp))
                         Text(
                             text = "You help run these clubs. Switch into Club Mode to manage routes, venues, and members.",
-                            color = ClimbPalette.textSecondary,
+                            color = ClimbPalette.liveSendTextMuted,
                             fontSize = 13.sp,
                             lineHeight = 18.sp,
                         )
@@ -135,7 +148,7 @@ fun SettingsScreen(
                             if (index > 0) Spacer(Modifier.height(6.dp))
                             Text(
                                 text = "Enter as \"${organization.name}\" →",
-                                color = ClimbPalette.chalk,
+                                color = ClimbPalette.liveSendAccent,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp,
                                 modifier = Modifier.clickable { onEnterClubMode(organization) },
@@ -146,27 +159,37 @@ fun SettingsScreen(
                 Spacer(Modifier.height(16.dp))
             }
 
-            SectionCard(title = "Appearance") {
-                AppearanceSection(settingsStore = settingsStore)
-            }
-            Spacer(Modifier.height(16.dp))
-
-            SectionCard(title = "Home background") {
-                HomeBackgroundSection(settingsStore = settingsStore)
-            }
-            Spacer(Modifier.height(16.dp))
-
-            SectionCard(title = "UI Concepts") {
+            LiveSendCard {
                 Column {
+                    LiveSendSectionLabel(text = "Appearance")
+                    Spacer(Modifier.height(10.dp))
+                    AppearanceSection(settingsStore = settingsStore)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+
+            LiveSendCard {
+                Column {
+                    LiveSendSectionLabel(text = "Home background")
+                    Spacer(Modifier.height(10.dp))
+                    HomeBackgroundSection(settingsStore = settingsStore)
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+
+            LiveSendCard {
+                Column {
+                    LiveSendSectionLabel(text = "UI Concepts")
+                    Spacer(Modifier.height(10.dp))
                     Text(
                         text = "Design exploration: \"Live Send\" — an energetic sport-style alternative UI with its own auth flow and gym-mode dashboard.",
-                        color = ClimbPalette.textSecondary,
+                        color = ClimbPalette.liveSendTextMuted,
                         fontSize = 13.sp,
                         lineHeight = 18.sp,
                     )
                     Text(
                         text = "Preview: Live Send →",
-                        color = ClimbPalette.chalk,
+                        color = ClimbPalette.liveSendAccent,
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(top = 10.dp).clickable(onClick = onOpenLiveSendPreview),
@@ -175,14 +198,18 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(16.dp))
 
-            SectionCard(title = "Account") {
-                Text(
-                    text = "Sign out",
-                    color = ClimbPalette.fell,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.clickable { authRepository.signOut() },
-                )
+            LiveSendCard {
+                Column {
+                    LiveSendSectionLabel(text = "Account")
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "Sign out",
+                        color = ClimbPalette.liveSendCta,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable { authRepository.signOut() },
+                    )
+                }
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -213,22 +240,21 @@ private fun ProfileSection(uid: String, profile: UserProfile, socialRepository: 
         )
         Text(
             text = "Tap to change photo",
-            color = ClimbPalette.textMuted,
+            color = ClimbPalette.liveSendTextMuted,
             fontSize = 12.sp,
             modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
         )
     }
 
-    OutlinedTextField(
+    LiveSendTextField(
         value = username,
         onValueChange = { username = it; errorMessage = null; successMessage = null },
-        label = { Text("Username") },
-        singleLine = true,
+        placeholder = "Username",
         modifier = Modifier.fillMaxWidth(),
     )
 
     if (errorMessage != null) {
-        Text(text = errorMessage.orEmpty(), color = ClimbPalette.fell, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+        Text(text = errorMessage.orEmpty(), color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     }
     if (successMessage != null) {
         Text(text = successMessage.orEmpty(), color = ClimbPalette.sent, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
@@ -236,8 +262,10 @@ private fun ProfileSection(uid: String, profile: UserProfile, socialRepository: 
 
     val usernameChanged = username != profile.username
     val photoChanged = selectedPhotoUri != null
-    Button(
+    LiveSendPrimaryButton(
+        text = "Save changes",
         enabled = !loading && (usernameChanged || photoChanged) && usernamePattern.matches(username),
+        loading = loading,
         onClick = {
             loading = true
             errorMessage = null
@@ -273,13 +301,7 @@ private fun ProfileSection(uid: String, profile: UserProfile, socialRepository: 
             }
         },
         modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-    ) {
-        if (loading) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-        } else {
-            Text("Save changes")
-        }
-    }
+    )
 }
 
 @Composable
@@ -289,13 +311,13 @@ private fun EditableAvatar(photoUri: Uri?, photoUrl: String?, name: String, onCl
         modifier = Modifier
             .size(88.dp)
             .clip(CircleShape)
-            .background(ClimbPalette.surfaceRaised)
-            .border(1.dp, ClimbPalette.border, CircleShape)
+            .background(ClimbPalette.liveSendSurfaceRaised)
+            .border(1.dp, ClimbPalette.liveSendBorder, CircleShape)
             .clickable(onClick = onClick)
             .semantics { contentDescription = "Change profile photo" },
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = letter, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 32.sp)
+        Text(text = letter, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Black, fontSize = 32.sp)
         val model = photoUri ?: photoUrl?.takeIf { it.isNotBlank() }
         if (model != null) {
             AsyncImage(
@@ -313,7 +335,7 @@ private fun PasswordSection(authRepository: AuthRepository) {
     if (!authRepository.hasPasswordProvider) {
         Text(
             text = "Your account signs in with Google, so there's no password to change here.",
-            color = ClimbPalette.textSecondary,
+            color = ClimbPalette.liveSendTextMuted,
             fontSize = 13.sp,
             lineHeight = 18.sp,
         )
@@ -328,45 +350,44 @@ private fun PasswordSection(authRepository: AuthRepository) {
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var successMessage by remember { mutableStateOf<String?>(null) }
 
-    OutlinedTextField(
+    LiveSendTextField(
         value = currentPassword,
         onValueChange = { currentPassword = it; errorMessage = null; successMessage = null },
-        label = { Text("Current password") },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
+        placeholder = "Current password",
+        isPassword = true,
         modifier = Modifier.fillMaxWidth(),
     )
     Spacer(Modifier.height(10.dp))
-    OutlinedTextField(
+    LiveSendTextField(
         value = newPassword,
         onValueChange = { newPassword = it; errorMessage = null; successMessage = null },
-        label = { Text("New password") },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
+        placeholder = "New password",
+        isPassword = true,
         modifier = Modifier.fillMaxWidth(),
     )
     Spacer(Modifier.height(10.dp))
-    OutlinedTextField(
+    LiveSendTextField(
         value = confirmPassword,
         onValueChange = { confirmPassword = it; errorMessage = null; successMessage = null },
-        label = { Text("Confirm new password") },
-        singleLine = true,
-        visualTransformation = PasswordVisualTransformation(),
+        placeholder = "Confirm new password",
+        isPassword = true,
         modifier = Modifier.fillMaxWidth(),
     )
 
     if (newPassword.isNotEmpty() && newPassword.length < 6) {
-        Text(text = "New password must be at least 6 characters", color = ClimbPalette.fell, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+        Text(text = "New password must be at least 6 characters", color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     } else if (confirmPassword.isNotEmpty() && newPassword != confirmPassword) {
-        Text(text = "Passwords don't match", color = ClimbPalette.fell, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+        Text(text = "Passwords don't match", color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     } else if (errorMessage != null) {
-        Text(text = errorMessage.orEmpty(), color = ClimbPalette.fell, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+        Text(text = errorMessage.orEmpty(), color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     } else if (successMessage != null) {
         Text(text = successMessage.orEmpty(), color = ClimbPalette.sent, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     }
 
-    Button(
+    LiveSendPrimaryButton(
+        text = "Update password",
         enabled = !loading && currentPassword.isNotBlank() && newPassword.length >= 6 && newPassword == confirmPassword,
+        loading = loading,
         onClick = {
             loading = true
             errorMessage = null
@@ -384,18 +405,12 @@ private fun PasswordSection(authRepository: AuthRepository) {
             }
         },
         modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-    ) {
-        if (loading) {
-            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-        } else {
-            Text("Update password")
-        }
-    }
+    )
 }
 
 @Composable
 private fun AppearanceSection(settingsStore: SettingsStore) {
-    Text(text = "Theme", color = ClimbPalette.textMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
+    Text(text = "Theme", color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
     Spacer(Modifier.height(10.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         ClimbThemeOption.entries.forEach { option ->
@@ -417,11 +432,11 @@ private fun HomeBackgroundSection(settingsStore: SettingsStore) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                Text(text = "Video montage", color = ClimbPalette.textPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                Text(text = "Video montage", color = ClimbPalette.liveSendTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = "Cycle through your own climb videos behind the Home screen. Turn off to use the plain background instead.",
-                    color = ClimbPalette.textSecondary,
+                    color = ClimbPalette.liveSendTextMuted,
                     fontSize = 12.sp,
                     lineHeight = 16.sp,
                 )
@@ -429,12 +444,19 @@ private fun HomeBackgroundSection(settingsStore: SettingsStore) {
             Switch(
                 checked = settingsStore.homeVideoBackgroundEnabled,
                 onCheckedChange = { settingsStore.updateHomeVideoBackgroundEnabled(it) },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = ClimbPalette.liveSendAccentText,
+                    checkedTrackColor = ClimbPalette.liveSendAccent,
+                    uncheckedThumbColor = ClimbPalette.liveSendTextMuted,
+                    uncheckedTrackColor = ClimbPalette.liveSendSurfaceRaised,
+                    uncheckedBorderColor = ClimbPalette.liveSendBorder,
+                ),
             )
         }
 
         if (settingsStore.homeVideoBackgroundEnabled) {
             Spacer(Modifier.height(18.dp))
-            Text(text = "Style", color = ClimbPalette.textMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
+            Text(text = "Style", color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
             Spacer(Modifier.height(10.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 HomeVideoMontageStyle.entries.forEach { option ->
@@ -448,12 +470,17 @@ private fun HomeBackgroundSection(settingsStore: SettingsStore) {
 
             Spacer(Modifier.height(18.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(text = "Video visibility", color = ClimbPalette.textMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
-                Text(text = "${(settingsStore.homeVideoOpacity * 100).roundToInt()}%", color = ClimbPalette.textMuted, fontSize = 11.sp)
+                Text(text = "Video visibility", color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
+                Text(text = "${(settingsStore.homeVideoOpacity * 100).roundToInt()}%", color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp)
             }
             Slider(
                 value = settingsStore.homeVideoOpacity,
                 onValueChange = { settingsStore.updateHomeVideoOpacity(it) },
+                colors = SliderDefaults.colors(
+                    thumbColor = ClimbPalette.liveSendAccent,
+                    activeTrackColor = ClimbPalette.liveSendAccent,
+                    inactiveTrackColor = ClimbPalette.liveSendSurfaceRaised,
+                ),
                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Video background visibility" },
             )
         }
@@ -467,16 +494,16 @@ private fun MontageStyleRow(option: HomeVideoMontageStyle, selected: Boolean, on
         modifier = Modifier
             .fillMaxWidth()
             .clip(shape)
-            .background(if (selected) ClimbPalette.surfaceRaised else ClimbPalette.surface)
-            .border(if (selected) 2.dp else 1.dp, if (selected) ClimbPalette.chalk else ClimbPalette.border, shape)
+            .background(if (selected) ClimbPalette.liveSendSurfaceRaised else ClimbPalette.liveSendSurface)
+            .border(if (selected) 2.dp else 1.dp, if (selected) ClimbPalette.liveSendAccent else ClimbPalette.liveSendBorder, shape)
             .clickable(onClick = onClick)
             .semantics { contentDescription = "${option.label}${if (selected) ", selected" else ""}" }
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = option.label, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Medium, fontSize = 13.sp)
-            Text(text = option.description, color = ClimbPalette.textSecondary, fontSize = 11.sp, lineHeight = 15.sp)
+            Text(text = option.label, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+            Text(text = option.description, color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, lineHeight = 15.sp)
         }
         if (selected) {
             Text(text = "✓", color = ClimbPalette.sent, fontWeight = FontWeight.Bold, fontSize = 15.sp)
@@ -497,7 +524,7 @@ private fun ThemeCard(option: ClimbThemeOption, selected: Boolean, onClick: () -
                 .size(width = 72.dp, height = 64.dp)
                 .clip(shape)
                 .background(palette.bg)
-                .border(if (selected) 2.dp else 1.dp, if (selected) ClimbPalette.textPrimary else ClimbPalette.border, shape)
+                .border(if (selected) 2.dp else 1.dp, if (selected) ClimbPalette.liveSendAccent else ClimbPalette.liveSendBorder, shape)
                 .clickable(onClick = onClick)
                 .semantics { contentDescription = "${option.label} theme${if (selected) ", selected" else ""}" },
         ) {
@@ -518,6 +545,6 @@ private fun ThemeCard(option: ClimbThemeOption, selected: Boolean, onClick: () -
             )
         }
         Spacer(Modifier.height(6.dp))
-        Text(text = option.label, color = ClimbPalette.textMuted, fontSize = 11.sp)
+        Text(text = option.label, color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp)
     }
 }

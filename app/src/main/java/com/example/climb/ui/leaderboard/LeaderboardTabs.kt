@@ -36,8 +36,8 @@ fun LeaderboardTabs(selectedCategory: LeaderboardCategory, onSelect: (Leaderboar
             Row(
                 modifier = Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(if (isSelected) ClimbPalette.chalk else ClimbPalette.surface)
-                    .border(1.dp, if (isSelected) ClimbPalette.chalk else ClimbPalette.border, RoundedCornerShape(50))
+                    .background(if (isSelected) ClimbPalette.liveSendAccent else ClimbPalette.liveSendSurface)
+                    .border(1.dp, if (isSelected) ClimbPalette.liveSendAccent else ClimbPalette.liveSendBorder, RoundedCornerShape(50))
                     .clickable(onClick = { onSelect(category) })
                     .widthIn(min = 44.dp)
                     .padding(horizontal = 16.dp, vertical = 10.dp)
@@ -49,7 +49,7 @@ fun LeaderboardTabs(selectedCategory: LeaderboardCategory, onSelect: (Leaderboar
             ) {
                 Text(
                     text = category.tabTitle,
-                    color = if (isSelected) ClimbPalette.chalkText else ClimbPalette.textSecondary,
+                    color = if (isSelected) ClimbPalette.liveSendAccentText else ClimbPalette.liveSendTextMuted,
                     fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                     fontSize = 13.sp,
                 )

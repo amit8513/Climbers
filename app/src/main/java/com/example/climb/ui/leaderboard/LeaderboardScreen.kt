@@ -37,7 +37,8 @@ import com.example.climb.leaderboard.model.LeaderboardEntry
 import com.example.climb.leaderboard.model.LeaderboardResult
 import com.example.climb.leaderboard.period.LeaderboardPeriodProvider
 import com.example.climb.leaderboard.period.PeriodFilter
-import com.example.climb.ui.components.SectionCard
+import com.example.climb.ui.livesend.components.LiveSendCard
+import com.example.climb.ui.livesend.components.LiveSendSectionLabel
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 import kotlinx.coroutines.launch
@@ -97,7 +98,7 @@ fun LeaderboardScreen(
         load(forceRefresh = false)
     }
 
-    Box(modifier = modifier.fillMaxSize().wallTexture()) {
+    Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(modifier = Modifier.fillMaxSize()) {
             LeaderboardHeader(periodFilter = periodFilter, onPeriodSelect = { periodFilter = it })
             LeaderboardTabs(
@@ -142,10 +143,10 @@ private fun LeaderboardHeader(periodFilter: PeriodFilter, onPeriodSelect: (Perio
         verticalAlignment = Alignment.Top,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = "LEADERBOARD", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = 0.5.sp)
+            Text(text = "LEADERBOARD", color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Black, fontSize = 22.sp, letterSpacing = 0.5.sp)
             Text(
                 text = "See how you stack up with your friends.",
-                color = ClimbPalette.textSecondary,
+                color = ClimbPalette.liveSendTextMuted,
                 fontSize = 12.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -183,12 +184,12 @@ private fun LeaderboardContent(
     ) {
         if (result.entries.isNotEmpty()) {
             item {
-                Text(text = category.podiumTitle, color = ClimbPalette.textMuted, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.5.sp)
+                Text(text = category.podiumTitle, color = ClimbPalette.liveSendTextMuted, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = 0.5.sp)
                 LeaderboardPodium(podiumEntries, category, onEntryClick = onOpenEntry)
                 lastUpdatedAt?.let {
                     Text(
                         text = "Updated ${SimpleDateFormat("MMM d, h:mm a", Locale.US).format(Date(it))}",
-                        color = ClimbPalette.textMuted,
+                        color = ClimbPalette.liveSendTextMuted,
                         fontSize = 10.sp,
                         modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
                     )
@@ -211,21 +212,25 @@ private fun LeaderboardContent(
         if (result.unrankedFriends.isNotEmpty()) {
             item {
                 Spacer(Modifier.height(4.dp))
-                SectionCard(title = "Friends without data yet") {
-                    Text(
-                        text = "Their climbs aren't synced to this device yet, so they can't be ranked — this fills in once cross-device sync exists.",
-                        color = ClimbPalette.textSecondary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                    )
+                Column {
+                    LiveSendSectionLabel(text = "Friends without data yet")
                     Spacer(Modifier.height(10.dp))
-                    result.unrankedFriends.forEach { friend ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(text = friend.displayName, color = ClimbPalette.textPrimary, fontSize = 13.sp)
-                            Text(text = friend.eligibilityReason ?: "No data yet", color = ClimbPalette.textMuted, fontSize = 11.sp)
+                    LiveSendCard {
+                        Text(
+                            text = "Their climbs aren't synced to this device yet, so they can't be ranked — this fills in once cross-device sync exists.",
+                            color = ClimbPalette.liveSendTextMuted,
+                            fontSize = 12.sp,
+                            lineHeight = 16.sp,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        result.unrankedFriends.forEach { friend ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(text = friend.displayName, color = ClimbPalette.liveSendTextPrimary, fontSize = 13.sp)
+                                Text(text = friend.eligibilityReason ?: "No data yet", color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp)
+                            }
                         }
                     }
                 }
@@ -234,15 +239,19 @@ private fun LeaderboardContent(
 
         item {
             Spacer(Modifier.height(4.dp))
-            SectionCard(title = "How scoring works") {
-                Text(text = category.scoringExplanation, color = ClimbPalette.textSecondary, fontSize = 12.sp, lineHeight = 17.sp)
+            Column {
+                LiveSendSectionLabel(text = "How scoring works")
+                Spacer(Modifier.height(10.dp))
+                LiveSendCard {
+                    Text(text = category.scoringExplanation, color = ClimbPalette.liveSendTextMuted, fontSize = 12.sp, lineHeight = 17.sp)
+                }
             }
         }
 
         item {
             Text(
                 text = "Leaderboard updates every Monday at 12:00 AM.",
-                color = ClimbPalette.textMuted,
+                color = ClimbPalette.liveSendTextMuted,
                 fontSize = 11.sp,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
             )
@@ -254,7 +263,7 @@ private fun LeaderboardContent(
 private fun LoadingSkeleton() {
     Column(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            CircularProgressIndicator(color = ClimbPalette.chalk, strokeWidth = 2.dp, modifier = Modifier.height(28.dp))
+            CircularProgressIndicator(color = ClimbPalette.liveSendAccent, strokeWidth = 2.dp, modifier = Modifier.height(28.dp))
         }
     }
 }
@@ -266,10 +275,10 @@ private fun EmptyState() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(text = "No rankings yet", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(text = "No rankings yet", color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
         Text(
             text = "Add friends and log some climbs to start this week's leaderboard.",
-            color = ClimbPalette.textSecondary,
+            color = ClimbPalette.liveSendTextMuted,
             fontSize = 13.sp,
             modifier = Modifier.padding(top = 6.dp),
         )
@@ -283,10 +292,10 @@ private fun ErrorState(message: String, onRetry: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text(text = "Couldn't load the leaderboard", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text(text = message, color = ClimbPalette.textSecondary, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp, bottom = 12.dp))
+        Text(text = "Couldn't load the leaderboard", color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(text = message, color = ClimbPalette.liveSendTextMuted, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp, bottom = 12.dp))
         TextButton(onClick = onRetry) {
-            Text("Try again", color = ClimbPalette.chalk, fontWeight = FontWeight.Bold)
+            Text("Try again", color = ClimbPalette.liveSendAccent, fontWeight = FontWeight.Bold)
         }
     }
 }

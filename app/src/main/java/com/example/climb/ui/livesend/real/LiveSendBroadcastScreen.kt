@@ -141,7 +141,16 @@ fun LiveSendBroadcastScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     updates.forEach { update ->
-                        LiveSendActivityRow(ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt)))
+                        LiveSendActivityRow(
+                            activity = ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt)),
+                            onDelete = if (isStaff) {
+                                {
+                                    scope.launch { clubRepository.deleteUpdate(organization.id, currentUid, update) }
+                                }
+                            } else {
+                                null
+                            },
+                        )
                     }
                 }
             }
@@ -193,9 +202,11 @@ internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit) {
 }
 
 /** Same row visual as [com.example.climb.ui.livesend.ClubDashboardScreen]'s private `ActivityRow`
- * — promoted here as an internal helper so Broadcast doesn't duplicate the look. */
+ * — promoted here as an internal helper so Broadcast doesn't duplicate the look. [onDelete] is
+ * staff-only moderation (null hides the affordance entirely — the member-facing call site never
+ * passes one, since members can't delete posts). */
 @Composable
-internal fun LiveSendActivityRow(activity: ActivityItem) {
+internal fun LiveSendActivityRow(activity: ActivityItem, onDelete: (() -> Unit)? = null) {
     val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = Modifier
@@ -209,9 +220,21 @@ internal fun LiveSendActivityRow(activity: ActivityItem) {
     ) {
         LiveSendAvatar(initial = activity.initial, size = 32)
         Spacer(Modifier.width(12.dp))
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(text = activity.text, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             Text(text = activity.timeAgo, color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, modifier = Modifier.padding(top = 2.dp))
+        }
+        if (onDelete != null) {
+            Text(
+                text = "Delete",
+                color = ClimbPalette.liveSendCta,
+                fontWeight = FontWeight.Bold,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .heightIn(min = 44.dp)
+                    .clickable(onClick = onDelete)
+                    .semantics { role = Role.Button; contentDescription = "Delete post" },
+            )
         }
     }
 }
