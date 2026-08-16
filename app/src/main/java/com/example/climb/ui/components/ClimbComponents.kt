@@ -66,12 +66,13 @@ fun HoldBadge(
 }
 
 @Composable
-fun OutcomePill(outcome: ClimbOutcome, modifier: Modifier = Modifier) {
+fun OutcomePill(outcome: ClimbOutcome, modifier: Modifier = Modifier, backgroundColor: Color? = null) {
     val color = when (outcome) {
         ClimbOutcome.SENT -> ClimbPalette.sent
         ClimbOutcome.FELL -> ClimbPalette.fell
         ClimbOutcome.PROJECT -> ClimbPalette.project
     }
+    val shape = RoundedCornerShape(50)
     Text(
         text = outcome.name,
         color = color,
@@ -79,7 +80,8 @@ fun OutcomePill(outcome: ClimbOutcome, modifier: Modifier = Modifier) {
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.5.sp,
         modifier = modifier
-            .border(1.dp, color, RoundedCornerShape(50))
+            .then(if (backgroundColor != null) Modifier.background(backgroundColor, shape) else Modifier)
+            .border(1.dp, color, shape)
             .padding(horizontal = 7.dp, vertical = 2.dp),
     )
 }

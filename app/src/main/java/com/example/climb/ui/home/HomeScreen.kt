@@ -161,7 +161,9 @@ fun HomeScreen(
 
             Spacer(Modifier.height(22.dp))
 
-            LiveSendSectionLabel(text = "Recent Climbs", modifier = Modifier.padding(horizontal = 20.dp))
+            // Matches Sends This Week's own card background — per user request that this label,
+            // the row date text, and the Sent badge all read as one consistent tone with that card.
+            LiveSendSectionLabel(text = "Recent Climbs", modifier = Modifier.padding(horizontal = 20.dp), color = ClimbPalette.liveSendSurface)
 
             Spacer(Modifier.height(10.dp))
 
@@ -259,14 +261,17 @@ private fun ClimbRow(climb: ClimbEntity, now: Long, onClick: () -> Unit) {
                 )
                 Text(
                     text = formatClimbDate(climb.createdAt, now),
-                    color = ClimbPalette.liveSendTextMuted,
+                    color = ClimbPalette.liveSendSurface,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace,
                 )
             }
             Spacer(Modifier.height(3.dp))
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutcomePill(outcome = climb.outcome)
+                OutcomePill(
+                    outcome = climb.outcome,
+                    backgroundColor = if (climb.outcome == ClimbOutcome.SENT) ClimbPalette.liveSendSurface else null,
+                )
                 if (climb.notes.isNotBlank()) {
                     Text(
                         text = climb.notes,

@@ -18,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -76,7 +77,7 @@ fun HomeVideoBackground(
     val videoFiles = remember(climbs) { climbs.mapNotNull { it.videoFileOrNull() }.take(MAX_BACKGROUND_CLIPS) }
     if (videoFiles.isEmpty()) return
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize().clipToBounds()) {
         when (style) {
             HomeVideoMontageStyle.FULL_CLIPS -> FullClipsPlayer(videoFiles, modifier = Modifier.fillMaxSize())
             HomeVideoMontageStyle.SHORT_MONTAGE -> ShortMontagePlayer(videoFiles, modifier = Modifier.fillMaxSize())
@@ -154,7 +155,12 @@ private fun FullClipsPlayer(videoFiles: List<File>, modifier: Modifier = Modifie
 
     AndroidView(
         factory = { ctx -> newBackgroundPlayerView(ctx).apply { player = exoPlayer; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM } },
-        modifier = modifier.alpha(dipOpacity.value),
+        // Hard-clips the TextureView's rendered pixels to this composable's actual bounds — a
+        // TextureView participates in normal view Z-ordering (unlike SurfaceView), but its content
+        // isn't automatically clipped by Compose the way a Composable's own drawing is, so a
+        // resize-mode rescale mid-transition (a new clip loading with a different source aspect
+        // ratio) could otherwise let a sliver of unscrimmed video show past this view's edge.
+        modifier = modifier.clipToBounds().alpha(dipOpacity.value),
     )
 }
 
@@ -244,7 +250,9 @@ private fun ShortMontagePlayer(videoFiles: List<File>, modifier: Modifier = Modi
         }
     }
 
-    Box(modifier = modifier) {
+    // clipToBounds() on each player — see FullClipsPlayer's doc comment on why a TextureView needs
+    // this explicitly even though it (unlike SurfaceView) otherwise respects normal Z-ordering.
+    Box(modifier = modifier.clipToBounds()) {
         AndroidView(
             factory = { ctx -> newBackgroundPlayerView(ctx).apply { player = playerA; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM } },
             modifier = Modifier.fillMaxSize().alpha(alphaA.value),

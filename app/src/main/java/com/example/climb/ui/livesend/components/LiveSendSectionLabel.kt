@@ -3,6 +3,7 @@ package com.example.climb.ui.livesend.components
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import com.example.climb.ui.theme.ClimbPalette
@@ -22,10 +23,11 @@ fun LiveSendSectionLabel(
     modifier: Modifier = Modifier,
     fontSize: Int = 12,
     forceUppercase: Boolean = true,
+    color: Color = ClimbPalette.liveSendTextMuted,
 ) {
     Text(
         text = if (forceUppercase) text.uppercase() else text,
-        color = ClimbPalette.liveSendTextMuted,
+        color = color,
         fontWeight = FontWeight.Bold,
         fontSize = fontSize.sp,
         letterSpacing = 1.sp,
