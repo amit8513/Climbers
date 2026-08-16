@@ -233,12 +233,12 @@ private fun NormalNavHost(
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
     Scaffold(
-        // LIVE_SEND_PREVIEW and CLUB_MEMBER both host entirely liveSend-styled full-bleed screens
-        // (their own fixed dark/neon-lime palette, not the theme-reactive one) — matching this
-        // Scaffold's containerColor to whichever palette the current route actually shows keeps a
-        // theme-colored background from peeking through as a mismatched sliver behind the system
-        // bars while those routes are on screen.
-        containerColor = if (currentRoute == Routes.LIVE_SEND_PREVIEW || currentRoute == Routes.CLUB_MEMBER) {
+        // LIVE_SEND_PREVIEW, CLUBS, and CLUB_MEMBER all host entirely liveSend-styled full-bleed
+        // screens (their own fixed dark/neon-lime palette, not the theme-reactive one) — matching
+        // this Scaffold's containerColor to whichever palette the current route actually shows
+        // keeps a theme-colored background from peeking through as a mismatched sliver behind the
+        // system bars while those routes are on screen.
+        containerColor = if (currentRoute == Routes.LIVE_SEND_PREVIEW || currentRoute == Routes.CLUBS || currentRoute == Routes.CLUB_MEMBER) {
             ClimbPalette.liveSendBg
         } else {
             ClimbPalette.bg

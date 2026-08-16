@@ -88,16 +88,16 @@ fun ClubsScreen(
 ) {
     val memberships by clubRepository.observeMembershipsForUser(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
 
-    Box(modifier = modifier.fillMaxSize().wallTexture()) {
+    Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             Text(
                 text = "← Back",
-                color = ClimbPalette.textSecondary,
+                color = ClimbPalette.liveSendTextMuted,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 20.dp, bottom = 8.dp).clickable(onClick = onBack),
             )
-            Text(text = "Clubs", color = ClimbPalette.textPrimary, fontWeight = FontWeight.Black, fontSize = 22.sp, modifier = Modifier.padding(bottom = 16.dp))
+            Text(text = "Clubs", color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Black, fontSize = 22.sp, modifier = Modifier.padding(bottom = 16.dp))
 
             OrganizationListContent(
                 currentUid = currentUid,
@@ -158,7 +158,7 @@ private fun OrganizationListContent(
 private fun SectionLabel(title: String) {
     Text(
         text = title.uppercase(),
-        color = ClimbPalette.textMuted,
+        color = ClimbPalette.liveSendTextMuted,
         fontSize = 11.sp,
         letterSpacing = 1.sp,
         fontWeight = FontWeight.Bold,
@@ -193,9 +193,9 @@ private fun OtherOrganizationRow(org: OrganizationEntity, currentUid: String, cu
         onClick = { if (!pending) scope.launch { clubRepository.requestToJoin(org.id, currentUid, currentUsername) } },
         trailing = {
             if (pending) {
-                Text(text = "Request pending", color = ClimbPalette.textMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Text(text = "Request pending", color = ClimbPalette.liveSendTextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             } else {
-                Text(text = "Request to join", color = ClimbPalette.chalk, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text(text = "Request to join", color = ClimbPalette.liveSendAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         },
     )
@@ -206,10 +206,10 @@ fun RoleBadge(role: OrganizationRole) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(50))
-            .border(1.dp, ClimbPalette.border, RoundedCornerShape(50))
+            .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(50))
             .padding(horizontal = 8.dp, vertical = 3.dp),
     ) {
-        Text(text = role.name, color = ClimbPalette.textMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(text = role.name, color = ClimbPalette.liveSendTextMuted, fontSize = 10.sp, fontWeight = FontWeight.Bold)
     }
 }
 

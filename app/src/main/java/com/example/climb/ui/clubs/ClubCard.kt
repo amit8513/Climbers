@@ -42,24 +42,24 @@ fun ClubCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(ClimbPalette.surface)
-            .border(1.dp, ClimbPalette.border, RoundedCornerShape(14.dp))
+            .background(ClimbPalette.liveSendSurfaceRaised)
+            .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(
-            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(ClimbPalette.wall),
+            modifier = Modifier.size(44.dp).clip(RoundedCornerShape(12.dp)).background(ClimbPalette.liveSendSurface),
             contentAlignment = Alignment.Center,
         ) {
-            Text(text = name.take(1).uppercase(), color = ClimbPalette.chalk, fontWeight = FontWeight.Black, fontSize = 18.sp)
+            Text(text = name.take(1).uppercase(), color = ClimbPalette.liveSendAccent, fontWeight = FontWeight.Black, fontSize = 18.sp)
         }
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = name, color = ClimbPalette.textPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text(text = name, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
             if (subtitle.isNotEmpty()) {
                 Spacer(Modifier.height(2.dp))
-                Text(text = subtitle, color = ClimbPalette.textMuted, fontSize = 12.sp)
+                Text(text = subtitle, color = ClimbPalette.liveSendTextMuted, fontSize = 12.sp)
             }
         }
         if (trailing != null) {
