@@ -113,6 +113,10 @@ fun OnboardingScreen(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center,
+                // "Log in" carries its own vertical padding for a bigger touch target, which made
+                // it sit visibly lower than this line's plain text under Row's default top
+                // alignment — centering both vertically keeps their baselines lined up.
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
                     text = "Already have an account? ",
