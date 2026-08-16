@@ -125,7 +125,6 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onManageMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
                     onManageVenues = { navController.navigate(ClubRoutes.CAMERAS) },
                     onManageBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
-                    onManageChat = { navController.navigate(ClubRoutes.CHAT) },
                     onNavRoutes = { navController.navigate(ClubRoutes.explore("routes")) },
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
@@ -159,6 +158,7 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onExitClub = onExitClub,
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
+                    onOpenChat = { navController.navigate(ClubRoutes.CHAT) },
                 )
             }
             composable(ClubRoutes.MEMBERS) {

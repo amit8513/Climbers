@@ -119,6 +119,12 @@ fun RouteDetailScreen(
     // most-recent-first — see RouteCompletionRow's doc comment for why this is a plain chronological
     // list rather than a fabricated ranking score. Empty default keeps the mock preview unaffected.
     completions: List<RouteCompletionRow> = emptyList(),
+    // False in the member shell, where the outer MemberClubNavHost's own shared floating island
+    // already shows for this tab (per user request that every floating island in Club Mode stay
+    // consistent, rather than this screen's own distinct Home/Progress/Ranks/Club bar). Staff
+    // Club Mode has no such shared chrome, so it keeps rendering its own bar (default true, also
+    // preserving the untouched mock preview).
+    showOwnBottomBar: Boolean = true,
 ) {
     Box(modifier = Modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(
@@ -200,16 +206,18 @@ fun RouteDetailScreen(
         }
 
         Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-            LiveSendBottomBar(
-                tabs = listOf(
-                    // Was "Feed" (no real feed screen exists in club mode) — real Home now.
-                    LiveSendNavTab(icon = Icons.Filled.Home, label = "Home", selected = false, onClick = onFeedTab),
-                    LiveSendNavTab(icon = Icons.Filled.ShowChart, label = "Progress", selected = false, onClick = onProgressTab),
-                    LiveSendNavTab(icon = Icons.Filled.EmojiEvents, label = "Ranks", selected = false, onClick = onRanksTab),
-                    LiveSendNavTab(icon = Icons.Filled.Groups, label = "Club", selected = true, onClick = onClubTab),
-                ),
-                modifier = Modifier.align(Alignment.BottomCenter),
-            )
+            if (showOwnBottomBar) {
+                LiveSendBottomBar(
+                    tabs = listOf(
+                        // Was "Feed" (no real feed screen exists in club mode) — real Home now.
+                        LiveSendNavTab(icon = Icons.Filled.Home, label = "Home", selected = false, onClick = onFeedTab),
+                        LiveSendNavTab(icon = Icons.Filled.ShowChart, label = "Progress", selected = false, onClick = onProgressTab),
+                        LiveSendNavTab(icon = Icons.Filled.EmojiEvents, label = "Ranks", selected = false, onClick = onRanksTab),
+                        LiveSendNavTab(icon = Icons.Filled.Groups, label = "Club", selected = true, onClick = onClubTab),
+                    ),
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
+            }
             if (showRecordFab) {
                 LiveSendFab(
                     onClick = onRecordAttempt,

@@ -138,6 +138,12 @@ fun ExploreScreen(
     // member-facing context pass nothing, so nothing changes there).
     onAddRouteClick: (() -> Unit)? = null,
     onAddVenueClick: (() -> Unit)? = null,
+    // False in the member shell, where the outer MemberClubNavHost's own shared floating island
+    // already shows for this tab (per user request that every floating island in Club Mode stay
+    // consistent, rather than this screen's own distinct Home/Progress/Ranks/Club bar). Staff
+    // Club Mode has no such shared chrome, so it keeps rendering its own bar (default true, also
+    // preserving the untouched mock preview).
+    showOwnBottomBar: Boolean = true,
 ) {
     // initialSection is intentionally unused now — see the ExploreSection doc comment above.
     Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
@@ -279,16 +285,18 @@ fun ExploreScreen(
         }
 
         Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
-            LiveSendBottomBar(
-                tabs = listOf(
-                    // Was labeled "Feed" (no real feed screen exists in club mode) — now a real
-                    // Home affordance, matching the icon (already Home) that was already here.
-                    LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onNavigateFeed),
-                    LiveSendNavTab(Icons.Filled.QueryStats, "Progress", selected = false, onClick = onNavigateProgress),
-                    LiveSendNavTab(Icons.Filled.EmojiEvents, "Ranks", selected = false, onClick = onNavigateRanks),
-                    LiveSendNavTab(Icons.Filled.Group, "Club", selected = true, onClick = onNavigateClub),
-                ),
-            )
+            if (showOwnBottomBar) {
+                LiveSendBottomBar(
+                    tabs = listOf(
+                        // Was labeled "Feed" (no real feed screen exists in club mode) — now a real
+                        // Home affordance, matching the icon (already Home) that was already here.
+                        LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onNavigateFeed),
+                        LiveSendNavTab(Icons.Filled.QueryStats, "Progress", selected = false, onClick = onNavigateProgress),
+                        LiveSendNavTab(Icons.Filled.EmojiEvents, "Ranks", selected = false, onClick = onNavigateRanks),
+                        LiveSendNavTab(Icons.Filled.Group, "Club", selected = true, onClick = onNavigateClub),
+                    ),
+                )
+            }
             if (showRecordFab) {
                 LiveSendFab(
                     onClick = onFabClick,

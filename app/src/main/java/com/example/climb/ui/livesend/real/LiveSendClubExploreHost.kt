@@ -227,6 +227,9 @@ fun LiveSendClubExploreHost(
                 initialSection = initialSection,
                 onAddRouteClick = if (isStaff) { { navController.navigate(ExploreRoutes.ADD_ROUTE_PICK_VENUE) } } else null,
                 onAddVenueClick = if (isStaff) { { navController.navigate(ExploreRoutes.ADD_VENUE) } } else null,
+                // Member context relies on MemberClubNavHost's own shared floating island instead —
+                // see ExploreScreen's showOwnBottomBar doc comment.
+                showOwnBottomBar = isStaff,
             )
         }
 
@@ -266,6 +269,9 @@ fun LiveSendClubExploreHost(
                         betaUploadRouteId = routeId
                         pickBetaVideoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
                     },
+                    // Member context relies on MemberClubNavHost's own shared floating island
+                    // instead — see RouteDetailScreen's showOwnBottomBar doc comment.
+                    showOwnBottomBar = isStaff,
                 )
             }
         }

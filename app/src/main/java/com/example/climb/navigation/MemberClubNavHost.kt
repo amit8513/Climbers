@@ -56,11 +56,14 @@ private object MemberClubRoutes {
     fun attemptVideo(attemptId: Long) = "member_club_attempt_video/$attemptId"
 }
 
-// ROUTES and UPDATES each render their own full-screen "Live Send" chrome (their own floating
-// bottom bar baked in) rather than using this Scaffold's bottomBar slot, so they're deliberately
-// excluded here — including either would double up two bottom bars on screen at once.
+// Every top-level member tab shows the same shared floating island (per user request that all
+// of Club Mode's floating islands stay consistent) — ROUTES and UPDATES used to render their own
+// distinct internal bottom bar instead (a leftover from before they were member-shell tabs); that
+// internal bar is now suppressed for the member (non-staff) context so this shared one shows
+// through instead, matching Overview/Videos/Chat/Leaderboard.
 private val MEMBER_CLUB_TAB_ROUTES = setOf(
-    MemberClubRoutes.OVERVIEW, MemberClubRoutes.VIDEOS, MemberClubRoutes.CHAT, MemberClubRoutes.LEADERBOARD,
+    MemberClubRoutes.OVERVIEW, MemberClubRoutes.ROUTES, MemberClubRoutes.UPDATES,
+    MemberClubRoutes.VIDEOS, MemberClubRoutes.CHAT, MemberClubRoutes.LEADERBOARD,
 )
 
 private fun navigateToMemberClubTab(navController: NavHostController, route: String) {
@@ -103,12 +106,19 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
             // showing both at once was a real reported bug (two back rows stacked on the video
             // screen). PROGRESS_PREVIEW has no back control of its own, so it keeps this one.
             if (currentRoute != MemberClubRoutes.ATTEMPT_VIDEO) {
+                // Every screen's back goes to Overview, the shell's own landing tab — only
+                // Overview's back exits the shell entirely, back to the Clubs list.
+                val backTarget = if (currentRoute == MemberClubRoutes.OVERVIEW) {
+                    onBack
+                } else {
+                    { navigateToMemberClubTab(navController, MemberClubRoutes.OVERVIEW) }
+                }
                 Text(
                     text = "← Back",
                     color = ClimbPalette.liveSendTextMuted,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 4.dp).clickable(onClick = onBack),
+                    modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 4.dp).clickable(onClick = backTarget),
                 )
             }
         },

@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Group
@@ -101,6 +102,10 @@ fun LiveSendBroadcastScreen(
     // defaulted no-op in the member context, which has no members-management concept.
     onNavBroadcast: () -> Unit = {},
     onNavMembers: () -> Unit = {},
+    // Staff-only — opens the club's group chat, replacing the header's Home icon (redundant for
+    // staff, whose own floating island already has a Home tab). Unused/defaulted no-op in the
+    // member context, which reaches chat via its own shared island's Chat tab instead.
+    onOpenChat: () -> Unit = {},
 ) {
     val updates by clubRepository.observeUpdatesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
@@ -112,10 +117,19 @@ fun LiveSendBroadcastScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
                 .padding(horizontal = 20.dp, vertical = 20.dp)
-                .padding(bottom = 90.dp),
+                // A bit taller than the island's own footprint (56dp bar + 14dp*2 vertical margin)
+                // so it never overlaps this page's content even with a larger system navigation
+                // bar inset on top of that — was 90dp, which could clip the last visible row.
+                .padding(bottom = 104.dp),
         ) {
-            LiveSendPageHeader(title = "Broadcast", onGoHome = onGoHome)
-            Spacer(Modifier.height(20.dp))
+            LiveSendPageHeader(
+                title = "Broadcast",
+                onGoHome = onGoHome,
+                // Staff's floating island already has its own Home tab, so this header slot is
+                // repurposed to open the club chat instead (moved here from the Manage grid).
+                onOpenChat = if (isStaff) onOpenChat else null,
+            )
+            Spacer(Modifier.height(16.dp))
 
             if (isStaff) {
                 val context = LocalContext.current
@@ -134,9 +148,9 @@ fun LiveSendBroadcastScreen(
                 }
 
                 LiveSendSectionLabel(text = "Post an update")
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
                 LiveSendTextField(value = text, onValueChange = { text = it; errorMessage = null }, placeholder = "What's new at the gym?")
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
 
                 val currentAnnotated = annotatedBitmap
                 if (currentAnnotated != null) {
@@ -169,7 +183,7 @@ fun LiveSendBroadcastScreen(
                         },
                     )
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(8.dp))
 
                 errorMessage?.let { Text(text = it, color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp)) }
                 LiveSendPrimaryButton(
@@ -198,7 +212,7 @@ fun LiveSendBroadcastScreen(
                     },
                     modifier = Modifier.padding(top = 2.dp),
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(16.dp))
 
                 val bitmapToAnnotate = pickedBitmap
                 if (bitmapToAnnotate != null) {
@@ -252,25 +266,31 @@ fun LiveSendBroadcastScreen(
             }
         }
 
-        val tabs = if (isStaff) {
-            listOf(
-                LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
-                LiveSendNavTab(Icons.Filled.Campaign, "Broadcast", selected = true, onClick = onNavBroadcast),
-                LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
-                LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
+        // Member context relies on MemberClubNavHost's own shared floating island instead (per
+        // user request that every floating island in Club Mode stay consistent) — only staff,
+        // which has no such shared chrome, renders its own bar here.
+        if (isStaff) {
+            LiveSendBottomBar(
+                tabs = listOf(
+                    LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
+                    LiveSendNavTab(Icons.Filled.Campaign, "Broadcast", selected = true, onClick = onNavBroadcast),
+                    LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
+                    LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
+                ),
+                modifier = Modifier.align(Alignment.BottomCenter),
             )
-        } else {
-            listOf(LiveSendNavTab(Icons.Filled.Home, "Home", selected = true, onClick = onGoHome))
         }
-        LiveSendBottomBar(tabs = tabs, modifier = Modifier.align(Alignment.BottomCenter))
     }
 }
 
 /** Shared page header for the Live-Send-styled real club screens (Broadcast/Members) — a title
- * plus an explicit Home icon button, matching [com.example.climb.ui.livesend.ClubDashboardScreen]'s
- * header row so all of Club Mode reads as one consistent surface. */
+ * plus an explicit icon button, matching [com.example.climb.ui.livesend.ClubDashboardScreen]'s
+ * header row so all of Club Mode reads as one consistent surface. That button is normally Home
+ * ([onGoHome]); passing [onOpenChat] swaps it for a Chat icon instead — used by Broadcast's staff
+ * context, whose own floating island already has a Home tab, so this slot is repurposed rather
+ * than left redundant. */
 @Composable
-internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit) {
+internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit, onOpenChat: (() -> Unit)? = null) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = title,
@@ -285,14 +305,19 @@ internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit) {
                 .clip(RoundedCornerShape(20.dp))
                 .background(ClimbPalette.liveSendSurface)
                 .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(20.dp))
-                .clickable(onClick = onGoHome)
+                .clickable(onClick = onOpenChat ?: onGoHome)
                 .semantics {
                     role = Role.Button
-                    contentDescription = "Go to Home"
+                    contentDescription = if (onOpenChat != null) "Open club chat" else "Go to Home"
                 },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Filled.Home, contentDescription = null, tint = ClimbPalette.liveSendTextPrimary, modifier = Modifier.size(20.dp))
+            Icon(
+                if (onOpenChat != null) Icons.AutoMirrored.Filled.Chat else Icons.Filled.Home,
+                contentDescription = null,
+                tint = ClimbPalette.liveSendTextPrimary,
+                modifier = Modifier.size(20.dp),
+            )
         }
     }
 }

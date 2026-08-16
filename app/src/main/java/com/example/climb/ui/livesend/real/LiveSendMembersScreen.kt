@@ -111,11 +111,25 @@ fun LiveSendMembersScreen(
             if (members.isEmpty()) {
                 Text(text = "No members yet.", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
             } else {
-                Column(
-                    modifier = Modifier.heightIn(max = 170.dp).verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                // Same bordered, fills-the-rest-of-the-page treatment as Broadcast's "Recent" box,
+                // per user request to make this section match — a large, clearly-edged frame
+                // instead of a small fixed-height list.
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(14.dp))
+                        .padding(10.dp),
                 ) {
-                    members.forEach { member -> MemberCard(member) }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        members.forEach { member -> MemberCard(member) }
+                    }
                 }
             }
         }

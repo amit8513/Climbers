@@ -103,9 +103,6 @@ fun ClubDashboardScreen(
     onManageMembers: () -> Unit,
     onManageVenues: () -> Unit,
     onManageBroadcast: () -> Unit,
-    // Defaulted (like onOpenSettings below) so the untouched mock preview keeps compiling and
-    // rendering identically without passing it.
-    onManageChat: () -> Unit = {},
     onNavRoutes: () -> Unit,
     onNavBroadcast: () -> Unit,
     onNavMembers: () -> Unit,
@@ -175,9 +172,6 @@ fun ClubDashboardScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
                         LiveSendTile(label = "Cameras", emoji = "📷", onClick = onManageVenues)
                         LiveSendTile(label = "Broadcast", emoji = "📣", onClick = onManageBroadcast)
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
-                        LiveSendTile(label = "Chat", emoji = "💬", onClick = onManageChat)
                     }
                 }
             }
