@@ -27,6 +27,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.climb.analysis.Visibility
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.data.settings.ClimbThemeOption
 import com.example.climb.data.settings.HomeVideoMontageStyle
@@ -50,6 +52,7 @@ import com.example.climb.data.settings.SettingsStore
 import com.example.climb.data.social.AuthRepository
 import com.example.climb.data.social.SocialRepository
 import com.example.climb.data.social.UserProfile
+import com.example.climb.leaderboard.model.LeaderboardPrivacySettings
 import com.example.climb.ui.livesend.components.LiveSendCard
 import com.example.climb.ui.livesend.components.LiveSendPrimaryButton
 import com.example.climb.ui.livesend.components.LiveSendSectionLabel
@@ -128,6 +131,15 @@ fun SettingsScreen(
                         fontSize = 13.sp,
                         modifier = Modifier.padding(top = 10.dp).clickable(onClick = onOpenClubs),
                     )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+
+            LiveSendCard {
+                Column {
+                    LiveSendSectionLabel(text = "Leaderboard privacy")
+                    Spacer(Modifier.height(10.dp))
+                    LeaderboardPrivacySection(uid = uid, socialRepository = socialRepository)
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -406,6 +418,131 @@ private fun PasswordSection(authRepository: AuthRepository) {
         },
         modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
     )
+}
+
+/** Real, Firestore-backed per-user leaderboard privacy settings (see `SocialRepository` and
+ * `LocalLeaderboardRepository`) — replaces the reasonable-default-for-everyone this screen had no
+ * control over before. Loads the current user's own settings once, then writes every change back
+ * immediately (optimistic local update + fire-and-forget persist, same shape as the rest of this
+ * screen's toggles). */
+@Composable
+private fun LeaderboardPrivacySection(uid: String, socialRepository: SocialRepository) {
+    val scope = rememberCoroutineScope()
+    var settings by remember { mutableStateOf<LeaderboardPrivacySettings?>(null) }
+
+    LaunchedEffect(uid) {
+        settings = socialRepository.getLeaderboardPrivacySettings(uid)
+    }
+
+    val current = settings
+    if (current == null) {
+        Text(text = "Loading…", color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp)
+        return
+    }
+
+    fun update(next: LeaderboardPrivacySettings) {
+        settings = next
+        scope.launch { socialRepository.updateLeaderboardPrivacySettings(uid, next) }
+    }
+
+    Column {
+        LeaderboardPrivacyToggleRow(
+            title = "Participate in leaderboard",
+            description = "Show up on your friends' weekly leaderboard, and see them on yours.",
+            checked = current.participateInLeaderboard,
+            onCheckedChange = { update(current.copy(participateInLeaderboard = it)) },
+        )
+        Spacer(Modifier.height(14.dp))
+        LeaderboardPrivacyToggleRow(
+            title = "Share stats with friends",
+            description = "Let friends see your rank, score, and grade on the leaderboard.",
+            checked = current.allowFriendsToViewStats,
+            enabled = current.participateInLeaderboard,
+            onCheckedChange = { update(current.copy(allowFriendsToViewStats = it)) },
+        )
+
+        Spacer(Modifier.height(18.dp))
+        Text(text = "Video visibility on leaderboard", color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
+        Spacer(Modifier.height(10.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            leaderboardVideoVisibilityOptions.forEach { option ->
+                LeaderboardVideoVisibilityRow(
+                    option = option,
+                    selected = current.defaultVideoVisibility == option.visibility,
+                    onClick = { update(current.copy(defaultVideoVisibility = option.visibility)) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LeaderboardPrivacyToggleRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(text = title, color = ClimbPalette.liveSendTextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Spacer(Modifier.height(2.dp))
+            Text(text = description, color = ClimbPalette.liveSendTextMuted, fontSize = 12.sp, lineHeight = 16.sp)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = ClimbPalette.liveSendAccentText,
+                checkedTrackColor = ClimbPalette.liveSendAccent,
+                uncheckedThumbColor = ClimbPalette.liveSendTextMuted,
+                uncheckedTrackColor = ClimbPalette.liveSendSurfaceRaised,
+                uncheckedBorderColor = ClimbPalette.liveSendBorder,
+            ),
+        )
+    }
+}
+
+/** Only the three visibilities meaningful without a friend picker — [Visibility.SELECTED_FRIENDS]
+ * needs per-friend selection UI this small settings section doesn't offer, so it's left reachable
+ * only via [LeaderboardPrivacySettings.selectedViewerIds] staying whatever it already was (empty
+ * by default) rather than exposed here. */
+private data class LeaderboardVideoVisibilityOption(val visibility: Visibility, val label: String, val description: String)
+
+private val leaderboardVideoVisibilityOptions = listOf(
+    LeaderboardVideoVisibilityOption(Visibility.PRIVATE, "Private", "Friends never see you have a leaderboard video."),
+    LeaderboardVideoVisibilityOption(Visibility.FRIENDS_ONLY, "Friends only", "Any accepted friend can see you have a video."),
+    LeaderboardVideoVisibilityOption(Visibility.PUBLIC, "Public", "Anyone can see you have a video."),
+)
+
+@Composable
+private fun LeaderboardVideoVisibilityRow(option: LeaderboardVideoVisibilityOption, selected: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(if (selected) ClimbPalette.liveSendSurfaceRaised else ClimbPalette.liveSendSurface)
+            .border(if (selected) 2.dp else 1.dp, if (selected) ClimbPalette.liveSendAccent else ClimbPalette.liveSendBorder, shape)
+            .clickable(onClick = onClick)
+            .semantics { contentDescription = "${option.label}${if (selected) ", selected" else ""}" }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(text = option.label, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+            Text(text = option.description, color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, lineHeight = 15.sp)
+        }
+        if (selected) {
+            Text(text = "✓", color = ClimbPalette.sent, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        }
+    }
 }
 
 @Composable

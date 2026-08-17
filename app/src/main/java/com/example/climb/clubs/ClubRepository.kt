@@ -217,6 +217,15 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
             ).await()
     }
 
+    /** Staff-only moderation delete for the group chat — same trust level/shape as [deleteUpdate]:
+     * any staff member can delete any message, not just the original sender. Messages otherwise
+     * stay immutable (no edit path exists anywhere, matching the `clubMessages` rule's
+     * `allow update: if false`) — this only adds a removal capability on top of that. */
+    suspend fun deleteMessage(organizationId: Long, userId: String, message: ClubMessageEntity): Result<Unit> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        firestore.collection(CLUB_MESSAGES).document(message.id.toString()).delete().await()
+    }
+
     /** Any member records their own attempt stats — this is participation bookkeeping, not a
      * staff mutation, so unlike [createVenue]/[createRoute]/etc. it doesn't call
      * [requireStaffAccess]. Called once per saved club-linked attempt (see
@@ -297,8 +306,13 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
     /** Records that [userId] has sent [routeId] — same trust level as [recordRouteAttempt]
      * (participation bookkeeping, not a staff mutation, no [requireStaffAccess]). One doc per
      * (route, user): re-sending the same route just refreshes [RouteCompletionEntity.completedAt]
-     * on the same doc rather than creating a duplicate row. */
-    suspend fun recordRouteCompletion(routeId: Long, organizationId: Long, userId: String, userDisplayName: String): Result<Unit> = runCatching {
+     * on the same doc rather than creating a duplicate row.
+     *
+     * [attemptId] is the local [com.example.climb.analysis.ClimbAttemptEntity.id] this send came
+     * from, when the caller has one — see [RouteCompletionEntity.attemptId]'s doc comment for why
+     * this is stored even though it only ever resolves to a real duration on its own recording
+     * device. Optional/nullable so every existing caller keeps compiling unchanged. */
+    suspend fun recordRouteCompletion(routeId: Long, organizationId: Long, userId: String, userDisplayName: String, attemptId: Long? = null): Result<Unit> = runCatching {
         firestore.collection(ROUTE_COMPLETIONS).document("${routeId}_$userId")
             .set(
                 mapOf(
@@ -307,6 +321,7 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
                     "userId" to userId,
                     "userDisplayName" to userDisplayName,
                     "completedAt" to System.currentTimeMillis(),
+                    "attemptId" to attemptId,
                 ),
             ).await()
         Unit
@@ -801,6 +816,7 @@ private fun DocumentSnapshot.toRouteCompletion(): RouteCompletionEntity? {
         userId = userId,
         userDisplayName = getString("userDisplayName") ?: userId,
         completedAt = getLong("completedAt") ?: 0L,
+        attemptId = getLong("attemptId"),
     )
 }
 

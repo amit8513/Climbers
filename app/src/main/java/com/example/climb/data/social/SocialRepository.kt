@@ -1,6 +1,8 @@
 package com.example.climb.data.social
 
 import android.net.Uri
+import com.example.climb.analysis.Visibility
+import com.example.climb.leaderboard.model.LeaderboardPrivacySettings
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
@@ -20,8 +22,20 @@ private const val USERS = "users"
 private const val USERNAMES = "usernames"
 private const val FRIEND_REQUESTS = "friendRequests"
 private const val FRIENDS = "friends"
+private const val LEADERBOARD_PRIVACY_FIELD = "leaderboardPrivacy"
 
 private fun profilePicturePath(uid: String) = "profile_pictures/$uid/photo.jpg"
+
+/** Reasonable default for any user who hasn't touched their own leaderboard privacy settings yet
+ * (participating, stats visible to friends, friends-only video) — same values
+ * `LocalLeaderboardRepository` used to hardcode for every friend before this settings storage
+ * existed (see LEADERBOARD.md). Used both as the fallback when a profile fails to load and as the
+ * value returned for a user whose doc simply has no `leaderboardPrivacy` field yet. */
+val DEFAULT_LEADERBOARD_PRIVACY_SETTINGS = LeaderboardPrivacySettings(
+    participateInLeaderboard = true,
+    allowFriendsToViewStats = true,
+    defaultVideoVisibility = Visibility.FRIENDS_ONLY,
+)
 
 class SocialRepository(
     private val firestore: FirebaseFirestore,
@@ -91,6 +105,34 @@ class SocialRepository(
      * comment on why this project accepts that trade-off rather than pruning them). */
     suspend fun updateFcmToken(uid: String, token: String): Result<Unit> = runCatching {
         firestore.collection(USERS).document(uid).update("fcmTokens", FieldValue.arrayUnion(token)).await()
+    }
+
+    /** Stored as a field on the user's own profile doc (same doc as username/photoUrl), not a new
+     * collection — reuses `users/{uid}`'s existing rule (owner-only write, any signed-in read),
+     * matching how every other piece of profile data already syncs. */
+    suspend fun updateLeaderboardPrivacySettings(uid: String, settings: LeaderboardPrivacySettings): Result<Unit> = runCatching {
+        firestore.collection(USERS).document(uid).update(LEADERBOARD_PRIVACY_FIELD, settings.toFirestoreMap()).await()
+    }
+
+    /** One-shot read for a single user (e.g. resolving one friend's settings while building a
+     * leaderboard entry) — falls back to [DEFAULT_LEADERBOARD_PRIVACY_SETTINGS] on any failure or
+     * missing field, same fallback shape as [getProfile], never throws. */
+    suspend fun getLeaderboardPrivacySettings(uid: String): LeaderboardPrivacySettings =
+        runCatching { firestore.collection(USERS).document(uid).get().await().toLeaderboardPrivacySettings() }
+            .getOrNull() ?: DEFAULT_LEADERBOARD_PRIVACY_SETTINGS
+
+    /** Live view of the current user's own settings, for the Settings screen to reflect edits
+     * made on another signed-in device. */
+    fun observeLeaderboardPrivacySettings(uid: String): Flow<LeaderboardPrivacySettings> = callbackFlow {
+        val registration = firestore.collection(USERS).document(uid)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    close(error)
+                    return@addSnapshotListener
+                }
+                trySend(snapshot?.toLeaderboardPrivacySettings() ?: DEFAULT_LEADERBOARD_PRIVACY_SETTINGS)
+            }
+        awaitClose { registration.remove() }
     }
 
     // Used for one-shot batch lookups (e.g. resolving a list of club member uids to display
@@ -210,6 +252,30 @@ private fun DocumentSnapshot.toUserProfile(uid: String): UserProfile? {
 private fun DocumentSnapshot.toFriend(): Friend? {
     val username = getString("username") ?: return null
     return Friend(uid = id, username = username, since = getLong("since") ?: 0L)
+}
+
+private fun LeaderboardPrivacySettings.toFirestoreMap(): Map<String, Any> = mapOf(
+    "participating" to participateInLeaderboard,
+    "statsVisibleToFriends" to allowFriendsToViewStats,
+    "videoVisibility" to defaultVideoVisibility.name,
+    "selectedViewerIds" to selectedViewerIds.toList(),
+)
+
+/** Returns [DEFAULT_LEADERBOARD_PRIVACY_SETTINGS] both when the doc doesn't exist yet and when it
+ * exists but has never had the [LEADERBOARD_PRIVACY_FIELD] map written to it — a brand-new user
+ * and a pre-existing user who never opened the leaderboard privacy settings should both see the
+ * same reasonable default, not a crash or an empty/zeroed-out settings object. */
+private fun DocumentSnapshot.toLeaderboardPrivacySettings(): LeaderboardPrivacySettings {
+    val raw = get(LEADERBOARD_PRIVACY_FIELD) as? Map<*, *> ?: return DEFAULT_LEADERBOARD_PRIVACY_SETTINGS
+    val visibility = (raw["videoVisibility"] as? String)
+        ?.let { runCatching { Visibility.valueOf(it) }.getOrNull() }
+        ?: Visibility.FRIENDS_ONLY
+    return LeaderboardPrivacySettings(
+        participateInLeaderboard = raw["participating"] as? Boolean ?: true,
+        allowFriendsToViewStats = raw["statsVisibleToFriends"] as? Boolean ?: true,
+        defaultVideoVisibility = visibility,
+        selectedViewerIds = (raw["selectedViewerIds"] as? List<*>)?.filterIsInstance<String>()?.toSet() ?: emptySet(),
+    )
 }
 
 private fun DocumentSnapshot.toFriendRequest(): FriendRequest? {

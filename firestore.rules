@@ -7,6 +7,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // The `leaderboardPrivacy` map (participating/statsVisibleToFriends/videoVisibility/
+    // selectedViewerIds — see SocialRepository.updateLeaderboardPrivacySettings) lives as a plain
+    // field on this same doc, not a separate collection, so it's already covered by the rule
+    // below: only the owning user can write it (`request.auth.uid == uid`), and any signed-in
+    // user can read it (a superset of "friends can read," same scoping this doc already gives
+    // username/photoUrl/fcmTokens) — no separate rule needed.
     match /users/{uid} {
       allow read: if signedIn();
       allow write: if signedIn() && request.auth.uid == uid;
@@ -177,13 +183,17 @@ service cloud.firestore {
     }
 
     // The club's single group chat thread — unlike clubUpdates, any real member (not just staff)
-    // can post, and messages are never edited or deleted (a plain append-only log).
+    // can post, and messages are never edited (still a plain append-only log for the content
+    // itself). Staff can now delete a message for moderation, same trust level/shape as
+    // clubUpdates' delete rule — NOT a member self-service capability (there's no "resource.data
+    // .senderUid == request.auth.uid" clause here on purpose).
     match /clubMessages/{messageId} {
       allow read: if signedIn();
       allow create: if signedIn() &&
         isMemberOf(request.resource.data.organizationId) &&
         request.resource.data.senderUid == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if signedIn() && isStaffOf(resource.data.organizationId);
     }
 
     // Attempt-count bookkeeping for the member-facing club leaderboard — any member can record

@@ -63,13 +63,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
 import com.example.climb.BuildConfig
 import com.example.climb.R
 import com.example.climb.analysis.AnalysisRepository
 import com.example.climb.analysis.AnalysisStatus
 import com.example.climb.analysis.ClimbAttemptEntity
+import com.example.climb.analysis.PoseAnalysisWorker
 import com.example.climb.analysis.Visibility
+import com.example.climb.colordetection.ColorCalibrationSource
 import com.example.climb.colordetection.ColorCalibrator
 import com.example.climb.colordetection.DebugCoordinateMapper
 import com.example.climb.colordetection.PixelBuffer
@@ -453,7 +456,19 @@ fun DetailScreen(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = "${currentBonusState.holdCount} hold${if (currentBonusState.holdCount == 1) "" else "s"} detected",
+                        text = buildString {
+                            append(currentBonusState.holdCount)
+                            append(" hold")
+                            if (currentBonusState.holdCount != 1) append("s")
+                            append(" detected")
+                            // Honest indication of which of the two detection paths produced
+                            // this result (see DetectionBonusState's own doc comment) — a
+                            // calibrated result came from this hold's own sampled color, not
+                            // the generic per-RouteColor profile.
+                            if (currentBonusState.targetModel.calibrationSource == ColorCalibrationSource.FRAME_CALIBRATED) {
+                                append(" (calibrated)")
+                            }
+                        },
                         color = ClimbPalette.textMuted,
                         fontSize = 11.sp,
                     )
@@ -599,11 +614,18 @@ fun DetailScreen(
                                 // The tuning is now baked into the new file's pixels, so it's
                                 // reset to defaults — reopening plays the app's normal (default)
                                 // highlight effect live on top, same as any other climb.
+                                // calibratedColorModelJson must be cleared here too, not just the
+                                // hue fields: it was sampled from this climb's PRE-bake pixel
+                                // colors, and reapplying it to the POST-bake file (which already has
+                                // the highlight baked into its own pixels) would resample against
+                                // colors that no longer represent the original hold — a real bug
+                                // found during review, not a hypothetical one.
                                 repository.update(
                                     currentClimb.copy(
                                         videoPath = outputPath,
                                         hueOffsetDegrees = null,
                                         hueToleranceDegrees = null,
+                                        calibratedColorModelJson = null,
                                     ),
                                 )
                                 File(oldPath).delete()
@@ -922,8 +944,11 @@ private fun CalibrationPickerDialog(frame: Bitmap, onCancel: () -> Unit, onTap: 
     }
 }
 
+/** `internal` (not `private`) so isolated Compose UI tests can drive it directly with a fake
+ * [AnalysisRepository]/fake attempt+analysis flow instead of a real Room-backed one — see
+ * `PoseAnalysisRetryTest` in `androidTest`. */
 @Composable
-private fun PoseAnalysisSection(
+internal fun PoseAnalysisSection(
     climbId: Long,
     videoPath: String,
     durationMs: Long,
@@ -957,15 +982,27 @@ private fun PoseAnalysisSection(
     }
 }
 
+/** `internal` (not `private`) — see [PoseAnalysisSection]'s doc comment. [enqueueRetry] defaults
+ * to the real WorkManager re-enqueue (see its own doc comment below) but is a parameter, not a
+ * hardcoded call, specifically so `PoseAnalysisRetryTest` can substitute a fake and assert the
+ * retry fired with the right `attemptId` without needing a real WorkManager/WorkerFactory/Room
+ * stack running in the test process. */
 @Composable
-private fun PoseAnalysisStatusRow(
+internal fun PoseAnalysisStatusRow(
     attempt: ClimbAttemptEntity,
     analysisRepository: AnalysisRepository,
     onViewProgress: (attemptId: Long) -> Unit,
     onViewResult: (analysisId: Long) -> Unit,
+    enqueueRetry: (attemptId: Long) -> Unit = rememberDefaultRetryEnqueue(),
 ) {
     val analysis by analysisRepository.observeLatestAnalysis(attempt.id).collectAsStateWithLifecycle(initialValue = null)
     val currentAnalysis = analysis
+    // Guards against double-tapping "Retry" before observeLatestAnalysis's Flow has had a chance
+    // to re-emit with the freshly re-queued row (see below) — without it, a second tap in that
+    // narrow window would re-enqueue (harmlessly, since REPLACE is idempotent) and call
+    // onViewProgress again, which is redundant but not unsafe either way. Reset whenever the
+    // underlying analysis identity changes so a later, genuinely new failure can be retried again.
+    var isRetrying by remember(currentAnalysis?.id) { mutableStateOf(false) }
 
     when {
         currentAnalysis == null -> Text("Starting…", color = ClimbPalette.textSecondary, fontSize = 13.sp)
@@ -976,17 +1013,53 @@ private fun PoseAnalysisStatusRow(
             fontSize = 13.sp,
             modifier = Modifier.clickable { onViewResult(currentAnalysis.id) },
         )
-        currentAnalysis.status == AnalysisStatus.FAILED -> Text(
-            text = "Analysis failed: ${currentAnalysis.failureReason ?: "unknown error"}",
-            color = ClimbPalette.fell,
-            fontSize = 13.sp,
-        )
+        currentAnalysis.status == AnalysisStatus.FAILED -> Column {
+            Text(
+                text = "Analysis failed: ${currentAnalysis.failureReason ?: "unknown error"}",
+                color = ClimbPalette.fell,
+                fontSize = 13.sp,
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = "Retry",
+                color = ClimbPalette.chalk,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                modifier = Modifier.clickable(enabled = !isRetrying) {
+                    isRetrying = true
+                    enqueueRetry(attempt.id)
+                    onViewProgress(attempt.id)
+                },
+            )
+        }
         else -> Text(
             text = "Analysis in progress — tap to view",
             color = ClimbPalette.textSecondary,
             fontSize = 13.sp,
             modifier = Modifier.clickable { onViewProgress(attempt.id) },
         )
+    }
+}
+
+/**
+ * The real, production re-enqueue behind [PoseAnalysisStatusRow]'s `enqueueRetry` default:
+ * REPLACE (not KEEP) because this unique work name already has a terminal (failed) record in
+ * WorkManager's own database from the original run, and KEEP would not reliably re-run work
+ * against an already-terminal unique name. Split out as its own `remember`ed lambda (rather than
+ * inlined in the click handler) purely so [PoseAnalysisStatusRow] can default to it while still
+ * accepting a substitute in tests.
+ */
+@Composable
+private fun rememberDefaultRetryEnqueue(): (attemptId: Long) -> Unit {
+    val context = LocalContext.current
+    return remember(context) {
+        { attemptId: Long ->
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                PoseAnalysisWorker.uniqueWorkName(attemptId),
+                ExistingWorkPolicy.REPLACE,
+                PoseAnalysisWorker.buildRequest(attemptId),
+            )
+        }
     }
 }
 

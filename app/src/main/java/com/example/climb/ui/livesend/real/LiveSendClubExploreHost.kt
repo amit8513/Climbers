@@ -49,6 +49,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.climb.analysis.AnalysisRepository
 import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.clubs.RouteEntity
@@ -173,6 +174,13 @@ fun LiveSendClubExploreHost(
     // entire host regardless of which inner screen was showing, stranding Browse with no back
     // affordance at all (a real reported regression).
     onAtRootChanged: (Boolean) -> Unit = {},
+    // Optional — resolves RouteDetailScreen's per-route leaderboard to real completion durations
+    // where this device's own local analysis DB has them (see RouteCompletionRow's doc comment for
+    // why that's only ever a subset of real sends). Null default keeps every existing caller
+    // (com.example.climb.navigation.ClubNavHost / MemberClubNavHost) compiling unchanged; wiring a
+    // real instance through from AppContainer is a small follow-up left undone here since neither
+    // caller is in this feature's scope.
+    analysisRepository: AnalysisRepository? = null,
 ) {
     val routes by clubRepository.observeActiveRoutesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val venueEntities by clubRepository.observeVenuesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -273,7 +281,9 @@ fun LiveSendClubExploreHost(
                     totalSends = sends,
                     betaVideoAvailable = route.betaVideoUrl != null,
                     betaVideoUrl = route.betaVideoUrl,
-                    completions = routeCompletions.map { RouteCompletionRow(userDisplayName = it.userDisplayName, completedAt = it.completedAt) },
+                    completions = routeCompletions.map { RouteCompletionRow(userDisplayName = it.userDisplayName, completedAt = it.completedAt, attemptId = it.attemptId, userId = it.userId) },
+                    analysisRepository = analysisRepository,
+                    currentUid = currentUid,
                     sharedAttempts = sharedAttemptRows,
                     onToggleLike = { row -> scope.launch { clubRepository.setSharedAttemptLiked(row.id, currentUid, liked = !row.likedByViewer) } },
                     onBack = { navController.popBackStack() },

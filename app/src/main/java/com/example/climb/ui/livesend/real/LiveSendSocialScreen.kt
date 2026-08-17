@@ -109,7 +109,11 @@ fun LiveSendSocialScreen(
                 modifier = Modifier.padding(bottom = 16.dp),
             )
 
-            SocialTabBar(selected = selectedTab, onSelect = { selectedTab = it })
+            SocialTabBar(
+                tabs = SocialTab.entries.map { tab ->
+                    SocialTabSpec(label = tab.label, selected = tab == selectedTab, onClick = { selectedTab = tab })
+                },
+            )
 
             Spacer(Modifier.height(16.dp))
 
@@ -130,22 +134,31 @@ fun LiveSendSocialScreen(
     }
 }
 
+/** One segmented pill per tab, [Modifier.weight(1f)] each — shared by this screen and
+ * [com.example.climb.ui.livesend.real.LiveSendBroadcastScreen]'s "Manage Social" restructure, so
+ * both real Social-pattern screens render an identical tab bar rather than duplicating it.
+ * [SocialTabSpec] (rather than an enum-typed `selected`/`onSelect` pair, as this originally took)
+ * keeps this reusable across each screen's own differently-typed tab enum. */
 @Composable
-private fun SocialTabBar(selected: SocialTab, onSelect: (SocialTab) -> Unit) {
+internal fun SocialTabBar(tabs: List<SocialTabSpec>) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        SocialTab.entries.forEach { tab ->
+        tabs.forEach { tab ->
             SocialTabButton(
                 label = tab.label,
-                selected = tab == selected,
-                onClick = { onSelect(tab) },
+                selected = tab.selected,
+                onClick = tab.onClick,
                 modifier = Modifier.weight(1f),
             )
         }
     }
 }
 
+/** One [SocialTabBar] entry — a plain label/selected/onClick triple, deliberately not tied to
+ * either screen's own tab enum (see [SocialTabBar]'s doc comment). */
+internal data class SocialTabSpec(val label: String, val selected: Boolean, val onClick: () -> Unit)
+
 @Composable
-private fun SocialTabButton(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SocialTabButton(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val shape = RoundedCornerShape(50)
     Box(
         modifier = modifier

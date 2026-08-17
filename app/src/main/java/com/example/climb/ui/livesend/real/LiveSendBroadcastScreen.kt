@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Group
@@ -39,6 +38,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,12 +52,14 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.OrganizationEntity
+import com.example.climb.ui.clubs.ClubChatContent
 import com.example.climb.ui.components.EmptyState
 import com.example.climb.ui.components.PhotoAnnotationDialog
 import com.example.climb.ui.livesend.ActivityItem
@@ -71,28 +74,44 @@ import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 import kotlinx.coroutines.launch
 
+private enum class ManageSocialTab(val label: String) {
+    UPDATES("Updates"),
+    CHAT("Chat"),
+}
+
 /**
  * Real, Live-Send-styled replacement for [com.example.climb.ui.clubs.ClubUpdatesScreen] at the
- * `club_updates`/`member_club_updates` destinations — same real data
- * ([ClubRepository.observeUpdatesForOrganization]/[ClubRepository.postUpdate]) and the same
- * staff-vs-member distinction ([isStaff] gates the posting form), just matching
- * [com.example.climb.ui.livesend.ClubDashboardScreen]'s dark/neon-lime look instead of the old
- * Material page style, per the user's request to make Broadcast/Members visually consistent with
- * the dashboard — including the dashboard's own floating "island" bottom bar ([isStaff]:
- * Home/Broadcast/Members/Exit, mirroring [com.example.climb.ui.livesend.ClubDashboardScreen]'s bar
- * exactly, since Dashboard itself isn't one of those tabs either — same as Explore isn't reachable
- * from Dashboard's bar, only its Manage grid; member context has no members-management concept, so
- * just a Home tab). The whole page is a fixed, non-scrolling layout — only "Recent" scrolls
- * internally within its own bounded height — per user request. [onGoHome] navigates to the real
- * app's Home screen as a real, poppable destination inside the staff shell's own back stack (see
- * [com.example.climb.navigation.ClubNavHost]'s `club_home_preview`) — not a permanent exit; member
- * callers pass their real "back" callback instead, which was always real back-navigation. [onExitClub]
- * is the genuinely separate, permanent "leave Club Mode" action the staff "Exit" tab uses — unused/
- * defaulted no-op in the member context, which has no such tab.
+ * `club_updates`/`member_club_updates` destinations — renamed from "Broadcast" to "Manage Social"
+ * and restructured into an Updates/Chat tabbed layout matching [LiveSendSocialScreen]'s member-
+ * facing "Social" tab UX pattern exactly (same [SocialTabBar]/[SocialTabSpec] segmented pill row,
+ * same [rememberSaveableStateHolder]-backed tab switching so each tab keeps its own scroll
+ * position/chat draft across switches instead of disposing it). Folding Chat in as a tab (rather
+ * than a separate pushed screen) means staff no longer need to navigate away to
+ * [com.example.climb.ui.clubs.ClubChatScreen] for it — see
+ * [com.example.climb.navigation.ClubNavHost], which no longer registers a standalone chat route.
+ *
+ * Both tabs still use the exact same real data/actions as before this restructure
+ * ([ClubRepository.observeUpdatesForOrganization]/[ClubRepository.postUpdate]/[ClubRepository.deleteUpdate]
+ * for Updates, [ClubChatContent] for Chat) and the same staff-vs-member distinction ([isStaff]
+ * gates the posting form and now also the chat delete affordance) — just reached via one tabbed
+ * page instead of a separate screen per concept. Unlike [LiveSendSocialScreen] there is
+ * deliberately no third "Shared videos" tab here — staff already has a separate, dedicated videos-
+ * management screen elsewhere, so a redundant third tab would just be unscoped duplication.
+ *
+ * The outer header/floating "island" bottom bar shell is UNCHANGED by this restructure — the staff
+ * shell still has no shared Scaffold chrome (unlike [com.example.climb.navigation.MemberClubNavHost]),
+ * so this screen still renders both itself; only the content area between them became tabbed.
+ * [onGoHome] navigates to the real app's Home screen as a real, poppable destination inside the
+ * staff shell's own back stack (see [com.example.climb.navigation.ClubNavHost]'s
+ * `club_home_preview`) — not a permanent exit; member callers pass their real "back" callback
+ * instead, which was always real back-navigation. [onExitClub] is the genuinely separate,
+ * permanent "leave Club Mode" action the staff "Exit" tab uses — unused/defaulted no-op in the
+ * member context, which has no such tab.
  */
 @Composable
 fun LiveSendBroadcastScreen(
     currentUid: String,
+    currentUsername: String,
     clubRepository: ClubRepository,
     organization: OrganizationEntity,
     isStaff: Boolean,
@@ -102,18 +121,18 @@ fun LiveSendBroadcastScreen(
     // defaulted no-op in the member context, which has no members-management concept.
     onNavBroadcast: () -> Unit = {},
     onNavMembers: () -> Unit = {},
-    // Staff-only — opens the club's group chat, replacing the header's Home icon (redundant for
-    // staff, whose own floating island already has a Home tab). Unused/defaulted no-op in the
-    // member context, which reaches chat via its own shared island's Chat tab instead.
-    onOpenChat: () -> Unit = {},
     // Member-only — this screen is a pushed destination reached from the Social tab, not a tab
     // itself, so it needs a real "back to Social" affordance instead of the header's usual Home
-    // icon. Null (default) for staff, whose Broadcast is still a real top-level tab.
+    // icon. Null (default) for staff, whose Manage Social is still a real top-level tab.
     onBack: (() -> Unit)? = null,
 ) {
-    val updates by clubRepository.observeUpdatesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
-    val orgInitial = organization.name.firstOrNull()?.uppercase() ?: "?"
+    var selectedTab by rememberSaveable { mutableStateOf(ManageSocialTab.UPDATES) }
+    // Same reasoning as LiveSendSocialScreen: switching selectedTab would otherwise fully dispose
+    // the previous tab's subtree (losing an in-progress chat draft or scroll position) every time
+    // — SaveableStateProvider keyed on the tab saves/restores each tab's own rememberSaveable
+    // state across that dispose/recompose.
+    val saveableStateHolder = rememberSaveableStateHolder()
 
     Box(modifier = Modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(
@@ -129,146 +148,41 @@ fun LiveSendBroadcastScreen(
                 .padding(bottom = 104.dp),
         ) {
             LiveSendPageHeader(
-                title = "Broadcast",
+                title = "Manage Social",
                 onGoHome = onGoHome,
-                // Staff's floating island already has its own Home tab, so this header slot is
-                // repurposed to open the club chat instead (moved here from the Manage grid).
-                onOpenChat = if (isStaff) onOpenChat else null,
                 onBack = onBack,
             )
             Spacer(Modifier.height(16.dp))
 
-            if (isStaff) {
-                val context = LocalContext.current
-                var text by remember { mutableStateOf("") }
-                var errorMessage by remember { mutableStateOf<String?>(null) }
-                var posting by remember { mutableStateOf(false) }
-                // The picked photo before annotation (shows the markup dialog); the annotated
-                // result after "Done" (shown as a small preview, attached on Post).
-                var pickedBitmap by remember { mutableStateOf<Bitmap?>(null) }
-                var annotatedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+            SocialTabBar(
+                tabs = ManageSocialTab.entries.map { tab ->
+                    SocialTabSpec(label = tab.label, selected = tab == selectedTab, onClick = { selectedTab = tab })
+                },
+            )
+            Spacer(Modifier.height(16.dp))
 
-                val pickPhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-                    if (uri != null) {
-                        pickedBitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
-                    }
-                }
-
-                LiveSendSectionLabel(text = "Post an update")
-                Spacer(Modifier.height(8.dp))
-                LiveSendTextField(value = text, onValueChange = { text = it; errorMessage = null }, placeholder = "What's new at the gym?")
-                Spacer(Modifier.height(8.dp))
-
-                val currentAnnotated = annotatedBitmap
-                if (currentAnnotated != null) {
-                    Box(modifier = Modifier.fillMaxWidth().aspectRatio(currentAnnotated.width.toFloat() / currentAnnotated.height.toFloat())) {
-                        Image(
-                            bitmap = currentAnnotated.asImageBitmap(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
-                        )
-                        Text(
-                            text = "Remove photo",
-                            color = ClimbPalette.liveSendCta,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(8.dp)
-                                .clickable { annotatedBitmap = null },
-                        )
-                    }
-                } else {
-                    Text(
-                        text = "+ Add a photo (circle a hold, draw an arrow, highlight the wall)",
-                        color = ClimbPalette.liveSendAccent,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        modifier = Modifier.clickable {
-                            pickPhotoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        },
+            saveableStateHolder.SaveableStateProvider(selectedTab) {
+                when (selectedTab) {
+                    ManageSocialTab.UPDATES -> ManageSocialUpdatesTab(
+                        currentUid = currentUid,
+                        clubRepository = clubRepository,
+                        organization = organization,
+                        isStaff = isStaff,
+                        modifier = Modifier.weight(1f),
                     )
-                }
-                Spacer(Modifier.height(8.dp))
-
-                errorMessage?.let { Text(text = it, color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp)) }
-                LiveSendPrimaryButton(
-                    text = if (posting) "Posting…" else "Post",
-                    enabled = text.isNotBlank() && !posting,
-                    onClick = {
-                        posting = true
-                        scope.launch {
-                            val photoToUpload = annotatedBitmap
-                            val photoUrlResult = if (photoToUpload != null) {
-                                clubRepository.uploadUpdatePhoto(organization.id, currentUid, photoToUpload)
-                            } else {
-                                Result.success(null)
-                            }
-                            photoUrlResult.onFailure {
-                                posting = false
-                                errorMessage = it.message ?: "Couldn't upload photo"
-                            }
-                            photoUrlResult.onSuccess { photoUrl ->
-                                val result = clubRepository.postUpdate(organization.id, currentUid, text, photoUrl)
-                                posting = false
-                                result.onSuccess { text = ""; annotatedBitmap = null }
-                                result.onFailure { errorMessage = it.message ?: "Something went wrong" }
-                            }
-                        }
-                    },
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                Spacer(Modifier.height(16.dp))
-
-                val bitmapToAnnotate = pickedBitmap
-                if (bitmapToAnnotate != null) {
-                    PhotoAnnotationDialog(
-                        bitmap = bitmapToAnnotate,
-                        onCancel = { pickedBitmap = null },
-                        onDone = { result ->
-                            annotatedBitmap = result
-                            pickedBitmap = null
+                    ManageSocialTab.CHAT -> ClubChatContent(
+                        currentUid = currentUid,
+                        currentUsername = currentUsername,
+                        clubRepository = clubRepository,
+                        organization = organization,
+                        isStaff = isStaff,
+                        onDeleteMessage = if (isStaff) {
+                            { message -> scope.launch { clubRepository.deleteMessage(organization.id, currentUid, message) } }
+                        } else {
+                            null
                         },
+                        modifier = Modifier.weight(1f).fillMaxWidth(),
                     )
-                }
-            }
-
-            LiveSendSectionLabel(text = "Recent")
-            Spacer(Modifier.height(10.dp))
-            if (updates.isEmpty()) {
-                EmptyState(title = "No updates yet.", message = "New sets, maintenance notices, and events will show up here.")
-            } else {
-                // Fills the rest of this fixed, non-scrolling page (rather than a small fixed max
-                // height) with its own internal scroll, so a growing real update list scrolls in
-                // place in a large, clearly-bordered frame instead of a cramped little box.
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(14.dp))
-                        .padding(10.dp),
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        updates.forEach { update ->
-                            LiveSendActivityRow(
-                                activity = ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt), photoUrl = update.photoUrl),
-                                onDelete = if (isStaff) {
-                                    {
-                                        scope.launch { clubRepository.deleteUpdate(organization.id, currentUid, update) }
-                                    }
-                                } else {
-                                    null
-                                },
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -280,7 +194,7 @@ fun LiveSendBroadcastScreen(
             LiveSendBottomBar(
                 tabs = listOf(
                     LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
-                    LiveSendNavTab(Icons.Filled.Campaign, "Broadcast", selected = true, onClick = onNavBroadcast),
+                    LiveSendNavTab(Icons.Filled.Campaign, "Social", selected = true, onClick = onNavBroadcast),
                     LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
                     LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
                 ),
@@ -290,15 +204,174 @@ fun LiveSendBroadcastScreen(
     }
 }
 
-/** Shared page header for the Live-Send-styled real club screens (Broadcast/Members) — a title
- * plus an explicit icon button, matching [com.example.climb.ui.livesend.ClubDashboardScreen]'s
- * header row so all of Club Mode reads as one consistent surface. That button is Home by default
- * ([onGoHome]); [onOpenChat] swaps it for a Chat icon (Broadcast's staff context, whose own
- * floating island already has a Home tab); [onBack] — highest priority — swaps it for a back arrow
- * instead, for a screen that isn't a tab at all but a pushed destination (member Broadcast/Chat,
- * reached from the Social tab). */
+/** The "Updates" tab's content — the staff-only posting composer (unchanged) plus the real update
+ * feed, including the already-working staff delete-post affordance ([ClubRepository.deleteUpdate]
+ * via [LiveSendActivityRow]'s `onDelete`), now under the same centered "LABEL (N)" section-header
+ * pattern [LiveSendSocialScreen]'s own Updates tab uses, for visual consistency between the two. */
 @Composable
-internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit, onOpenChat: (() -> Unit)? = null, onBack: (() -> Unit)? = null) {
+private fun ManageSocialUpdatesTab(
+    currentUid: String,
+    clubRepository: ClubRepository,
+    organization: OrganizationEntity,
+    isStaff: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val updates by clubRepository.observeUpdatesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
+    val scope = rememberCoroutineScope()
+    val orgInitial = organization.name.firstOrNull()?.uppercase() ?: "?"
+
+    Column(modifier = modifier) {
+        if (isStaff) {
+            val context = LocalContext.current
+            var text by remember { mutableStateOf("") }
+            var errorMessage by remember { mutableStateOf<String?>(null) }
+            var posting by remember { mutableStateOf(false) }
+            // The picked photo before annotation (shows the markup dialog); the annotated
+            // result after "Done" (shown as a small preview, attached on Post).
+            var pickedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+            var annotatedBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+            val pickPhotoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+                if (uri != null) {
+                    pickedBitmap = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it) }
+                }
+            }
+
+            LiveSendSectionLabel(text = "Post an update")
+            Spacer(Modifier.height(8.dp))
+            LiveSendTextField(value = text, onValueChange = { text = it; errorMessage = null }, placeholder = "What's new at the gym?")
+            Spacer(Modifier.height(8.dp))
+
+            val currentAnnotated = annotatedBitmap
+            if (currentAnnotated != null) {
+                Box(modifier = Modifier.fillMaxWidth().aspectRatio(currentAnnotated.width.toFloat() / currentAnnotated.height.toFloat())) {
+                    Image(
+                        bitmap = currentAnnotated.asImageBitmap(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)),
+                    )
+                    Text(
+                        text = "Remove photo",
+                        color = ClimbPalette.liveSendCta,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(8.dp)
+                            .clickable { annotatedBitmap = null },
+                    )
+                }
+            } else {
+                Text(
+                    text = "+ Add a photo (circle a hold, draw an arrow, highlight the wall)",
+                    color = ClimbPalette.liveSendAccent,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier.clickable {
+                        pickPhotoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    },
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+
+            errorMessage?.let { Text(text = it, color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp)) }
+            LiveSendPrimaryButton(
+                text = if (posting) "Posting…" else "Post",
+                enabled = text.isNotBlank() && !posting,
+                onClick = {
+                    posting = true
+                    scope.launch {
+                        val photoToUpload = annotatedBitmap
+                        val photoUrlResult = if (photoToUpload != null) {
+                            clubRepository.uploadUpdatePhoto(organization.id, currentUid, photoToUpload)
+                        } else {
+                            Result.success(null)
+                        }
+                        photoUrlResult.onFailure {
+                            posting = false
+                            errorMessage = it.message ?: "Couldn't upload photo"
+                        }
+                        photoUrlResult.onSuccess { photoUrl ->
+                            val result = clubRepository.postUpdate(organization.id, currentUid, text, photoUrl)
+                            posting = false
+                            result.onSuccess { text = ""; annotatedBitmap = null }
+                            result.onFailure { errorMessage = it.message ?: "Something went wrong" }
+                        }
+                    }
+                },
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Spacer(Modifier.height(16.dp))
+
+            val bitmapToAnnotate = pickedBitmap
+            if (bitmapToAnnotate != null) {
+                PhotoAnnotationDialog(
+                    bitmap = bitmapToAnnotate,
+                    onCancel = { pickedBitmap = null },
+                    onDone = { result ->
+                        annotatedBitmap = result
+                        pickedBitmap = null
+                    },
+                )
+            }
+        }
+
+        Text(
+            text = "UPDATES (${updates.size})",
+            color = ClimbPalette.liveSendTextMuted,
+            fontWeight = FontWeight.Bold,
+            fontSize = 12.sp,
+            letterSpacing = 1.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+        )
+        if (updates.isEmpty()) {
+            EmptyState(title = "No updates yet.", message = "New sets, maintenance notices, and events will show up here.")
+        } else {
+            // Fills the rest of this tab's content (rather than a small fixed max height) with its
+            // own internal scroll, so a growing real update list scrolls in place in a large,
+            // clearly-bordered frame instead of a cramped little box.
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(14.dp))
+                    .padding(10.dp),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    updates.forEach { update ->
+                        LiveSendActivityRow(
+                            activity = ActivityItem(initial = orgInitial, text = update.text, timeAgo = formatRelativeTime(update.createdAt), photoUrl = update.photoUrl),
+                            onDelete = if (isStaff) {
+                                {
+                                    scope.launch { clubRepository.deleteUpdate(organization.id, currentUid, update) }
+                                }
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Shared page header for the Live-Send-styled real club screens (Manage Social/Members/Cameras) —
+ * a title plus an explicit icon button, matching [com.example.climb.ui.livesend.ClubDashboardScreen]'s
+ * header row so all of Club Mode reads as one consistent surface. That button is Home by default
+ * ([onGoHome]); [onBack] — highest priority — swaps it for a back arrow instead, for a screen that
+ * isn't a tab at all but a pushed destination (member Manage Social, reached from the Social tab).
+ */
+@Composable
+internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit, onBack: (() -> Unit)? = null) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = title,
@@ -313,19 +386,15 @@ internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit, onOpenChat:
                 .clip(RoundedCornerShape(20.dp))
                 .background(ClimbPalette.liveSendSurface)
                 .border(1.dp, ClimbPalette.liveSendBorder, RoundedCornerShape(20.dp))
-                .clickable(onClick = onBack ?: onOpenChat ?: onGoHome)
+                .clickable(onClick = onBack ?: onGoHome)
                 .semantics {
                     role = Role.Button
-                    contentDescription = if (onBack != null) "Back" else if (onOpenChat != null) "Open club chat" else "Go to Home"
+                    contentDescription = if (onBack != null) "Back" else "Go to Home"
                 },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                when {
-                    onBack != null -> Icons.AutoMirrored.Filled.ArrowBack
-                    onOpenChat != null -> Icons.AutoMirrored.Filled.Chat
-                    else -> Icons.Filled.Home
-                },
+                if (onBack != null) Icons.AutoMirrored.Filled.ArrowBack else Icons.Filled.Home,
                 contentDescription = null,
                 tint = ClimbPalette.liveSendTextPrimary,
                 modifier = Modifier.size(20.dp),
@@ -335,7 +404,7 @@ internal fun LiveSendPageHeader(title: String, onGoHome: () -> Unit, onOpenChat:
 }
 
 /** Same row visual as [com.example.climb.ui.livesend.ClubDashboardScreen]'s private `ActivityRow`
- * — promoted here as an internal helper so Broadcast doesn't duplicate the look. [onDelete] is
+ * — promoted here as an internal helper so Manage Social doesn't duplicate the look. [onDelete] is
  * staff-only moderation (null hides the affordance entirely — the member-facing call site never
  * passes one, since members can't delete posts). */
 @Composable

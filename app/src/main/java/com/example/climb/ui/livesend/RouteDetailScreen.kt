@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +48,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.climb.analysis.AnalysisRepository
+import com.example.climb.analysis.formatTimestampMs
 import com.example.climb.ui.livesend.components.ExpandableVideoPlayer
 import com.example.climb.ui.livesend.components.GradeBadge
 import com.example.climb.ui.livesend.components.LiveSendBottomBar
@@ -113,9 +116,24 @@ fun RouteDetailScreen(
     isStaff: Boolean = false,
     onUploadBeta: () -> Unit = {},
     // Real users who've sent this route (com.example.climb.clubs.ClubRepository.observeRouteCompletions),
-    // most-recent-first — see RouteCompletionRow's doc comment for why this is a plain chronological
-    // list rather than a fabricated ranking score. Empty default keeps the mock preview unaffected.
+    // most-recent-first — see RouteCompletionRow's doc comment for how this becomes a real ranked
+    // leaderboard. Empty default keeps the mock preview unaffected.
     completions: List<RouteCompletionRow> = emptyList(),
+    // Resolves RouteCompletionRow.attemptId to a real completion duration for whichever attempts
+    // exist in THIS device's local analysis DB — see RouteCompletionRow's doc comment for why that's
+    // never every completion. Null default (the mock preview, and any caller not yet wired to pass
+    // one — see LiveSendClubExploreHost's own doc comment on this parameter) just means no row here
+    // ever resolves a real time, which SentByRow already handles as the plain "no time recorded"
+    // case.
+    analysisRepository: AnalysisRepository? = null,
+    // The viewer's own uid — [RouteCompletionRow.attemptId] is a bare local SQLite autoincrement id,
+    // not globally unique, so duration resolution below is restricted to completions where
+    // [RouteCompletionRow.userId] matches this exactly; without that check, a completion belonging
+    // to a DIFFERENT user could spuriously match an unrelated attempt in the viewer's own local
+    // analysis table and display a fabricated time attributed to the wrong person. Empty default
+    // keeps the mock preview (and any caller not yet passing a real uid) safe: nothing will ever
+    // match, so every row falls back to plain send-order — the same behavior as before this fix.
+    currentUid: String = "",
     // Real member-shared attempt videos for this route (com.example.climb.clubs.ClubRepository.observeSharedAttemptsForRoute),
     // shown below the staff beta video so a member can watch how other real members climbed it,
     // not just the one official beta take — see SharedAttemptRow. Empty default keeps the mock
@@ -129,6 +147,18 @@ fun RouteDetailScreen(
     // preserving the untouched mock preview).
     showOwnBottomBar: Boolean = true,
 ) {
+    // One-shot, bounded to this route's own (already-fetched) completion list — re-resolved
+    // whenever the completion list itself changes, not a long-lived reactive query over the whole
+    // analyses table. See AnalysisRepository.getCompletedDurationsForAttempts's doc comment.
+    var durationsByAttemptId by remember { mutableStateOf<Map<Long, Long>>(emptyMap()) }
+    LaunchedEffect(completions, analysisRepository, currentUid) {
+        // Restricted to the viewer's OWN completions — see currentUid's own doc comment above for
+        // why resolving a bare local attemptId across users would risk a fabricated, misattributed
+        // time.
+        val ownAttemptIds = completions.filter { it.userId == currentUid }.mapNotNull { it.attemptId }
+        durationsByAttemptId = analysisRepository?.getCompletedDurationsForAttempts(ownAttemptIds) ?: emptyMap()
+    }
+
     Box(modifier = Modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
         Column(
             modifier = Modifier
@@ -196,7 +226,7 @@ fun RouteDetailScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            SentByRow(completions = completions)
+            SentByRow(completions = completions, durationsByAttemptId = durationsByAttemptId)
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -333,15 +363,24 @@ private fun BetaVideoCard(onPlayVideo: () -> Unit, videoUrl: String?) {
     }
 }
 
-// TODO(live-send-real): a per-route "top rank by fastest completion time" leaderboard, requested
-// alongside the stats above, is NOT buildable from existing data. ClimbAttemptEntity/
-// ClimbAnalysisEntity (which carry the real routeId link and real climbStartMs/climbEndMs timing)
-// live entirely in the local Room database — AnalysisRepository's own doc comment says outright
-// "this never needed to move to Firestore." Every climber's attempt/analysis history is private to
-// their own phone; there is no cross-user query surface at all to rank against. Building this for
-// real would mean adding a new sync path (uploading a per-attempt route+duration summary to
-// Firestore, keyed by route, similar to RouteStatsEntity) — a genuine new backend feature, not a
-// small additive query, so it's left undone here rather than faked with placeholder rankings.
+// live-send-real: a per-route "top rank by fastest completion time" leaderboard was requested
+// alongside the stats above. The blocker this comment used to describe is still real and still not
+// fully solved — ClimbAttemptEntity/ClimbAnalysisEntity (which carry the real routeId link and real
+// climbStartMs/climbEndMs timing) live entirely in the local Room database on whichever phone
+// recorded them; AnalysisRepository's own doc comment says outright "this never needed to move to
+// Firestore." There is still no cross-user query surface: no phone can ever read another user's
+// local analysis rows, and RouteCompletionEntity (Firestore) has nowhere to durably cache another
+// device's duration either, short of that device uploading it itself — a genuine new sync feature
+// (e.g. an attempt uploading its own route+duration summary once analysis completes, similar to
+// RouteStatsEntity), which stays undone here rather than faked.
+//
+// What IS real now: RouteCompletionEntity carries an optional attemptId (see its doc comment) back
+// to the ClimbAttemptEntity that produced the send, and SentByRow below resolves that id against
+// THIS device's own local AnalysisRepository — so whichever completions happen to have their
+// analysis on the very phone rendering this screen (in practice: the viewer's own past sends, since
+// that's the only local Room DB this screen can ever see) get a real ranked time; every other real
+// send still displays, just without a time, exactly as before. This is a strictly-additive, honest
+// subset of the originally-requested feature, not a placeholder ranking.
 
 /**
  * Real club-wide send-rate / attempts / sends stat row (5:434–5:439 slots, repurposed — see the
@@ -374,19 +413,35 @@ private fun StatBlock(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-/** One real user who has sent this route — [completedAt] is a real timestamp, not a rank; there's
- * no real per-user tiebreak metric (see the TODO above) to rank sends by, so this is presented as
- * a plain most-recent-first list rather than a fabricated "#1/#2/#3" ranking. */
-data class RouteCompletionRow(val userDisplayName: String, val completedAt: Long)
+/** One real user who has sent this route — [completedAt] is a real timestamp. [attemptId] is an
+ * optional real link back to the local [com.example.climb.analysis.ClimbAttemptEntity] that
+ * produced this send (see [com.example.climb.clubs.RouteCompletionEntity.attemptId]'s doc comment);
+ * it only ever resolves to a real completion duration on the device that recorded that attempt, so
+ * most rows on most screens will show no time — that's a real absence of data, not a bug, and
+ * [SentByRow] falls back to plain send-order (most-recent-first) for every row without one.
+ * [userId] is required specifically so [RouteDetailScreen] can restrict duration resolution to the
+ * viewer's OWN completions — [attemptId] is a bare local SQLite autoincrement id, not a globally
+ * unique identifier, so resolving it against the viewer's own local analysis table without this
+ * check could spuriously match an unrelated attempt of theirs and display a fabricated time
+ * attributed to a completely different user. */
+data class RouteCompletionRow(val userDisplayName: String, val completedAt: Long, val attemptId: Long? = null, val userId: String = "")
 
-/** "Sent by" — who has actually completed this route, most-recent-first
- * (com.example.climb.clubs.ClubRepository.observeRouteCompletions), documented via the one real
- * flow that both logs a climb AND links it to this route (ClimbDetailsInputScreen's route picker +
+/**
+ * "Sent by" — a real per-route leaderboard built from
+ * com.example.climb.clubs.ClubRepository.observeRouteCompletions, documented via the one real flow
+ * that both logs a climb AND links it to this route (ClimbDetailsInputScreen's route picker +
  * "Sent this climb" switch — plain in-app tagging alone has no route picker, so it can't produce
- * one of these). Bounded-height internal scroll past ~2 rows, matching every other growing real
- * list in this package (ClubDashboardScreen's activity feed, etc.) rather than stretching the page. */
+ * one of these).
+ *
+ * Ranking: completions [durationsByAttemptId] resolves to a real time are ranked first, fastest
+ * time first (#1 = fastest); every completion without a resolvable time follows in the order it
+ * arrived (most-recent-first, per observeRouteCompletions), continuing the same rank numbering — a
+ * "sent, no time recorded" row still earns a rank, it just isn't sorted by a time that doesn't
+ * exist for it. Bounded-height internal scroll past ~2 rows, matching every other growing real list
+ * in this package (ClubDashboardScreen's activity feed, etc.) rather than stretching the page.
+ */
 @Composable
-private fun SentByRow(completions: List<RouteCompletionRow>) {
+private fun SentByRow(completions: List<RouteCompletionRow>, durationsByAttemptId: Map<Long, Long> = emptyMap()) {
     Column {
         Text(
             text = "Sent by (${completions.size})",
@@ -402,15 +457,37 @@ private fun SentByRow(completions: List<RouteCompletionRow>) {
                 fontSize = 13.sp,
             )
         } else {
+            val (timed, untimed) = completions.partition { it.attemptId != null && durationsByAttemptId.containsKey(it.attemptId) }
+            val ranked: List<Pair<RouteCompletionRow, Long?>> =
+                timed.sortedBy { durationsByAttemptId.getValue(it.attemptId!!) }.map { it to durationsByAttemptId[it.attemptId] } +
+                    untimed.map { it to null }
+
             Column(
                 modifier = Modifier.heightIn(max = 138.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                completions.forEach { completion ->
+                ranked.forEachIndexed { index, (completion, durationMs) ->
                     LiveSendCard(cornerRadius = 14, padding = 14) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                            Text(text = completion.userDisplayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text(text = formatRelativeTime(completion.completedAt), color = ClimbPalette.liveSendTextMuted, fontSize = 12.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "#${index + 1}",
+                                    color = if (durationMs != null) ClimbPalette.liveSendGold else ClimbPalette.liveSendTextMuted,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    fontSize = 13.sp,
+                                    modifier = Modifier.padding(end = 8.dp),
+                                )
+                                Text(text = completion.userDisplayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            }
+                            Text(
+                                // A real resolved time takes priority over the plain relative
+                                // timestamp — see this function's doc comment for when that is (and
+                                // far more often, isn't) available.
+                                text = durationMs?.let { formatTimestampMs(it) } ?: formatRelativeTime(completion.completedAt),
+                                color = if (durationMs != null) ClimbPalette.liveSendTextPrimary else ClimbPalette.liveSendTextMuted,
+                                fontWeight = if (durationMs != null) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 12.sp,
+                            )
                         }
                     }
                 }

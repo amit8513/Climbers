@@ -235,11 +235,14 @@ private fun NormalNavHost(
 
     Scaffold(
         // LIVE_SEND_PREVIEW, CLUBS, and CLUB_MEMBER all host entirely liveSend-styled full-bleed
-        // screens (their own fixed dark/neon-lime palette, not the theme-reactive one) — matching
-        // this Scaffold's containerColor to whichever palette the current route actually shows
-        // keeps a theme-colored background from peeking through as a mismatched sliver behind the
-        // system bars while those routes are on screen.
-        containerColor = if (currentRoute == Routes.LIVE_SEND_PREVIEW || currentRoute == Routes.CLUBS || currentRoute == Routes.CLUB_MEMBER) {
+        // screens (their own fixed dark/neon-lime palette, not the theme-reactive one), and so does
+        // every TAB_ROUTES screen (Home/Progress/Leaderboard/Friends were all restyled to the same
+        // fixed liveSend palette) — matching this Scaffold's containerColor to whichever palette the
+        // current route actually shows keeps the theme-reactive (and, on the warm-toned themes,
+        // visibly brown) ClimbPalette.bg from peeking through as a mismatched band behind the
+        // floating bottom bar, which doesn't itself cover the Scaffold's full reserved bottom-bar
+        // area.
+        containerColor = if (currentRoute == Routes.LIVE_SEND_PREVIEW || currentRoute == Routes.CLUBS || currentRoute == Routes.CLUB_MEMBER || currentRoute in TAB_ROUTES) {
             ClimbPalette.liveSendBg
         } else {
             ClimbPalette.bg

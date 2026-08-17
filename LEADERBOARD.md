@@ -25,18 +25,23 @@ So, today (`leaderboard/data/LocalLeaderboardRepository.kt`):
 - Because `ClimbEntity`/`SharedClimb` have no attempt history or shared problem identity yet,
   each logged/shared climb maps to its own one-attempt "problem." Real attempt/problem tracking
   would make Consistency/lock-off-style metrics much more meaningful for everyone.
-- Per-friend leaderboard privacy settings (`LeaderboardPrivacySettings`) aren't stored anywhere
-  yet — `LocalLeaderboardRepository` applies a reasonable default (participating, stats visible to
-  friends, friends-only video) to every accepted friend. In practice this is mostly redundant with
-  `firestore.rules`, which already restricted what `FriendClimbsRepository` could read in the
-  first place.
+- Per-friend leaderboard privacy settings (`LeaderboardPrivacySettings`) are now real and
+  storable: each user's own settings live as a `leaderboardPrivacy` map field on their `users/{uid}`
+  profile doc (`SocialRepository.updateLeaderboardPrivacySettings`/`getLeaderboardPrivacySettings`/
+  `observeLeaderboardPrivacySettings`), editable from a "Leaderboard privacy" section in
+  `SettingsScreen`. `LocalLeaderboardRepository.friendEntry` fetches each friend's real stored
+  settings (falling back to `DEFAULT_LEADERBOARD_PRIVACY_SETTINGS` — participating, stats visible,
+  friends-only video — only for a user who's never touched their own settings) and now **excludes**
+  a friend from the leaderboard entirely (not just from the ranked list — from
+  `unrankedFriends` too) when their real settings say not participating or stats-sharing is off,
+  instead of silently falling back to an unfiltered entry. `firestore.rules` needed no new match
+  block: the field rides on `users/{uid}`'s existing owner-only-write rule.
 
 **What must move server-side for this to be production-grade:** authoritative scoring (currently
 computed on-device by whoever's viewing, from data already filtered by Firestore rules — a
 malicious client could still lie about its own computation, though not about what it can read),
-real per-friend `LeaderboardPrivacySettings` storage, and persisted weekly period rows with real
-`Active → Calculating → Complete` status transitions (currently just computed on demand from
-calendar time).
+and persisted weekly period rows with real `Active → Calculating → Complete` status transitions
+(currently just computed on demand from calendar time).
 
 ## The five categories
 

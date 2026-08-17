@@ -138,7 +138,7 @@ fun LiveSendMembersScreen(
         LiveSendBottomBar(
             tabs = listOf(
                 LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
-                LiveSendNavTab(Icons.Filled.Campaign, "Broadcast", selected = false, onClick = onNavBroadcast),
+                LiveSendNavTab(Icons.Filled.Campaign, "Social", selected = false, onClick = onNavBroadcast),
                 LiveSendNavTab(Icons.Filled.Group, "Members", selected = true, onClick = {}),
                 LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
             ),

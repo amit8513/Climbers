@@ -185,13 +185,25 @@ data class RouteStatsEntity(
  * through `ClimbDetailsInputScreen`'s route picker + "Sent this climb" switch (plain `TagScreen`
  * has no route picker at all, so it can never produce one of these). Re-sending the same route just
  * refreshes [completedAt] on the same doc (id `"${routeId}_$userId"`) rather than piling up
- * duplicates — this is "have you sent it," not an attempt log. */
+ * duplicates — this is "have you sent it," not an attempt log.
+ *
+ * [attemptId] links back to the local [com.example.climb.analysis.ClimbAttemptEntity] that produced
+ * this send, when the caller has one at write time — added so a per-route "fastest time" leaderboard
+ * can resolve a real completion duration (`climbEndMs - climbStartMs`) from the linked
+ * [com.example.climb.analysis.ClimbAnalysisEntity], instead of fabricating one. That analysis data
+ * lives only in the *local* Room database of whichever phone recorded it (see
+ * [com.example.climb.analysis.AnalysisRepository]'s own doc comment — attempts/analyses never sync
+ * to Firestore), so in practice [attemptId] only ever resolves to a real duration on the same device
+ * that created it; every other user's row here is real (a real send, at a real time) but its
+ * duration is simply unresolvable cross-device without a new sync feature, not fabricated as zero
+ * or omitted as a schema gap. Null for every completion recorded before this field existed. */
 data class RouteCompletionEntity(
     val routeId: Long,
     val organizationId: Long,
     val userId: String,
     val userDisplayName: String,
     val completedAt: Long,
+    val attemptId: Long? = null,
 )
 
 /**

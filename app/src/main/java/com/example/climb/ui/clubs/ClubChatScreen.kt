@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -34,6 +35,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -101,13 +106,21 @@ fun ClubChatScreen(
  * out of [ClubChatScreen] so the Social tab's in-place "Chat" tab can embed exactly the same real
  * chat (same data, same send action) inline within its own page shell, instead of navigating to a
  * separate screen for it. [ClubChatScreen] itself is now a thin wrapper around this for the staff
- * shell's standalone Chat route, which still needs its own header/back. */
+ * shell's standalone Chat route.
+ *
+ * [isStaff]/[onDeleteMessage] add staff-only moderation delete (see
+ * [com.example.climb.clubs.ClubRepository.deleteMessage]) on top of the same shared component —
+ * both default to "no delete capability at all" so every member-facing caller (the member Social
+ * tab's embedded Chat, and this file's own [ClubChatScreen] wrapper) keeps working unchanged
+ * without passing either: a regular member must never see or trigger message deletion. */
 @Composable
 fun ClubChatContent(
     currentUid: String,
     currentUsername: String,
     clubRepository: ClubRepository,
     organization: OrganizationEntity,
+    isStaff: Boolean = false,
+    onDeleteMessage: ((ClubMessageEntity) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val messages by clubRepository.observeMessagesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -154,7 +167,16 @@ fun ClubChatContent(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(messages, key = { it.id }) { message ->
-                    ChatMessageBubble(message = message, isOwnMessage = message.senderUid == currentUid)
+                    ChatMessageBubble(
+                        message = message,
+                        isOwnMessage = message.senderUid == currentUid,
+                        isStaff = isStaff,
+                        onDelete = if (isStaff && onDeleteMessage != null) {
+                            { onDeleteMessage(message) }
+                        } else {
+                            null
+                        },
+                    )
                 }
             }
         }
@@ -207,8 +229,13 @@ fun ClubChatContent(
     }
 }
 
+/** [isStaff]/[onDelete] add a "Delete" text affordance — same look/behavior as
+ * [com.example.climb.ui.livesend.real.LiveSendActivityRow]'s existing post-delete affordance, for
+ * visual consistency within the same restyled "Manage Social" screen. Placed inline next to the
+ * timestamp (not a fillMaxWidth row) so a short message's bubble doesn't suddenly stretch to the
+ * full available width just because a delete affordance was added underneath it. */
 @Composable
-private fun ChatMessageBubble(message: ClubMessageEntity, isOwnMessage: Boolean) {
+private fun ChatMessageBubble(message: ClubMessageEntity, isOwnMessage: Boolean, isStaff: Boolean = false, onDelete: (() -> Unit)? = null) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = if (isOwnMessage) Arrangement.End else Arrangement.Start) {
         Column(
             modifier = Modifier
@@ -234,11 +261,25 @@ private fun ChatMessageBubble(message: ClubMessageEntity, isOwnMessage: Boolean)
                 lineHeight = 19.sp,
             )
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = formatRelativeTime(message.sentAt),
-                color = if (isOwnMessage) ClimbPalette.liveSendAccentText.copy(alpha = 0.6f) else ClimbPalette.liveSendTextMuted,
-                fontSize = 10.sp,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = formatRelativeTime(message.sentAt),
+                    color = if (isOwnMessage) ClimbPalette.liveSendAccentText.copy(alpha = 0.6f) else ClimbPalette.liveSendTextMuted,
+                    fontSize = 10.sp,
+                )
+                if (isStaff && onDelete != null) {
+                    Text(
+                        text = "Delete",
+                        color = ClimbPalette.liveSendCta,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        modifier = Modifier
+                            .heightIn(min = 32.dp)
+                            .clickable(onClick = onDelete)
+                            .semantics { role = Role.Button; contentDescription = "Delete message" },
+                    )
+                }
+            }
         }
     }
 }

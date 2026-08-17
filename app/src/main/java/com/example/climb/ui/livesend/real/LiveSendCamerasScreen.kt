@@ -164,7 +164,7 @@ fun LiveSendCamerasScreen(
                 LiveSendBottomBar(
                     tabs = listOf(
                         LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
-                        LiveSendNavTab(Icons.Filled.Campaign, "Broadcast", selected = false, onClick = onNavBroadcast),
+                        LiveSendNavTab(Icons.Filled.Campaign, "Social", selected = false, onClick = onNavBroadcast),
                         LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
                         LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
                     ),

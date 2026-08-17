@@ -222,7 +222,11 @@ fun ClimbDetailsInputScreen(
                             clubRepository.recordClubAttempt(route.organizationId, currentUid, currentUsername, vGrade, completed)
                             clubRepository.recordRouteAttempt(route.routeId, route.organizationId, completed)
                             if (completed) {
-                                clubRepository.recordRouteCompletion(route.routeId, route.organizationId, currentUid, currentUsername)
+                                // attemptId links this send back to the ClimbAttemptEntity just
+                                // created above — see RouteCompletionEntity.attemptId's doc comment
+                                // for why this is real but only resolves to a duration on this
+                                // same device (analyses never sync to Firestore).
+                                clubRepository.recordRouteCompletion(route.routeId, route.organizationId, currentUid, currentUsername, attemptId)
                             }
                         }
                         saving = false

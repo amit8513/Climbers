@@ -26,7 +26,27 @@ class AnalysisRepository(private val dao: AnalysisDao) {
     fun observeClubAttempts(userId: String, organizationId: Long): Flow<List<ClimbAttemptEntity>> =
         dao.observeAttemptsForUserAndOrganization(userId, organizationId)
 
-    fun observeLatestAnalysis(attemptId: Long): Flow<ClimbAnalysisEntity?> = dao.observeLatestAnalysis(attemptId)
+    fun observeLatestAnalysis(attemptId: Long): Flow<AnalysisStatusSummary?> = dao.observeLatestAnalysis(attemptId)
+
+    /**
+     * Real completion durations (`climbEndMs - climbStartMs`) for whichever of [attemptIds] have a
+     * COMPLETE analysis in this device's local DB, keyed by attemptId — used to resolve a per-route
+     * leaderboard's real times (see [com.example.climb.clubs.RouteCompletionEntity.attemptId]'s doc
+     * comment). Attempt ids from *other* users' completions simply aren't present in this local
+     * table and are silently absent from the returned map, not fabricated as zero. Bounded, one-shot
+     * (not a Flow), so this is safe to call with a short caller-supplied id list even though the
+     * underlying query isn't the same lightweight shape as [observeLatestAnalysis] — see
+     * [AnalysisTimingSummary]'s doc comment.
+     */
+    suspend fun getCompletedDurationsForAttempts(attemptIds: List<Long>): Map<Long, Long> {
+        if (attemptIds.isEmpty()) return emptyMap()
+        return dao.getTimingsForAttempts(attemptIds)
+            .filter { it.status == AnalysisStatus.COMPLETE && it.climbStartMs != null && it.climbEndMs != null }
+            // Latest analysis per attempt wins (an attempt could in principle be re-analyzed) —
+            // query is already ORDER BY createdAt DESC, so the first match per attemptId is newest.
+            .distinctBy { it.attemptId }
+            .associate { it.attemptId to (it.climbEndMs!! - it.climbStartMs!!) }
+    }
 
     suspend fun createQueuedAnalysis(attemptId: Long, now: Long): Long = dao.insertAnalysis(
         ClimbAnalysisEntity(

@@ -176,7 +176,7 @@ fun ClubDashboardScreen(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
                         LiveSendTile(label = "Cameras", emoji = "📷", onClick = onManageVenues)
-                        LiveSendTile(label = "Broadcast", emoji = "📣", onClick = onManageBroadcast)
+                        LiveSendTile(label = "Social", emoji = "📣", onClick = onManageBroadcast)
                     }
                 }
             }
@@ -190,7 +190,7 @@ fun ClubDashboardScreen(
                 // onGoHome is a real no-op here (see ClubNavHost) rather than a self-navigate,
                 // which used to cause a visible transition flash for going nowhere.
                 LiveSendNavTab(Icons.Filled.Home, "Home", selected = true, onClick = onGoHome),
-                LiveSendNavTab(Icons.Filled.Campaign, "Broadcast", selected = false, onClick = onNavBroadcast),
+                LiveSendNavTab(Icons.Filled.Campaign, "Social", selected = false, onClick = onNavBroadcast),
                 LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
                 LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExit),
             ),

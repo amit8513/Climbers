@@ -1,6 +1,5 @@
 package com.example.climb.leaderboard.data
 
-import com.example.climb.analysis.Visibility
 import com.example.climb.data.ClimbOutcome
 import com.example.climb.data.ClimbRepository
 import com.example.climb.data.social.Friend
@@ -40,14 +39,6 @@ class LocalLeaderboardRepository(
 
     private val cache = LeaderboardCache()
 
-    /** Placeholder until real per-friend leaderboard privacy settings are stored anywhere —
-     * defaults to "on" for every accepted friend, same as a brand new user would see today. */
-    private val defaultFriendPrivacy = LeaderboardPrivacySettings(
-        participateInLeaderboard = true,
-        allowFriendsToViewStats = true,
-        defaultVideoVisibility = Visibility.FRIENDS_ONLY,
-    )
-
     override suspend fun getLeaderboard(viewerUserId: String, category: LeaderboardCategory, period: LeaderboardPeriod): LeaderboardResult {
         cache.get(category, period.id)?.let { (result, _) -> return result }
         return refreshLeaderboard(viewerUserId, category, period)
@@ -74,12 +65,15 @@ class LocalLeaderboardRepository(
         val friends = socialRepository.observeFriends(currentUid).first()
 
         val currentUserRaw = currentUserEntry(period)
-        val friendEntries = friends.map { friendEntry(it, period, viewerUserId) }
+        // mapNotNull, not map: a friend who has opted out of the leaderboard entirely (or turned
+        // off stats sharing with this viewer) must be excluded outright, not merely hidden in the
+        // UI — LeaderboardPrivacyFilter.filterForViewer returns null for exactly that case.
+        val friendEntries = friends.mapNotNull { friendEntry(it, period, viewerUserId) }
         val (eligibleFriends, unrankedFriends) = friendEntries.partition { it.isEligible }
         val rankable = eligibleFriends + (if (currentUserRaw.isEligible) listOf(currentUserRaw) else emptyList())
 
         val previousCurrentUserRaw = currentUserEntry(previousPeriod)
-        val previousFriendEntries = friends.map { friendEntry(it, previousPeriod, viewerUserId) }
+        val previousFriendEntries = friends.mapNotNull { friendEntry(it, previousPeriod, viewerUserId) }
         val previousRankable = previousFriendEntries.filter { it.isEligible } +
             (if (previousCurrentUserRaw.isEligible) listOf(previousCurrentUserRaw) else emptyList())
         val previousRanks = rankEntries(previousRankable, category, emptyMap()).associate { it.userId to it.rank }
@@ -102,11 +96,15 @@ class LocalLeaderboardRepository(
         return calculateEntry(currentUid, currentDisplayName, null, attempts, emptyList(), zoneId, isCurrentUser = true)
     }
 
-    private suspend fun friendEntry(friend: Friend, period: LeaderboardPeriod, viewerUserId: String): LeaderboardEntry {
+    /** Returns null when [friend] must not appear in this viewer's leaderboard at all — real,
+     * per-friend [LeaderboardPrivacySettings] (participation, stats sharing, video visibility),
+     * not a hardcoded default applied to everyone. */
+    private suspend fun friendEntry(friend: Friend, period: LeaderboardPeriod, viewerUserId: String): LeaderboardEntry? {
         val attempts = friendAttempts(friend.uid, period)
         val raw = calculateEntry(friend.uid, friend.username, null, attempts, emptyList(), zoneId)
         val videoCount = attempts.count { it.videoId != null }
-        return LeaderboardPrivacyFilter.filterForViewer(raw, viewerUserId, defaultFriendPrivacy, areFriends = true, totalOwnedVideoCount = videoCount) ?: raw
+        val settings = socialRepository.getLeaderboardPrivacySettings(friend.uid)
+        return LeaderboardPrivacyFilter.filterForViewer(raw, viewerUserId, settings, areFriends = true, totalOwnedVideoCount = videoCount)
     }
 
     /** The friend's climbs already passed `firestore.rules`' visibility check just to be

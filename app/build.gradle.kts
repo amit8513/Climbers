@@ -56,6 +56,12 @@ dependencies {
     testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
+    // Compose UI test support (createComposeRule, onNodeWithText, performClick, ...) — matched to
+    // the same Compose BOM version used by the main sourceSet so androidTest's Compose test
+    // artifacts never drift from the app's own Compose version.
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
