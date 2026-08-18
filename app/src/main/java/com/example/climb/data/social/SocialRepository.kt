@@ -1,6 +1,7 @@
 package com.example.climb.data.social
 
 import android.net.Uri
+import android.util.Log
 import com.example.climb.analysis.Visibility
 import com.example.climb.leaderboard.model.LeaderboardPrivacySettings
 import com.google.firebase.firestore.DocumentSnapshot
@@ -23,6 +24,12 @@ private const val USERNAMES = "usernames"
 private const val FRIEND_REQUESTS = "friendRequests"
 private const val FRIENDS = "friends"
 private const val LEADERBOARD_PRIVACY_FIELD = "leaderboardPrivacy"
+private const val TAG = "SocialRepository"
+
+/** Kept short and freeform on purpose — a one-line "about me", not a full profile essay. Enforced
+ * both here (defensive truncation on write) and in SettingsScreen's own input (a live counter so
+ * the limit is never a surprise at save time). */
+const val MAX_BIO_LENGTH = 160
 
 private fun profilePicturePath(uid: String) = "profile_pictures/$uid/photo.jpg"
 
@@ -98,6 +105,12 @@ class SocialRepository(
         firestore.collection(USERS).document(uid).update("photoUrl", photoUrl).await()
     }
 
+    /** Blank clears it back to "no bio" (stored as `null`, not an empty string) rather than
+     * leaving a visible-but-empty field on the profile page. */
+    suspend fun updateBio(uid: String, bio: String): Result<Unit> = runCatching {
+        firestore.collection(USERS).document(uid).update("bio", bio.trim().take(MAX_BIO_LENGTH).ifBlank { null }).await()
+    }
+
     /** An array, not a single field — the same account can be signed in on more than one device,
      * and each device's token needs its own push. [arrayUnion] is a no-op (not a duplicate) if this
      * exact token is already stored, so this is safe to call on every app start/token refresh, not
@@ -127,7 +140,12 @@ class SocialRepository(
         val registration = firestore.collection(USERS).document(uid)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    // Never let a Firestore hiccup (permission edge case, missing index, a blip
+                    // offline) crash the app — an uncaught close(error) here propagates straight
+                    // through collectAsStateWithLifecycle and kills the whole process. Degrade to
+                    // the same reasonable default a missing field already gets.
+                    Log.w(TAG, "Failed to observe leaderboard privacy settings for $uid", error)
+                    trySend(DEFAULT_LEADERBOARD_PRIVACY_SETTINGS)
                     return@addSnapshotListener
                 }
                 trySend(snapshot?.toLeaderboardPrivacySettings() ?: DEFAULT_LEADERBOARD_PRIVACY_SETTINGS)
@@ -145,7 +163,9 @@ class SocialRepository(
         val registration = firestore.collection(USERS).document(uid)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    // See observeLeaderboardPrivacySettings's doc comment — never crash on this.
+                    Log.w(TAG, "Failed to observe profile for $uid", error)
+                    trySend(null)
                     return@addSnapshotListener
                 }
                 trySend(snapshot?.toUserProfile(uid))
@@ -211,6 +231,15 @@ class SocialRepository(
             firestore.collection(USERS).document(request.toUid).collection(FRIENDS).document(request.fromUid),
             mapOf("username" to request.fromUsername, "since" to now),
         )
+        // Keeps UserProfile.friendCount in sync on both sides — see its doc comment for why this
+        // denormalized field exists at all (rules don't let one user read another's /friends
+        // subcollection directly). The write to the OTHER party's own doc (whichever of
+        // fromUid/toUid isn't request.auth.uid) is only legal because of firestore.rules' matching
+        // "friendCount-only, accepted-request-gated" exception on /users/{uid} — this must stay a
+        // single-field FieldValue.increment(1) update, never a broader write, or it'll violate that
+        // rule and the whole batch (including the two friend docs above) will be rejected.
+        batch.update(firestore.collection(USERS).document(request.fromUid), "friendCount", FieldValue.increment(1))
+        batch.update(firestore.collection(USERS).document(request.toUid), "friendCount", FieldValue.increment(1))
         batch.commit().await()
     }
 
@@ -219,11 +248,17 @@ class SocialRepository(
             .update("status", FriendRequestStatus.DECLINED.name).await()
     }
 
+    // Rules only allow the doc owner to read their own /friends subcollection (see
+    // firestore.rules) — calling this with any uid other than the signed-in user is always
+    // denied. Degrades to an empty list rather than crashing (see observeLeaderboardPrivacySettings's
+    // doc comment); callers that need a REMOTE user's friend count must read
+    // [UserProfile.friendCount] instead (denormalized, readable by anyone signed in).
     fun observeFriends(uid: String): Flow<List<Friend>> = callbackFlow {
         val registration = firestore.collection(USERS).document(uid).collection(FRIENDS)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    Log.w(TAG, "Failed to observe friends for $uid", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 trySend(snapshot?.documents?.mapNotNull { it.toFriend() }.orEmpty())
@@ -234,7 +269,8 @@ class SocialRepository(
     private fun observeRequests(query: Query): Flow<List<FriendRequest>> = callbackFlow {
         val registration = query.addSnapshotListener { snapshot, error ->
             if (error != null) {
-                close(error)
+                Log.w(TAG, "Failed to observe friend requests", error)
+                trySend(emptyList())
                 return@addSnapshotListener
             }
             trySend(snapshot?.documents?.mapNotNull { it.toFriendRequest() }.orEmpty())
@@ -246,7 +282,13 @@ class SocialRepository(
 private fun DocumentSnapshot.toUserProfile(uid: String): UserProfile? {
     if (!exists()) return null
     val username = getString("username") ?: return null
-    return UserProfile(uid = uid, username = username, photoUrl = getString("photoUrl"))
+    return UserProfile(
+        uid = uid,
+        username = username,
+        photoUrl = getString("photoUrl"),
+        bio = getString("bio"),
+        friendCount = getLong("friendCount")?.toInt() ?: 0,
+    )
 }
 
 private fun DocumentSnapshot.toFriend(): Friend? {

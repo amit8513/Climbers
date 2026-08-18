@@ -23,6 +23,7 @@ class AppWorkerFactory(private val container: AppContainer) : WorkerFactory() {
             workerParameters,
             container.analysisRepository,
             container.poseEstimator,
+            container.clubRepository,
         )
         ClimbSyncWorker::class.java.name -> ClimbSyncWorker(
             appContext,

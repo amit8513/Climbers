@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -26,6 +27,7 @@ import com.example.climb.ui.livesend.real.LiveSendBroadcastScreen
 import com.example.climb.ui.livesend.real.LiveSendCamerasScreen
 import com.example.climb.ui.livesend.real.LiveSendClubExploreHost
 import com.example.climb.ui.livesend.real.LiveSendMembersScreen
+import com.example.climb.ui.livesend.real.LiveSendStatisticsScreen
 import com.example.climb.ui.progress.ProgressScreen
 import com.example.climb.ui.settings.SettingsScreen
 import com.example.climb.ui.theme.ClimbPalette
@@ -42,6 +44,7 @@ private object ClubRoutes {
     const val SETTINGS_PREVIEW = "club_settings_preview"
     const val PROGRESS_PREVIEW = "club_progress_preview"
     const val RANKS_PREVIEW = "club_ranks_preview"
+    const val STATS = "club_stats"
 }
 
 private fun navigateToClubTab(navController: NavHostController, route: String) {
@@ -74,6 +77,13 @@ private fun navigateToClubTab(navController: NavHostController, route: String) {
  */
 @Composable
 fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfile, organization: OrganizationEntity, onExitClub: () -> Unit) {
+    // Once per real visit to this club's staff shell — see MemberClubNavHost's matching call for
+    // the member-shell side of the same signal. Fire-and-forget: a failure here (e.g. offline)
+    // must never block entering Club Mode itself.
+    LaunchedEffect(organization.id, currentUid) {
+        container.clubRepository.recordMemberActivity(organization.id, currentUid)
+    }
+
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     // Every "Home" control in this shell means Club Home — the Dashboard itself.
@@ -127,6 +137,7 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onManageMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
                     onManageVenues = { navController.navigate(ClubRoutes.CAMERAS) },
                     onManageBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
+                    onManageStats = { navController.navigate(ClubRoutes.STATS) },
                     onNavRoutes = { navController.navigate(ClubRoutes.explore("routes")) },
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
@@ -172,6 +183,13 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onGoHome = backToClubHome,
                     onExitClub = onExitClub,
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
+                )
+            }
+            composable(ClubRoutes.STATS) {
+                LiveSendStatisticsScreen(
+                    clubRepository = container.clubRepository,
+                    organization = organization,
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable(ClubRoutes.CAMERAS) {

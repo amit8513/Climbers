@@ -113,6 +113,9 @@ fun ClubDashboardScreen(
     // rendering identically without passing any of these explicitly.
     onGoHome: () -> Unit = onExit,
     onOpenSettings: () -> Unit = {},
+    // Opens the real Statistics screen (com.example.climb.ui.livesend.real.LiveSendStatisticsScreen)
+    // — a no-op default so the untouched design-exploration preview keeps compiling without it.
+    onManageStats: () -> Unit = {},
     clubName: String = "Golomb Club",
     memberCount: Int = 12,
     pendingJoinRequestCount: Int = 4,
@@ -177,6 +180,9 @@ fun ClubDashboardScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
                         LiveSendTile(label = "Cameras", emoji = "📷", onClick = onManageVenues)
                         LiveSendTile(label = "Social", emoji = "📣", onClick = onManageBroadcast)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(15.dp)) {
+                        LiveSendTile(label = "Stats", emoji = "📊", onClick = onManageStats)
                     }
                 }
             }

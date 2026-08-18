@@ -31,12 +31,17 @@ fun LiveSendTextField(
     modifier: Modifier = Modifier,
     keyboardType: KeyboardType = KeyboardType.Text,
     isPassword: Boolean = false,
+    // Opt-in — every existing caller (email/password/name fields) stays single-line; a short
+    // multi-line field like a bio passes singleLine = false and a minLines > 1.
+    singleLine: Boolean = true,
+    minLines: Int = 1,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
         placeholder = { Text(placeholder, color = ClimbPalette.liveSendTextMuted, fontSize = 14.sp) },
-        singleLine = true,
+        singleLine = singleLine,
+        minLines = minLines,
         shape = RoundedCornerShape(16.dp),
         visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(keyboardType = keyboardType),

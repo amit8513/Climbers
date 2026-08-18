@@ -17,6 +17,17 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if signedIn() && request.auth.uid == uid;
 
+      // A narrow exception to owner-only write, mirroring the /friends subcollection's own
+      // create-rule exception below: when request.auth.uid just accepted an incoming request
+      // FROM uid, acceptFriendRequest's batch also needs to bump uid's OWN friendCount (not just
+      // its own) so both sides' denormalized counts (UserProfile.friendCount) stay in sync.
+      // hasOnly(['friendCount']) means this can never be used to touch anything else on someone
+      // else's profile — not username, not photoUrl, nothing.
+      allow update: if signedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['friendCount']) &&
+        exists(/databases/$(database)/documents/friendRequests/$(uid + '_' + request.auth.uid)) &&
+        get(/databases/$(database)/documents/friendRequests/$(uid + '_' + request.auth.uid)).data.status == 'ACCEPTED';
+
       match /friends/{friendUid} {
         allow read: if signedIn() && request.auth.uid == uid;
         allow create: if signedIn() &&
@@ -110,7 +121,14 @@ service cloud.firestore {
           (request.resource.data.role == 'ADMIN' && request.resource.data.userId == request.auth.uid) ||
           isStaffOf(request.resource.data.organizationId)
         );
-      allow update, delete: if false;
+      // A narrow exception to the otherwise-immutable membership doc: a member may bump their OWN
+      // lastActiveAt field (and only that field) on every real Club Mode visit — see
+      // ClubRepository.recordMemberActivity. hasOnly(['lastActiveAt']) means this can never be
+      // used to touch role/userDisplayName/joinedAt/anything else.
+      allow update: if signedIn() &&
+        request.auth.uid == resource.data.userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastActiveAt']);
+      allow delete: if false;
     }
 
     match /organizationJoinRequests/{requestId} {
@@ -203,6 +221,16 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create, update: if signedIn() && request.resource.data.userId == request.auth.uid;
       allow delete: if false;
+    }
+
+    // A real, timestamped log of every attempt event — same trust level as clubStats (write-your-
+    // own-only), append-only. Backs the staff Statistics screen's time-bucketed "attempts/sends
+    // today/this week/this month" numbers, which routeStats' all-time running counters alone can't
+    // answer. See RouteAttemptEventEntity's doc comment.
+    match /routeAttemptEvents/{eventId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false;
     }
 
     // Who has sent a specific route — same trust level as clubStats (you can only ever write

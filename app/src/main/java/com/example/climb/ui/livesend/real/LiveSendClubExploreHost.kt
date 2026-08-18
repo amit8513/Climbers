@@ -174,6 +174,10 @@ fun LiveSendClubExploreHost(
     // entire host regardless of which inner screen was showing, stranding Browse with no back
     // affordance at all (a real reported regression).
     onAtRootChanged: (Boolean) -> Unit = {},
+    // Opens a sharer's user profile page from RouteDetailScreen's "Member sends" section — same
+    // destination LiveSendSocialScreen's shared-video cards use. Default no-op keeps the mock
+    // preview and the staff Club Mode context (no profile page exists there) unaffected.
+    onOpenUserProfile: (String) -> Unit = {},
     // Optional — resolves RouteDetailScreen's per-route leaderboard to real completion durations
     // where this device's own local analysis DB has them (see RouteCompletionRow's doc comment for
     // why that's only ever a subset of real sends). Null default keeps every existing caller
@@ -281,15 +285,19 @@ fun LiveSendClubExploreHost(
                     totalSends = sends,
                     betaVideoAvailable = route.betaVideoUrl != null,
                     betaVideoUrl = route.betaVideoUrl,
-                    completions = routeCompletions.map { RouteCompletionRow(userDisplayName = it.userDisplayName, completedAt = it.completedAt, attemptId = it.attemptId, userId = it.userId) },
+                    completions = routeCompletions.map { RouteCompletionRow(userDisplayName = it.userDisplayName, completedAt = it.completedAt, attemptId = it.attemptId, userId = it.userId, durationMs = it.durationMs) },
                     analysisRepository = analysisRepository,
                     currentUid = currentUid,
                     sharedAttempts = sharedAttemptRows,
                     onToggleLike = { row -> scope.launch { clubRepository.setSharedAttemptLiked(row.id, currentUid, liked = !row.likedByViewer) } },
+                    onOpenProfile = onOpenUserProfile,
                     onBack = { navController.popBackStack() },
                     onPlayVideo = { /* no-op: real playback is now inline in RouteDetailScreen's beta card via betaVideoUrl */ },
-                    onLogAttempt = { /* TODO(live-send-real): needs the full attempt-logging form (ClimbDetailsInputScreen) */ },
-                    onRecordAttempt = { /* TODO(live-send-real): same as above */ },
+                    // TODO(live-send-real): attempt-logging is deferred until the gym's own
+                    // in-venue cameras are the real recording source — a member manually picking a
+                    // video from their gallery to "log an attempt" isn't the intended flow.
+                    onLogAttempt = { },
+                    onRecordAttempt = { },
                     showRecordFab = false,
                     onFeedTab = onGoHome,
                     onProgressTab = onProgressTab,

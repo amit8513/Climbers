@@ -288,7 +288,6 @@ private fun NormalNavHost(
                     settingsStore = container.settingsStore,
                     onBack = { navController.popBackStack() },
                     onOpenClubs = { navController.navigate(Routes.CLUBS) },
-                    onOpenLiveSendPreview = { navController.navigate(Routes.LIVE_SEND_PREVIEW) },
                     staffOrganizations = staffOrganizations,
                     onEnterClubMode = onEnterClubMode,
                 )

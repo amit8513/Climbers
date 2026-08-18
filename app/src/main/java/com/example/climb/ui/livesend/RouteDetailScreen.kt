@@ -52,6 +52,7 @@ import com.example.climb.analysis.AnalysisRepository
 import com.example.climb.analysis.formatTimestampMs
 import com.example.climb.ui.livesend.components.ExpandableVideoPlayer
 import com.example.climb.ui.livesend.components.GradeBadge
+import com.example.climb.ui.livesend.components.LiveSendAvatar
 import com.example.climb.ui.livesend.components.LiveSendBottomBar
 import com.example.climb.ui.livesend.components.LiveSendCard
 import com.example.climb.ui.livesend.components.LiveSendFab
@@ -140,6 +141,11 @@ fun RouteDetailScreen(
     // preview unaffected.
     sharedAttempts: List<SharedAttemptRow> = emptyList(),
     onToggleLike: (SharedAttemptRow) -> Unit = {},
+    // Opens the sharer's user profile page — same destination as
+    // com.example.climb.ui.livesend.real.LiveSendSocialScreen's SocialSharedVideoCard. Default
+    // no-op keeps the mock preview and the staff Club Mode context (no profile page exists there)
+    // unaffected.
+    onOpenProfile: (String) -> Unit = {},
     // False in the member shell, where the outer MemberClubNavHost's own shared floating island
     // already shows for this tab (per user request that every floating island in Club Mode stay
     // consistent, rather than this screen's own distinct Home/Progress/Ranks/Club bar). Staff
@@ -230,7 +236,7 @@ fun RouteDetailScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            SharedAttemptsSection(attempts = sharedAttempts, onToggleLike = onToggleLike)
+            SharedAttemptsSection(attempts = sharedAttempts, onToggleLike = onToggleLike, onOpenProfile = onOpenProfile)
 
             Spacer(modifier = Modifier.height(20.dp))
 
@@ -423,8 +429,15 @@ private fun StatBlock(text: String, modifier: Modifier = Modifier) {
  * viewer's OWN completions — [attemptId] is a bare local SQLite autoincrement id, not a globally
  * unique identifier, so resolving it against the viewer's own local analysis table without this
  * check could spuriously match an unrelated attempt of theirs and display a fabricated time
- * attributed to a completely different user. */
-data class RouteCompletionRow(val userDisplayName: String, val completedAt: Long, val attemptId: Long? = null, val userId: String = "")
+ * attributed to a completely different user.
+ *
+ * [durationMs] is the real, cross-device-synced completion duration (see
+ * [com.example.climb.clubs.RouteCompletionEntity.durationMs]'s doc comment) — unlike [attemptId],
+ * this resolves on EVERY member's device, not just the one that recorded the attempt, once
+ * [com.example.climb.analysis.PoseAnalysisWorker]'s sync round-trips through Firestore. [SentByRow]
+ * prefers this over the local [attemptId] lookup, falling back to the latter only for the narrow
+ * window right after the viewer's own local analysis finishes but before that sync is visible here. */
+data class RouteCompletionRow(val userDisplayName: String, val completedAt: Long, val attemptId: Long? = null, val userId: String = "", val durationMs: Long? = null)
 
 /**
  * "Sent by" — a real per-route leaderboard built from
@@ -433,12 +446,15 @@ data class RouteCompletionRow(val userDisplayName: String, val completedAt: Long
  * "Sent this climb" switch — plain in-app tagging alone has no route picker, so it can't produce
  * one of these).
  *
- * Ranking: completions [durationsByAttemptId] resolves to a real time are ranked first, fastest
- * time first (#1 = fastest); every completion without a resolvable time follows in the order it
- * arrived (most-recent-first, per observeRouteCompletions), continuing the same rank numbering — a
- * "sent, no time recorded" row still earns a rank, it just isn't sorted by a time that doesn't
- * exist for it. Bounded-height internal scroll past ~2 rows, matching every other growing real list
- * in this package (ClubDashboardScreen's activity feed, etc.) rather than stretching the page.
+ * Ranking: completions with a resolvable real time are ranked first, fastest time first (#1 =
+ * fastest); every completion without a resolvable time follows in the order it arrived
+ * (most-recent-first, per observeRouteCompletions), continuing the same rank numbering — a "sent,
+ * no time recorded" row still earns a rank, it just isn't sorted by a time that doesn't exist for
+ * it. Each completion's real, cross-device-synced [RouteCompletionRow.durationMs] (see its doc
+ * comment) is preferred; the local-only [durationsByAttemptId] map is only consulted as a fallback,
+ * for the narrow window right after the viewer's own local analysis finishes but before that sync
+ * is visible here. Bounded-height internal scroll past ~2 rows, matching every other growing real
+ * list in this package (ClubDashboardScreen's activity feed, etc.) rather than stretching the page.
  */
 @Composable
 private fun SentByRow(completions: List<RouteCompletionRow>, durationsByAttemptId: Map<Long, Long> = emptyMap()) {
@@ -457,9 +473,12 @@ private fun SentByRow(completions: List<RouteCompletionRow>, durationsByAttemptI
                 fontSize = 13.sp,
             )
         } else {
-            val (timed, untimed) = completions.partition { it.attemptId != null && durationsByAttemptId.containsKey(it.attemptId) }
+            val resolvedMs: (RouteCompletionRow) -> Long? = { completion ->
+                completion.durationMs ?: completion.attemptId?.let { durationsByAttemptId[it] }
+            }
+            val (timed, untimed) = completions.partition { resolvedMs(it) != null }
             val ranked: List<Pair<RouteCompletionRow, Long?>> =
-                timed.sortedBy { durationsByAttemptId.getValue(it.attemptId!!) }.map { it to durationsByAttemptId[it.attemptId] } +
+                timed.sortedBy { resolvedMs(it) }.map { it to resolvedMs(it) } +
                     untimed.map { it to null }
 
             Column(
@@ -521,7 +540,7 @@ data class SharedAttemptRow(
  * convention as [SentByRow]. Each card plays inline on tap (same [BetaVideoPlayer] reuse as
  * [BetaVideoCard]) rather than a separate screen, and carries its own like button. */
 @Composable
-private fun SharedAttemptsSection(attempts: List<SharedAttemptRow>, onToggleLike: (SharedAttemptRow) -> Unit) {
+private fun SharedAttemptsSection(attempts: List<SharedAttemptRow>, onToggleLike: (SharedAttemptRow) -> Unit, onOpenProfile: (String) -> Unit = {}) {
     Column {
         Text(
             text = "Member sends (${attempts.size})",
@@ -541,36 +560,41 @@ private fun SharedAttemptsSection(attempts: List<SharedAttemptRow>, onToggleLike
                 modifier = Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                attempts.forEach { row -> SharedAttemptCard(row = row, onToggleLike = { onToggleLike(row) }) }
+                attempts.forEach { row -> SharedAttemptCard(row = row, onToggleLike = { onToggleLike(row) }, onOpenProfile = { onOpenProfile(row.userId) }) }
             }
         }
     }
 }
 
 @Composable
-private fun SharedAttemptCard(row: SharedAttemptRow, onToggleLike: () -> Unit) {
+private fun SharedAttemptCard(row: SharedAttemptRow, onToggleLike: () -> Unit, onOpenProfile: () -> Unit = {}) {
     var isPlaying by remember(row.id) { mutableStateOf(false) }
     LiveSendCard(cornerRadius = 16, padding = 14) {
         Column {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 // While the video is open, tapping this header closes it back to just this
-                // header row instead of the video staying open indefinitely.
-                Column(
-                    modifier = if (isPlaying) {
-                        Modifier
-                            .clickable(onClick = { isPlaying = false })
-                            .semantics { role = Role.Button; contentDescription = "Close video" }
-                    } else {
-                        Modifier
-                    },
+                // header row; otherwise it opens the sharer's profile — same dual-purpose tap
+                // target as LiveSendSocialScreen's SocialSharedVideoCard.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clickable(onClick = { if (isPlaying) isPlaying = false else onOpenProfile() })
+                        .semantics {
+                            role = Role.Button
+                            contentDescription = if (isPlaying) "Close video" else "Open ${row.userDisplayName}'s profile"
+                        },
                 ) {
-                    Text(text = row.userDisplayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                    Text(
-                        text = if (row.flash) "Flash" else if (row.completed) "Sent" else "Fell",
-                        color = if (row.completed) ClimbPalette.sent else ClimbPalette.fell,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    LiveSendAvatar(initial = row.userDisplayName.firstOrNull()?.toString() ?: "?", size = 32)
+                    Spacer(Modifier.width(10.dp))
+                    Column {
+                        Text(text = row.userDisplayName, color = ClimbPalette.liveSendTextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        Text(
+                            text = if (row.flash) "Flash" else if (row.completed) "Sent" else "Fell",
+                            color = if (row.completed) ClimbPalette.sent else ClimbPalette.fell,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                 }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

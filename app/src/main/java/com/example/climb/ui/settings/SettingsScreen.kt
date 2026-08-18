@@ -41,15 +41,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.climb.analysis.Visibility
 import com.example.climb.clubs.OrganizationEntity
-import com.example.climb.data.settings.ClimbThemeOption
 import com.example.climb.data.settings.HomeVideoMontageStyle
 import com.example.climb.data.settings.SettingsStore
 import com.example.climb.data.social.AuthRepository
+import com.example.climb.data.social.MAX_BIO_LENGTH
 import com.example.climb.data.social.SocialRepository
 import com.example.climb.data.social.UserProfile
 import com.example.climb.leaderboard.model.LeaderboardPrivacySettings
@@ -58,7 +60,6 @@ import com.example.climb.ui.livesend.components.LiveSendPrimaryButton
 import com.example.climb.ui.livesend.components.LiveSendSectionLabel
 import com.example.climb.ui.livesend.components.LiveSendTextField
 import com.example.climb.ui.theme.ClimbPalette
-import com.example.climb.ui.theme.palette
 import com.example.climb.ui.theme.wallTexture
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -74,7 +75,6 @@ fun SettingsScreen(
     settingsStore: SettingsStore,
     onBack: () -> Unit,
     onOpenClubs: () -> Unit,
-    onOpenLiveSendPreview: () -> Unit = {},
     staffOrganizations: List<OrganizationEntity> = emptyList(),
     onEnterClubMode: (OrganizationEntity) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -105,12 +105,8 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(16.dp))
 
-            LiveSendCard {
-                Column {
-                    LiveSendSectionLabel(text = "Password")
-                    Spacer(Modifier.height(10.dp))
-                    PasswordSection(authRepository = authRepository)
-                }
+            CollapsibleCard(title = "Change password") {
+                PasswordSection(authRepository = authRepository)
             }
             Spacer(Modifier.height(16.dp))
 
@@ -131,15 +127,6 @@ fun SettingsScreen(
                         fontSize = 13.sp,
                         modifier = Modifier.padding(top = 10.dp).clickable(onClick = onOpenClubs),
                     )
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-
-            LiveSendCard {
-                Column {
-                    LiveSendSectionLabel(text = "Leaderboard privacy")
-                    Spacer(Modifier.height(10.dp))
-                    LeaderboardPrivacySection(uid = uid, socialRepository = socialRepository)
                 }
             }
             Spacer(Modifier.height(16.dp))
@@ -173,15 +160,6 @@ fun SettingsScreen(
 
             LiveSendCard {
                 Column {
-                    LiveSendSectionLabel(text = "Appearance")
-                    Spacer(Modifier.height(10.dp))
-                    AppearanceSection(settingsStore = settingsStore)
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-
-            LiveSendCard {
-                Column {
                     LiveSendSectionLabel(text = "Home background")
                     Spacer(Modifier.height(10.dp))
                     HomeBackgroundSection(settingsStore = settingsStore)
@@ -189,24 +167,8 @@ fun SettingsScreen(
             }
             Spacer(Modifier.height(16.dp))
 
-            LiveSendCard {
-                Column {
-                    LiveSendSectionLabel(text = "UI Concepts")
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = "Design exploration: \"Live Send\" — an energetic sport-style alternative UI with its own auth flow and gym-mode dashboard.",
-                        color = ClimbPalette.liveSendTextMuted,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                    )
-                    Text(
-                        text = "Preview: Live Send →",
-                        color = ClimbPalette.liveSendAccent,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        modifier = Modifier.padding(top = 10.dp).clickable(onClick = onOpenLiveSendPreview),
-                    )
-                }
+            CollapsibleCard(title = "Leaderboard privacy") {
+                LeaderboardPrivacySection(uid = uid, socialRepository = socialRepository)
             }
             Spacer(Modifier.height(16.dp))
 
@@ -228,12 +190,46 @@ fun SettingsScreen(
     }
 }
 
+/** A [LiveSendCard] section that starts collapsed (just its title + a chevron) and only renders
+ * [content] once tapped open — used for sections that are useful but not something most people
+ * need to see on every visit (Change password, Leaderboard privacy), instead of always taking up
+ * full space on screen. */
+@Composable
+private fun CollapsibleCard(title: String, content: @Composable () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    LiveSendCard {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .semantics { contentDescription = "$title, ${if (expanded) "expanded" else "collapsed"}" },
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LiveSendSectionLabel(text = title)
+                Text(
+                    text = if (expanded) "▲" else "▼",
+                    color = ClimbPalette.liveSendTextMuted,
+                    fontSize = 11.sp,
+                )
+            }
+            if (expanded) {
+                Spacer(Modifier.height(10.dp))
+                content()
+            }
+        }
+    }
+}
+
 @Composable
 private fun ProfileSection(uid: String, profile: UserProfile, socialRepository: SocialRepository) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val friends by socialRepository.observeFriends(uid).collectAsStateWithLifecycle(initialValue = emptyList())
 
     var username by remember(profile.username) { mutableStateOf(profile.username) }
+    var bio by remember(profile.bio) { mutableStateOf(profile.bio.orEmpty()) }
     var selectedPhotoUri by remember { mutableStateOf<Uri?>(null) }
     var loading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -251,10 +247,16 @@ private fun ProfileSection(uid: String, profile: UserProfile, socialRepository: 
             onClick = { pickPhotoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
         )
         Text(
+            text = "${friends.size} friend${if (friends.size == 1) "" else "s"}",
+            color = ClimbPalette.liveSendTextMuted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        Text(
             text = "Tap to change photo",
             color = ClimbPalette.liveSendTextMuted,
             fontSize = 12.sp,
-            modifier = Modifier.padding(top = 8.dp, bottom = 16.dp),
+            modifier = Modifier.padding(top = 2.dp, bottom = 16.dp),
         )
     }
 
@@ -265,6 +267,24 @@ private fun ProfileSection(uid: String, profile: UserProfile, socialRepository: 
         modifier = Modifier.fillMaxWidth(),
     )
 
+    Spacer(Modifier.height(10.dp))
+
+    LiveSendTextField(
+        value = bio,
+        onValueChange = { if (it.length <= MAX_BIO_LENGTH) { bio = it; errorMessage = null; successMessage = null } },
+        placeholder = "Bio (optional)",
+        singleLine = false,
+        minLines = 2,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Text(
+        text = "${bio.length}/$MAX_BIO_LENGTH",
+        color = ClimbPalette.liveSendTextMuted,
+        fontSize = 11.sp,
+        textAlign = TextAlign.End,
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+    )
+
     if (errorMessage != null) {
         Text(text = errorMessage.orEmpty(), color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
     }
@@ -273,10 +293,11 @@ private fun ProfileSection(uid: String, profile: UserProfile, socialRepository: 
     }
 
     val usernameChanged = username != profile.username
+    val bioChanged = bio != profile.bio.orEmpty()
     val photoChanged = selectedPhotoUri != null
     LiveSendPrimaryButton(
         text = "Save changes",
-        enabled = !loading && (usernameChanged || photoChanged) && usernamePattern.matches(username),
+        enabled = !loading && (usernameChanged || bioChanged || photoChanged) && usernamePattern.matches(username),
         loading = loading,
         onClick = {
             loading = true
@@ -301,6 +322,14 @@ private fun ProfileSection(uid: String, profile: UserProfile, socialRepository: 
                 }
                 if (usernameChanged) {
                     val result = socialRepository.updateUsername(uid, profile.username, username)
+                    if (result.isFailure) {
+                        loading = false
+                        errorMessage = result.exceptionOrNull()?.message ?: "Something went wrong"
+                        return@launch
+                    }
+                }
+                if (bioChanged) {
+                    val result = socialRepository.updateBio(uid, bio)
                     if (result.isFailure) {
                         loading = false
                         errorMessage = result.exceptionOrNull()?.message ?: "Something went wrong"
@@ -546,21 +575,6 @@ private fun LeaderboardVideoVisibilityRow(option: LeaderboardVideoVisibilityOpti
 }
 
 @Composable
-private fun AppearanceSection(settingsStore: SettingsStore) {
-    Text(text = "Theme", color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp, letterSpacing = 0.6.sp)
-    Spacer(Modifier.height(10.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        ClimbThemeOption.entries.forEach { option ->
-            ThemeCard(
-                option = option,
-                selected = settingsStore.themeOption == option,
-                onClick = { settingsStore.selectTheme(option) },
-            )
-        }
-    }
-}
-
-@Composable
 private fun HomeBackgroundSection(settingsStore: SettingsStore) {
     Column {
         Row(
@@ -648,40 +662,3 @@ private fun MontageStyleRow(option: HomeVideoMontageStyle, selected: Boolean, on
     }
 }
 
-/** Each card previews the theme's own background, surface, and accent colors directly — rather
- * than a single dot — since the whole point of a full theme (vs. the old single-accent picker)
- * is that several colors change together. */
-@Composable
-private fun ThemeCard(option: ClimbThemeOption, selected: Boolean, onClick: () -> Unit) {
-    val palette = option.palette()
-    val shape = RoundedCornerShape(10.dp)
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(width = 72.dp, height = 64.dp)
-                .clip(shape)
-                .background(palette.bg)
-                .border(if (selected) 2.dp else 1.dp, if (selected) ClimbPalette.liveSendAccent else ClimbPalette.liveSendBorder, shape)
-                .clickable(onClick = onClick)
-                .semantics { contentDescription = "${option.label} theme${if (selected) ", selected" else ""}" },
-        ) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .height(22.dp)
-                    .background(palette.surface),
-            )
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(7.dp)
-                    .size(14.dp)
-                    .clip(CircleShape)
-                    .background(palette.chalk),
-            )
-        }
-        Spacer(Modifier.height(6.dp))
-        Text(text = option.label, color = ClimbPalette.liveSendTextMuted, fontSize = 11.sp)
-    }
-}

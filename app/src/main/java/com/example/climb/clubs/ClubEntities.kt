@@ -28,6 +28,11 @@ data class OrganizationMembershipEntity(
     val userDisplayName: String,
     val role: OrganizationRole,
     val joinedAt: Long,
+    /** Bumped by [ClubRepository.recordMemberActivity] once per real Club Mode visit (staff or
+     * member shell) — the one real signal behind the staff Statistics screen's daily/weekly active
+     * member counts and its churn-risk list. Null for a membership that predates this field, or one
+     * that's simply never been visited since — both real "no data yet," not a fabricated zero. */
+    val lastActiveAt: Long? = null,
 )
 
 /** A physical gym location belonging to an organization. */
@@ -196,7 +201,17 @@ data class RouteStatsEntity(
  * to Firestore), so in practice [attemptId] only ever resolves to a real duration on the same device
  * that created it; every other user's row here is real (a real send, at a real time) but its
  * duration is simply unresolvable cross-device without a new sync feature, not fabricated as zero
- * or omitted as a schema gap. Null for every completion recorded before this field existed. */
+ * or omitted as a schema gap. Null for every completion recorded before this field existed.
+ *
+ * [durationMs] is the real, cross-device-synced completion duration (`climbEndMs - climbStartMs`)
+ * — filled in asynchronously by [com.example.climb.analysis.PoseAnalysisWorker] once the recording
+ * device's own local pose analysis for [attemptId] finishes (see
+ * [com.example.climb.clubs.ClubRepository.updateRouteCompletionDuration]), since analysis is rarely
+ * done yet at the moment this completion doc is first created. Unlike [attemptId] (a bare local
+ * SQLite id that only ever resolves on its own recording device), this field is the actual synced
+ * value every other member's phone can read, making a real fastest-first leaderboard possible
+ * across devices. Null until that sync completes (or if it never does — offline, analysis failed,
+ * etc.), which is a real absence of data, not a fabricated zero. */
 data class RouteCompletionEntity(
     val routeId: Long,
     val organizationId: Long,
@@ -204,6 +219,7 @@ data class RouteCompletionEntity(
     val userDisplayName: String,
     val completedAt: Long,
     val attemptId: Long? = null,
+    val durationMs: Long? = null,
 )
 
 /**
@@ -241,6 +257,21 @@ data class SharedAttemptLikeEntity(
     val sharedAttemptId: Long,
     val userId: String,
     val likedAt: Long,
+)
+
+/** One real, timestamped attempt event — written alongside [RouteStatsEntity]'s running counters
+ * by [ClubRepository.recordRouteAttempt], purely so time-bucketed questions ("attempts today/this
+ * week/this month," per the staff Statistics screen) are answerable at all. [RouteStatsEntity]
+ * itself is an all-time running total with no per-period breakdown, so it alone can't answer those
+ * — this is the real per-event log that can. Same trust level as [RouteCompletionEntity]/
+ * [ClubStatsEntity] (a member can only ever write their own). */
+data class RouteAttemptEventEntity(
+    val id: Long,
+    val organizationId: Long,
+    val routeId: Long,
+    val userId: String,
+    val completed: Boolean,
+    val createdAt: Long,
 )
 
 fun hasStaffAccess(memberships: List<OrganizationMembershipEntity>): Boolean =

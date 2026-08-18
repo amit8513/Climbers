@@ -173,7 +173,9 @@ fun ClimbDetailsInputScreen(
 
             FieldLabel("Who can see this")
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(Visibility.entries.toList()) { option ->
+                // Visibility.SELECTED_FRIENDS excluded — no picker/rules support for it yet, same
+                // reasoning as TagScreen.kt's/DetailScreen.kt's own visibility pickers.
+                items(Visibility.entries.filter { it != Visibility.SELECTED_FRIENDS }) { option ->
                     FilterChip(
                         selected = visibility == option,
                         onClick = { visibility = option },
@@ -220,7 +222,7 @@ fun ClimbDetailsInputScreen(
                         )
                         routeContext?.let { route ->
                             clubRepository.recordClubAttempt(route.organizationId, currentUid, currentUsername, vGrade, completed)
-                            clubRepository.recordRouteAttempt(route.routeId, route.organizationId, completed)
+                            clubRepository.recordRouteAttempt(route.routeId, route.organizationId, currentUid, completed)
                             if (completed) {
                                 // attemptId links this send back to the ClimbAttemptEntity just
                                 // created above — see RouteCompletionEntity.attemptId's doc comment

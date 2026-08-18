@@ -45,10 +45,12 @@ private const val FULL_CLIP_CUT_DIP_MS = 220
 private const val SHORT_MONTAGE_HOLD_MS = 4_000L
 private const val SHORT_MONTAGE_TRANSITION_MS = 1_200L
 
-/** Base scrim darkness at [SettingsStore.homeVideoOpacity] = 0 (video fully hidden behind it).
- * Never scaled all the way to zero at opacity = 1 — the floor below keeps header/list text
- * readable even when the user wants the video as visible as possible. */
-private val BASE_SCRIM_STOPS = listOf(0f to 0.72f, 0.35f to 0.45f, 0.75f to 0.55f, 1f to 0.8f)
+/** Base scrim darkness at [SettingsStore.homeVideoOpacity] = 0 — raised close to fully opaque
+ * (was capped at 0.8 max, which still let video show through even at the user's darkest setting)
+ * so 0 genuinely reads as "almost not visible," not just "dimmed." Never scaled all the way to
+ * zero at opacity = 1 — the floor below keeps header/list text readable even when the user wants
+ * the video as visible as possible. */
+private val BASE_SCRIM_STOPS = listOf(0f to 0.92f, 0.35f to 0.88f, 0.75f to 0.9f, 1f to 0.97f)
 private const val SCRIM_FLOOR_FRACTION = 0.2f
 
 /** Newest-first, capped, and filtered to files that still actually exist on disk — a climb row

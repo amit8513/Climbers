@@ -9,6 +9,7 @@ import androidx.work.workDataOf
 import com.example.climb.analysis.metrics.MetricsConfiguration
 import com.example.climb.analysis.metrics.computeAnalysis
 import com.example.climb.analysis.scoring.scorePerformance
+import com.example.climb.clubs.ClubRepository
 import com.example.climb.coaching.DeterministicCoachingRuleEngine
 import com.example.climb.pose.PoseAnalysisConfiguration
 import com.example.climb.pose.PoseAnalysisPhase
@@ -30,6 +31,7 @@ class PoseAnalysisWorker(
     params: WorkerParameters,
     private val analysisRepository: AnalysisRepository,
     private val poseEstimator: PoseEstimator,
+    private val clubRepository: ClubRepository,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -81,6 +83,20 @@ class PoseAnalysisWorker(
                     phases = phases,
                     performanceResult = performanceResult,
                 )
+                // Best-effort, bonus sync — see ClubRepository.updateRouteCompletionDuration's doc
+                // comment for why this must be .update(), not .set(). Never allowed to fail the
+                // worker's own success outcome: this route-linked sync is strictly additive on top
+                // of the always-local analysis result above, so an offline device, a completion doc
+                // that doesn't exist yet, or any other failure here must stay silent.
+                if (attempt.completed && attempt.routeId != null) {
+                    runCatching {
+                        clubRepository.updateRouteCompletionDuration(
+                            routeId = attempt.routeId,
+                            userId = attempt.userId,
+                            durationMs = computation.metrics.climbEndMs - computation.metrics.climbStartMs,
+                        )
+                    }
+                }
                 Result.success(workDataOf(KEY_ANALYSIS_ID to analysisId))
             }
             is PoseAnalysisResult.Failure -> {

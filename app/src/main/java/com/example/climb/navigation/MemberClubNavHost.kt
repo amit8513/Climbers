@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -110,6 +111,13 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
         return
     }
 
+    // Once per real visit to this club's member shell — the real signal behind the staff
+    // Statistics screen's active-member/churn-risk numbers. Fire-and-forget: a failure here (e.g.
+    // offline) must never block entering Club Mode itself.
+    LaunchedEffect(organizationId, currentUid) {
+        container.clubRepository.recordMemberActivity(organizationId, currentUid)
+    }
+
     val navController = rememberNavController()
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     // Tracks whether the Routes tab's OWN nested NavHost (see LiveSendClubExploreHost) is sitting
@@ -182,6 +190,7 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
                     onProgressTab = { navController.navigate(MemberClubRoutes.PROGRESS_PREVIEW) },
                     onRanksTab = { navigateToMemberClubTab(navController, MemberClubRoutes.LEADERBOARD) },
                     onAtRootChanged = { routesAtRoot = it },
+                    onOpenUserProfile = { targetUid -> navController.navigate(MemberClubRoutes.userProfile(targetUid)) },
                 )
             }
             composable(MemberClubRoutes.PROGRESS_PREVIEW) {

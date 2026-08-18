@@ -37,6 +37,7 @@ private const val ROUTE_STATS = "routeStats"
 private const val ROUTE_COMPLETIONS = "routeCompletions"
 private const val SHARED_ATTEMPTS = "sharedAttempts"
 private const val SHARED_ATTEMPT_LIKES = "sharedAttemptLikes"
+private const val ROUTE_ATTEMPT_EVENTS = "routeAttemptEvents"
 
 private fun membershipDocId(organizationId: Long, userId: String) = "${organizationId}_$userId"
 
@@ -260,8 +261,11 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
 
     /** Route-wide analytics — how many people tried this route, how many sent it, how many fell.
      * Any member records their own attempt against the route's shared counters (participation
-     * bookkeeping, not a staff mutation, same trust level as [recordClubAttempt]). */
-    suspend fun recordRouteAttempt(routeId: Long, organizationId: Long, completed: Boolean): Result<Unit> = runCatching {
+     * bookkeeping, not a staff mutation, same trust level as [recordClubAttempt]). Also appends a
+     * real, timestamped [RouteAttemptEventEntity] — [RouteStatsEntity]'s counters alone are an
+     * all-time running total with no per-period breakdown, so the staff Statistics screen's
+     * "attempts/sends today/this week/this month" numbers read from this event log instead. */
+    suspend fun recordRouteAttempt(routeId: Long, organizationId: Long, userId: String, completed: Boolean): Result<Unit> = runCatching {
         val ref = firestore.collection(ROUTE_STATS).document(routeId.toString())
         firestore.runTransaction { transaction ->
             val snapshot = transaction.get(ref)
@@ -280,7 +284,48 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
                 ),
             )
         }.await()
+        val eventId = nextId(ROUTE_ATTEMPT_EVENTS)
+        firestore.collection(ROUTE_ATTEMPT_EVENTS).document(eventId.toString())
+            .set(
+                mapOf(
+                    "organizationId" to organizationId,
+                    "routeId" to routeId,
+                    "userId" to userId,
+                    "completed" to completed,
+                    "createdAt" to System.currentTimeMillis(),
+                ),
+            ).await()
         Unit
+    }
+
+    /** Every real attempt event for one club, unfiltered by time — [RouteStatsEntity]'s counters
+     * are all-time totals with no period breakdown, so the staff Statistics screen buckets these
+     * client-side into today/this-week/this-month itself (same no-composite-index-needed reasoning
+     * as [observeActiveRoutesForOrganization]: a single equality filter here, sorted/bucketed after
+     * the fact, rather than a second inequality filter on `createdAt` that would need one). */
+    fun observeRouteAttemptEvents(organizationId: Long): Flow<List<RouteAttemptEventEntity>> =
+        observeCollection(firestore.collection(ROUTE_ATTEMPT_EVENTS).whereEqualTo("organizationId", organizationId)) { it.toRouteAttemptEvent() }
+
+    /** Every route's stats for one club in a single listener — used by the staff Statistics
+     * screen's route-performance/venue-traffic sections instead of one [observeRouteStats]
+     * listener per route. */
+    fun observeRouteStatsForOrganization(organizationId: Long): Flow<List<RouteStatsEntity>> =
+        observeCollection(firestore.collection(ROUTE_STATS).whereEqualTo("organizationId", organizationId)) { it.toRouteStats() }
+
+    /** Every zone across every venue of one organization — same "one listener, not one per venue"
+     * reasoning as [observeRouteStatsForOrganization], needed to join a route's zoneId back to its
+     * venue for the Statistics screen's per-venue traffic breakdown. */
+    fun observeZonesForOrganization(organizationId: Long): Flow<List<ZoneEntity>> =
+        observeCollection(firestore.collection(ZONES).whereEqualTo("organizationId", organizationId)) { it.toZone() }
+
+    /** Bumped once per real Club Mode visit (staff or member shell alike — see both NavHosts'
+     * `LaunchedEffect(Unit)` call) — the only real signal behind the staff Statistics screen's
+     * daily/weekly active member counts and its churn-risk list. Best-effort: a failure here (e.g.
+     * offline) must never block entering Club Mode itself, so callers fire-and-forget this rather
+     * than gating navigation on it. */
+    suspend fun recordMemberActivity(organizationId: Long, userId: String): Result<Unit> = runCatching {
+        firestore.collection(MEMBERSHIPS).document(membershipDocId(organizationId, userId))
+            .update("lastActiveAt", System.currentTimeMillis()).await()
     }
 
     fun observeRouteStats(routeId: Long): Flow<RouteStatsEntity?> = callbackFlow {
@@ -325,6 +370,22 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
                 ),
             ).await()
         Unit
+    }
+
+    /** Best-effort, asynchronous fill-in of a completion doc's real duration, called by
+     * [com.example.climb.analysis.PoseAnalysisWorker] once the recording device's own local pose
+     * analysis for the linked attempt finishes. The completion doc itself is usually created
+     * ([recordRouteCompletion]) well before analysis is done — a climber marks a route sent
+     * immediately, but pose analysis of the video runs afterward in the background — so this exists
+     * to patch the real duration in once it's actually known, rather than requiring the whole send
+     * flow to block on analysis finishing first.
+     *
+     * Uses `.update()`, not `.set()`: this must only add/overwrite the single `durationMs` field on
+     * the existing doc (id `"${routeId}_$userId"`, from [recordRouteCompletion]) and must never
+     * clobber that doc's other fields (`userDisplayName`, `completedAt`, etc.) with a partial map. */
+    suspend fun updateRouteCompletionDuration(routeId: Long, userId: String, durationMs: Long): Result<Unit> = runCatching {
+        firestore.collection(ROUTE_COMPLETIONS).document("${routeId}_$userId")
+            .update("durationMs", durationMs).await()
     }
 
     /** Real users who've sent this route, most-recent-first — a plain chronological list, not a
@@ -672,6 +733,7 @@ private fun DocumentSnapshot.toMembership(): OrganizationMembershipEntity? {
         userDisplayName = getString("userDisplayName") ?: userId,
         role = role,
         joinedAt = getLong("joinedAt") ?: 0L,
+        lastActiveAt = getLong("lastActiveAt"),
     )
 }
 
@@ -793,6 +855,19 @@ private fun DocumentSnapshot.toRouteStats(): RouteStatsEntity? {
     )
 }
 
+private fun DocumentSnapshot.toRouteAttemptEvent(): RouteAttemptEventEntity? {
+    if (!exists()) return null
+    val userId = getString("userId") ?: return null
+    return RouteAttemptEventEntity(
+        id = id.toLong(),
+        organizationId = getLong("organizationId") ?: return null,
+        routeId = getLong("routeId") ?: return null,
+        userId = userId,
+        completed = getBoolean("completed") ?: false,
+        createdAt = getLong("createdAt") ?: 0L,
+    )
+}
+
 private fun DocumentSnapshot.toClubStats(): ClubStatsEntity? {
     if (!exists()) return null
     val userId = getString("userId") ?: return null
@@ -817,6 +892,7 @@ private fun DocumentSnapshot.toRouteCompletion(): RouteCompletionEntity? {
         userDisplayName = getString("userDisplayName") ?: userId,
         completedAt = getLong("completedAt") ?: 0L,
         attemptId = getLong("attemptId"),
+        durationMs = getLong("durationMs"),
     )
 }
 

@@ -78,7 +78,6 @@ fun LiveSendUserProfileScreen(
 ) {
     val profile by socialRepository.observeProfile(targetUid).collectAsStateWithLifecycle(initialValue = null)
     val myFriends by socialRepository.observeFriends(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
-    val targetFriends by socialRepository.observeFriends(targetUid).collectAsStateWithLifecycle(initialValue = emptyList())
     val myOutgoing by socialRepository.observeOutgoingRequests(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
     val memberships by clubRepository.observeMembershipsForUser(targetUid).collectAsStateWithLifecycle(initialValue = emptyList())
     val allOrgs by clubRepository.observeAllOrganizations().collectAsStateWithLifecycle(initialValue = emptyList())
@@ -128,13 +127,24 @@ fun LiveSendUserProfileScreen(
                         fontWeight = FontWeight.Black,
                         fontSize = 20.sp,
                     )
+                    val friendCount = profile?.friendCount ?: 0
                     Text(
-                        text = "${targetFriends.size} friend${if (targetFriends.size == 1) "" else "s"}",
+                        text = "$friendCount friend${if (friendCount == 1) "" else "s"}",
                         color = ClimbPalette.liveSendTextMuted,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
+            }
+
+            profile?.bio?.takeIf { it.isNotBlank() }?.let { bio ->
+                Text(
+                    text = bio,
+                    color = ClimbPalette.liveSendTextPrimary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
+                )
             }
 
             if (!isOwnProfile) {
