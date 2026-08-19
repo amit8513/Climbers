@@ -13,6 +13,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -28,7 +34,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.clubs.OrganizationMembershipEntity
+import com.example.climb.ui.livesend.components.LiveSendBottomBar
 import com.example.climb.ui.livesend.components.LiveSendCard
+import com.example.climb.ui.livesend.components.LiveSendNavTab
 import com.example.climb.ui.livesend.components.LiveSendProgressBar
 import com.example.climb.ui.livesend.components.LiveSendSectionLabel
 import com.example.climb.ui.livesend.components.LiveSendStatCard
@@ -55,10 +63,11 @@ private const val CHURN_GRACE_PERIOD_MS = 3 * ONE_DAY_MS
  * Manage grid — the one screen that actually reads [ClubRepository.observeRouteAttemptEvents],
  * [ClubRepository.observeRouteStatsForOrganization], [ClubRepository.observeZonesForOrganization],
  * and member [OrganizationMembershipEntity.lastActiveAt], all built for exactly this screen (see
- * each's own doc comment) and otherwise unused anywhere in the app. A pushed destination, not a
- * bottom-bar tab (there's no 5th slot in the fixed Home/Social/Members/Exit island), so unlike
- * [LiveSendMembersScreen]/[LiveSendCamerasScreen] this renders no bottom bar of its own — just
- * [LiveSendPageHeader]'s back arrow.
+ * each's own doc comment) and otherwise unused anywhere in the app. Now a genuine tab in the
+ * shared floating island (Home/Social/Members/Stats/Exit) alongside [LiveSendMembersScreen]/
+ * [LiveSendCamerasScreen] — per the standing "every floating island in Club Mode stays
+ * consistent" rule, Stats had to join the other four screens' bar rather than staying a
+ * back-arrow-only pushed destination.
  *
  * Four sections: real daily/weekly active-member counts plus a churn-risk list (members quiet for
  * 14+ days), real time-bucketed attempt/send counts (today / this week / last 30 days), route
@@ -69,7 +78,10 @@ private const val CHURN_GRACE_PERIOD_MS = 3 * ONE_DAY_MS
 fun LiveSendStatisticsScreen(
     clubRepository: ClubRepository,
     organization: OrganizationEntity,
-    onBack: () -> Unit,
+    onGoHome: () -> Unit,
+    onExitClub: () -> Unit,
+    onNavBroadcast: () -> Unit,
+    onNavMembers: () -> Unit,
 ) {
     val members by clubRepository.observeMembersForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val events by clubRepository.observeRouteAttemptEvents(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -121,15 +133,22 @@ fun LiveSendStatisticsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp, vertical = 20.dp),
+                .padding(horizontal = 20.dp, vertical = 20.dp)
+                // Matches every other Club Mode screen's reservation for the island's real
+                // footprint (56dp bar + 14dp*2 vertical margin) so the last section never sits
+                // under it.
+                .padding(bottom = 104.dp),
         ) {
-            LiveSendPageHeader(title = "Statistics", onGoHome = onBack, onBack = onBack)
+            LiveSendPageHeader(title = "Statistics", onGoHome = onGoHome)
             Spacer(Modifier.height(20.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                LiveSendStatCard(value = "$activeToday", label = "Active today", modifier = Modifier.weight(1f))
-                LiveSendStatCard(value = "$activeThisWeek", label = "Active this week", modifier = Modifier.weight(1f))
-                LiveSendStatCard(value = "${members.size}", label = "Total members", modifier = Modifier.weight(1f))
+                // labelMaxLines = 2 — three-across cards are too narrow for "Active this week"/
+                // "Total members" to fit on one line at this font size; wrapping instead of
+                // ellipsizing keeps the label readable.
+                LiveSendStatCard(value = "$activeToday", label = "Active today", modifier = Modifier.weight(1f), labelMaxLines = 2)
+                LiveSendStatCard(value = "$activeThisWeek", label = "Active this week", modifier = Modifier.weight(1f), labelMaxLines = 2)
+                LiveSendStatCard(value = "${members.size}", label = "Total members", modifier = Modifier.weight(1f), labelMaxLines = 2)
             }
             Spacer(Modifier.height(16.dp))
 
@@ -169,6 +188,17 @@ fun LiveSendStatisticsScreen(
             }
             Spacer(Modifier.height(24.dp))
         }
+
+        LiveSendBottomBar(
+            tabs = listOf(
+                LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
+                LiveSendNavTab(Icons.Filled.Campaign, "Social", selected = false, onClick = onNavBroadcast),
+                LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
+                LiveSendNavTab(Icons.Filled.BarChart, "Stats", selected = true, onClick = {}),
+                LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
+            ),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }
 

@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,7 +23,9 @@ import com.example.climb.ui.theme.ClimbPalette
  * Sends Today cards and RouteDetail's Send Rate/Peak Grade/Sessions stats. Same shape both places
  * (16dp-rounded surface, centered value, small muted caption below); [valueColor] lets a
  * standout stat (e.g. "LIVE NOW") use [ClimbPalette.liveSendCta]-style emphasis instead of the
- * default text color.
+ * default text color. [labelMaxLines] defaults to 1 (original behavior, ellipsized if it doesn't
+ * fit); pass 2 for narrower cards (e.g. three-across rows) whose label is long enough to need a
+ * second line rather than an ellipsis — the label wraps and centers instead of truncating.
  */
 @Composable
 fun LiveSendStatCard(
@@ -30,6 +33,7 @@ fun LiveSendStatCard(
     label: String,
     modifier: Modifier = Modifier,
     valueColor: Color = ClimbPalette.liveSendTextPrimary,
+    labelMaxLines: Int = 1,
 ) {
     Column(
         modifier = modifier
@@ -46,7 +50,8 @@ fun LiveSendStatCard(
             fontWeight = FontWeight.Bold,
             fontSize = 10.sp,
             letterSpacing = 0.5.sp,
-            maxLines = 1,
+            textAlign = TextAlign.Center,
+            maxLines = labelMaxLines,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 4.dp),
         )

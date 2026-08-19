@@ -28,7 +28,7 @@ import com.example.climb.ui.livesend.real.LiveSendCamerasScreen
 import com.example.climb.ui.livesend.real.LiveSendClubExploreHost
 import com.example.climb.ui.livesend.real.LiveSendMembersScreen
 import com.example.climb.ui.livesend.real.LiveSendStatisticsScreen
-import com.example.climb.ui.progress.ProgressScreen
+import com.example.climb.ui.livesend.real.RouteHistoryScreen
 import com.example.climb.ui.settings.SettingsScreen
 import com.example.climb.ui.theme.ClimbPalette
 
@@ -42,9 +42,9 @@ private object ClubRoutes {
     // Real destinations inside THIS NavHost's own back stack (not an AppMode switch) — see the
     // doc comment below for why that distinction matters.
     const val SETTINGS_PREVIEW = "club_settings_preview"
-    const val PROGRESS_PREVIEW = "club_progress_preview"
     const val RANKS_PREVIEW = "club_ranks_preview"
     const val STATS = "club_stats"
+    const val ROUTE_HISTORY = "club_route_history"
 }
 
 private fun navigateToClubTab(navController: NavHostController, route: String) {
@@ -88,17 +88,19 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
     val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
     // Every "Home" control in this shell means Club Home — the Dashboard itself.
     val backToClubHome = { navigateToClubTab(navController, ClubRoutes.MANAGE) }
-    // Same real push/pop pattern as HOME_PREVIEW — Explore/RouteDetail's Progress/Ranks tabs had
-    // no real destination at all before (a TODO no-op), now they show the app's own real,
-    // club-palette-restyled Progress/Leaderboard screens, poppable straight back.
-    val goProgress = { navController.navigate(ClubRoutes.PROGRESS_PREVIEW) }
+    // Same real push/pop pattern as HOME_PREVIEW. Explore/RouteDetail's Ranks tab shows the app's
+    // own real, club-palette-restyled Leaderboard screen, poppable straight back; their former
+    // "Progress" tab is now "History" (Route History — archived routes by V-grade), a genuine tab
+    // via navigateToClubTab rather than a plain push, since it's also reached from the Dashboard's
+    // Manage grid.
+    val goRouteHistory = { navigateToClubTab(navController, ClubRoutes.ROUTE_HISTORY) }
     val goRanks = { navController.navigate(ClubRoutes.RANKS_PREVIEW) }
 
-    // Every route here renders its own full-bleed liveSend-styled chrome EXCEPT the three real-app
-    // previews (Settings/Progress/Ranks), which intentionally show the real app's own theme-reactive
-    // chrome instead (see the doc comment above) — matching containerColor to whichever palette is
+    // Every route here renders its own full-bleed liveSend-styled chrome EXCEPT the two real-app
+    // previews (Settings/Ranks), which intentionally show the real app's own theme-reactive chrome
+    // instead (see the doc comment above) — matching containerColor to whichever palette is
     // actually on screen keeps a mismatched color sliver from showing behind the system bars.
-    val usesRealAppChrome = currentRoute == ClubRoutes.SETTINGS_PREVIEW || currentRoute == ClubRoutes.PROGRESS_PREVIEW || currentRoute == ClubRoutes.RANKS_PREVIEW
+    val usesRealAppChrome = currentRoute == ClubRoutes.SETTINGS_PREVIEW || currentRoute == ClubRoutes.RANKS_PREVIEW
     Scaffold(containerColor = if (usesRealAppChrome) ClimbPalette.bg else ClimbPalette.liveSendBg) { padding ->
         NavHost(
             navController = navController,
@@ -137,10 +139,11 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onManageMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
                     onManageVenues = { navController.navigate(ClubRoutes.CAMERAS) },
                     onManageBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
-                    onManageStats = { navController.navigate(ClubRoutes.STATS) },
+                    onManageStats = { navigateToClubTab(navController, ClubRoutes.STATS) },
                     onNavRoutes = { navController.navigate(ClubRoutes.explore("routes")) },
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
+                    onNavStats = { navigateToClubTab(navController, ClubRoutes.STATS) },
                     onExit = onExitClub,
                     applyStatusBarPadding = false,
                 )
@@ -154,9 +157,8 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     currentUid = currentUid,
                     clubRepository = container.clubRepository,
                     organization = organization,
-                    onClubTab = { navController.popBackStack(ClubRoutes.MANAGE, inclusive = false) },
                     onGoHome = backToClubHome,
-                    onProgressTab = goProgress,
+                    onHistoryTab = goRouteHistory,
                     onRanksTab = goRanks,
                     isStaff = true,
                     initialSection = if (section == "venues") ExploreSection.VENUES else ExploreSection.ROUTES,
@@ -173,6 +175,7 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onExitClub = onExitClub,
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
+                    onNavStats = { navigateToClubTab(navController, ClubRoutes.STATS) },
                 )
             }
             composable(ClubRoutes.MEMBERS) {
@@ -183,13 +186,17 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onGoHome = backToClubHome,
                     onExitClub = onExitClub,
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
+                    onNavStats = { navigateToClubTab(navController, ClubRoutes.STATS) },
                 )
             }
             composable(ClubRoutes.STATS) {
                 LiveSendStatisticsScreen(
                     clubRepository = container.clubRepository,
                     organization = organization,
-                    onBack = { navController.popBackStack() },
+                    onGoHome = backToClubHome,
+                    onExitClub = onExitClub,
+                    onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
+                    onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
                 )
             }
             composable(ClubRoutes.CAMERAS) {
@@ -201,6 +208,7 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onExitClub = onExitClub,
                     onNavBroadcast = { navigateToClubTab(navController, ClubRoutes.UPDATES) },
                     onNavMembers = { navigateToClubTab(navController, ClubRoutes.MEMBERS) },
+                    onNavStats = { navigateToClubTab(navController, ClubRoutes.STATS) },
                 )
             }
             composable(ClubRoutes.SETTINGS_PREVIEW) {
@@ -223,8 +231,14 @@ fun ClubNavHost(container: AppContainer, currentUid: String, profile: UserProfil
                     onEnterClubMode = { },
                 )
             }
-            composable(ClubRoutes.PROGRESS_PREVIEW) {
-                ProgressScreen(repository = container.climbRepository, currentUid = currentUid)
+            composable(ClubRoutes.ROUTE_HISTORY) {
+                RouteHistoryScreen(
+                    clubRepository = container.clubRepository,
+                    organization = organization,
+                    onGoHome = backToClubHome,
+                    onRanksTab = goRanks,
+                    onBackToRoutes = { navigateToClubTab(navController, ClubRoutes.explore("routes")) },
+                )
             }
             composable(ClubRoutes.RANKS_PREVIEW) {
                 LeaderboardScreen(

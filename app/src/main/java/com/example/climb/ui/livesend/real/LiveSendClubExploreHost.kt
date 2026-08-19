@@ -58,7 +58,7 @@ import com.example.climb.clubs.ZoneEntity
 import com.example.climb.data.RouteColor
 import com.example.climb.ui.livesend.ExploreScreen
 import com.example.climb.ui.livesend.ExploreSection
-import com.example.climb.ui.livesend.ExploreVenue
+import com.example.climb.ui.livesend.ExploreZone
 import com.example.climb.ui.livesend.PopularRoute
 import com.example.climb.ui.livesend.RouteCompletionRow
 import com.example.climb.ui.livesend.RouteDetailScreen
@@ -104,7 +104,10 @@ private object ExploreRoutes {
     fun addRouteSetRoute(venueId: Long, zoneId: Long) = "add_route_set_route/$venueId/$zoneId"
 }
 
-private fun RouteEntity.toPopularRoute(index: Int): PopularRoute {
+private const val ONE_DAY_MS = 24 * 60 * 60 * 1000L
+private const val ONE_WEEK_MS = 7 * ONE_DAY_MS
+
+private fun RouteEntity.toPopularRoute(index: Int, attemptsToday: Int, attemptsThisWeek: Int): PopularRoute {
     val (dotColor, badgeTextColor) = ROUTE_COLOR_CYCLE[index % ROUTE_COLOR_CYCLE.size]
     return PopularRoute(
         name = name,
@@ -116,6 +119,8 @@ private fun RouteEntity.toPopularRoute(index: Int): PopularRoute {
         dotColor = dotColor,
         badgeTextColor = badgeTextColor,
         id = id,
+        attemptsToday = attemptsToday,
+        attemptsThisWeek = attemptsThisWeek,
     )
 }
 
@@ -128,16 +133,17 @@ private fun RouteEntity.toPopularRoute(index: Int): PopularRoute {
  * navigate()/popBackStack(), not local composable state, specifically so screen changes here
  * inherit Navigation Compose's real default transition instead of approximating one.
  *
- * [onClubTab] is what "Club" on the shared bottom bar means in the caller's context (staff: back
- * to the dashboard; member: back to the club overview) — supplied by the caller since it differs
- * per host. [onRanksTab] is optional real cross-navigation to a leaderboard-like screen where one
- * exists (only the member context has one — [com.example.climb.navigation.MemberClubNavHost]'s
- * Club leaderboard tab); it's a TODO(live-send-real) no-op by default.
+ * The shared bottom bar's former "Club" tab (redundant with "Home" — both went to the same Club
+ * Dashboard) is now a real self tab on both Browse ("Routes") and RouteDetail ("Route"), so there
+ * is no more caller-supplied "Club" callback. [onRanksTab] is optional real cross-navigation to a
+ * leaderboard-like screen where one exists (only the member context has one —
+ * [com.example.climb.navigation.MemberClubNavHost]'s Club leaderboard tab); it's a
+ * TODO(live-send-real) no-op by default.
  *
  * TODO(live-send-real): onPlayVideo/onLogAttempt/onRecordAttempt/onSearchClick are left as
  * no-ops here — real attempt-logging needs the full existing ClimbDetailsInputScreen-style form,
- * out of scope for this pass. [onProgressTab]/[onRanksTab] DO have real destinations (the app's
- * own personal Progress/Leaderboard screens) — supplied by the caller, since only
+ * out of scope for this pass. [onHistoryTab]/[onRanksTab] DO have real destinations (the app's own
+ * Route History/Leaderboard screens) — supplied by the caller, since only
  * [com.example.climb.navigation.ClubNavHost] (staff) currently wires them to anything.
  *
  * [isStaff] (real Club Mode, per [com.example.climb.navigation.ClubNavHost]'s own `AppMode.Club`
@@ -157,9 +163,8 @@ fun LiveSendClubExploreHost(
     currentUid: String,
     clubRepository: ClubRepository,
     organization: OrganizationEntity,
-    onClubTab: () -> Unit,
     onGoHome: () -> Unit,
-    onProgressTab: () -> Unit = {},
+    onHistoryTab: () -> Unit = {},
     onRanksTab: () -> Unit = {},
     isStaff: Boolean = false,
     // Which section the Dashboard's Routes vs Venues tile should land on — see [ExploreSection].
@@ -188,6 +193,8 @@ fun LiveSendClubExploreHost(
 ) {
     val routes by clubRepository.observeActiveRoutesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val venueEntities by clubRepository.observeVenuesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
+    val zoneEntities by clubRepository.observeZonesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
+    val attemptEvents by clubRepository.observeRouteAttemptEvents(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -219,32 +226,28 @@ fun LiveSendClubExploreHost(
             // destination's rememberSaveable state alive while it stays on the stack — e.g.
             // pushing RouteDetail on top and popping back still remembers this filter), matching
             // the original host-level state's survival across a Browse -> RouteDetail -> back trip.
-            var selectedVenueId by rememberSaveable { mutableStateOf<Long?>(null) }
-            val selectedVenue = venueEntities.find { it.id == selectedVenueId }
-            // Real venue -> routes relationship is two hops (route.zoneId -> ZoneEntity.venueId),
-            // so tapping a venue tile pulls just that venue's zones, then filters the org's
-            // already-loaded route list by zone membership client-side rather than a second
-            // per-venue route query.
-            val visibleRoutes = if (selectedVenue != null) {
-                val venueZones by clubRepository.observeZonesForVenue(selectedVenue.id).collectAsStateWithLifecycle(initialValue = emptyList())
-                val zoneIds = venueZones.map { it.id }.toSet()
-                routes.filter { it.zoneId in zoneIds }
-            } else {
-                routes
-            }
+            var selectedZoneId by rememberSaveable { mutableStateOf<Long?>(null) }
+            val selectedZone = zoneEntities.find { it.id == selectedZoneId }
+            // A route's zone is a direct field (route.zoneId) — one hop, unlike the old venue
+            // filter which needed a second query (venue -> its zones) before it could match routes.
+            val visibleRoutes = if (selectedZone != null) routes.filter { it.zoneId == selectedZone.id } else routes
+            val now = System.currentTimeMillis()
+            val attemptsTodayByRoute = attemptEvents.filter { now - it.createdAt <= ONE_DAY_MS }.groupingBy { it.routeId }.eachCount()
+            val attemptsThisWeekByRoute = attemptEvents.filter { now - it.createdAt <= ONE_WEEK_MS }.groupingBy { it.routeId }.eachCount()
 
             ExploreScreen(
-                routes = visibleRoutes.mapIndexed { index, route -> route.toPopularRoute(index) },
-                venues = venueEntities.map { venue -> ExploreVenue(name = venue.name, routesLabel = "", id = venue.id) },
-                venueFilterLabel = selectedVenue?.name,
-                onClearVenueFilter = { selectedVenueId = null },
+                routes = visibleRoutes.mapIndexed { index, route ->
+                    route.toPopularRoute(index, attemptsTodayByRoute[route.id] ?: 0, attemptsThisWeekByRoute[route.id] ?: 0)
+                },
+                zones = zoneEntities.map { zone -> ExploreZone(name = zone.name, routesLabel = "", id = zone.id) },
+                zoneFilterLabel = selectedZone?.name,
+                onClearZoneFilter = { selectedZoneId = null },
                 onSearchClick = { /* TODO(live-send-real): no real route-search screen exists yet */ },
                 onRouteClick = { route -> route.id?.let { navController.navigate(ExploreRoutes.routeDetail(it)) } },
-                onVenueClick = { venue -> selectedVenueId = venue.id },
+                onZoneClick = { zone -> selectedZoneId = zone.id },
                 onNavigateFeed = onGoHome,
-                onNavigateProgress = onProgressTab,
+                onNavigateHistory = onHistoryTab,
                 onNavigateRanks = onRanksTab,
-                onNavigateClub = onClubTab,
                 onFabClick = { /* TODO(live-send-real): needs the real record flow */ },
                 // Unconditionally off in every club context now (staff and member) per user
                 // request — was `!isStaff` before, so members still saw it; logging a personal
@@ -300,14 +303,20 @@ fun LiveSendClubExploreHost(
                     onRecordAttempt = { },
                     showRecordFab = false,
                     onFeedTab = onGoHome,
-                    onProgressTab = onProgressTab,
+                    onHistoryTab = onHistoryTab,
                     onRanksTab = onRanksTab,
-                    onClubTab = onClubTab,
                     isStaff = isStaff,
                     onUploadBeta = {
                         betaUploadRouteId = routeId
                         pickBetaVideoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
                     },
+                    // Archiving pops back to Browse (RouteDetail no longer has a route to show
+                    // once it's retired from the active list); deleting does the same, plus the
+                    // route ceases to exist at all. Neither result is checked — a failure just
+                    // leaves the route as-is with the screen still showing it, same "silent no-op
+                    // on error" shape as this file's other staff mutations.
+                    onArchiveRoute = { scope.launch { clubRepository.retireRoute(organization.id, currentUid, route); navController.popBackStack() } },
+                    onDeleteRoute = { scope.launch { clubRepository.deleteRoute(organization.id, currentUid, route); navController.popBackStack() } },
                     // Member context relies on MemberClubNavHost's own shared floating island
                     // instead — see RouteDetailScreen's showOwnBottomBar doc comment.
                     showOwnBottomBar = isStaff,

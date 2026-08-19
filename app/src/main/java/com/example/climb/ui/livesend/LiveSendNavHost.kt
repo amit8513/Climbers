@@ -121,11 +121,10 @@ fun LiveSendNavHost(modifier: Modifier = Modifier) {
             ExploreScreen(
                 onSearchClick = { /* no search screen in this batch */ },
                 onRouteClick = { navController.navigate(LiveSendRoutes.ROUTE_DETAIL) },
-                onVenueClick = { navController.navigate(LiveSendRoutes.ROUTE_DETAIL) },
+                onZoneClick = { navController.navigate(LiveSendRoutes.ROUTE_DETAIL) },
                 onNavigateFeed = { navigateToLiveSendTab(navController, LiveSendRoutes.HOME_FEED) },
-                onNavigateProgress = { navigateToLiveSendTab(navController, LiveSendRoutes.PROGRESS) },
+                onNavigateHistory = { navigateToLiveSendTab(navController, LiveSendRoutes.PROGRESS) },
                 onNavigateRanks = { navigateToLiveSendTab(navController, LiveSendRoutes.COMMUNITY) },
-                onNavigateClub = { navigateToLiveSendTab(navController, LiveSendRoutes.EXPLORE) },
                 onFabClick = { /* no record screen in this batch */ },
             )
         }
@@ -154,9 +153,8 @@ fun LiveSendNavHost(modifier: Modifier = Modifier) {
                 onLogAttempt = { /* no log-attempt screen in this batch */ },
                 onRecordAttempt = { /* no record screen in this batch */ },
                 onFeedTab = { navigateToLiveSendTab(navController, LiveSendRoutes.HOME_FEED) },
-                onProgressTab = { navigateToLiveSendTab(navController, LiveSendRoutes.PROGRESS) },
+                onHistoryTab = { navigateToLiveSendTab(navController, LiveSendRoutes.PROGRESS) },
                 onRanksTab = { navigateToLiveSendTab(navController, LiveSendRoutes.COMMUNITY) },
-                onClubTab = { navigateToLiveSendTab(navController, LiveSendRoutes.EXPLORE) },
             )
         }
         composable(LiveSendRoutes.PROFILE) {

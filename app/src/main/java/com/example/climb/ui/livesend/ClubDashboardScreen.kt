@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
@@ -108,6 +109,9 @@ fun ClubDashboardScreen(
     onNavMembers: () -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier,
+    // Defaulted for the same reason as onManageStats below — a no-op keeps the untouched
+    // design-exploration preview (LiveSendNavHost) compiling without passing it.
+    onNavStats: () -> Unit = {},
     // Defaults reproduce the original mock content exactly, so
     // com.example.climb.ui.livesend.LiveSendNavHost (the untouched preview) keeps compiling and
     // rendering identically without passing any of these explicitly.
@@ -198,6 +202,7 @@ fun ClubDashboardScreen(
                 LiveSendNavTab(Icons.Filled.Home, "Home", selected = true, onClick = onGoHome),
                 LiveSendNavTab(Icons.Filled.Campaign, "Social", selected = false, onClick = onNavBroadcast),
                 LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
+                LiveSendNavTab(Icons.Filled.BarChart, "Stats", selected = false, onClick = onNavStats),
                 LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExit),
             ),
             modifier = Modifier.align(Alignment.BottomCenter),

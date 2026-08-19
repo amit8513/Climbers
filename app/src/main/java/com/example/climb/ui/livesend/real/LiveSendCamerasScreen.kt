@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
@@ -33,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
@@ -85,15 +87,19 @@ fun LiveSendCamerasScreen(
     onExitClub: () -> Unit,
     onNavBroadcast: () -> Unit,
     onNavMembers: () -> Unit,
+    onNavStats: () -> Unit,
 ) {
     val cameras by clubRepository.observeCamerasForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val venues by clubRepository.observeVenuesForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val scope = rememberCoroutineScope()
 
     val navController = rememberNavController()
+    // Drives the bottom bar's visibility below — kept outside the nested NavHost (see why below)
+    // so it always reflects which of this screen's own two destinations is showing.
+    val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
 
     Box(modifier = Modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
-        NavHost(navController = navController, startDestination = CamerasRoutes.LIST) {
+        NavHost(navController = navController, startDestination = CamerasRoutes.LIST, modifier = Modifier.fillMaxSize()) {
             composable(CamerasRoutes.LIST) {
                 var newCameraName by remember { mutableStateOf("") }
                 var addErrorMessage by remember { mutableStateOf<String?>(null) }
@@ -106,7 +112,10 @@ fun LiveSendCamerasScreen(
                         // reserves top system-bar inset space; applying it again pushed this
                         // headline visibly lower than the rest of Club Mode.
                         .padding(horizontal = 20.dp, vertical = 20.dp)
-                        .padding(bottom = 90.dp),
+                        // A bit taller than the island's own footprint (56dp bar + 14dp*2 vertical
+                        // margin), matching every other Club Mode screen's reservation, so it never
+                        // overlaps this page's content even with a larger system nav-bar inset.
+                        .padding(bottom = 104.dp),
                 ) {
                     LiveSendPageHeader(title = "Cameras", onGoHome = onGoHome)
                     Spacer(Modifier.height(20.dp))
@@ -160,16 +169,6 @@ fun LiveSendCamerasScreen(
                         modifier = Modifier.padding(top = 12.dp),
                     )
                 }
-
-                LiveSendBottomBar(
-                    tabs = listOf(
-                        LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
-                        LiveSendNavTab(Icons.Filled.Campaign, "Social", selected = false, onClick = onNavBroadcast),
-                        LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
-                        LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
-                    ),
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                )
             }
 
             composable(
@@ -191,6 +190,25 @@ fun LiveSendCamerasScreen(
                     )
                 }
             }
+        }
+
+        // Rendered here, as a direct sibling of NavHost rather than inside its LIST destination
+        // content, so BottomCenter aligns against this screen's real full-size Box — not the
+        // nested NavHost's own per-destination content box, which was only ever as tall as the
+        // page's Column + bar stacked together, pinning the bar visibly near the top instead of
+        // the true bottom. Hidden on the venue-picker destination, matching that it never showed
+        // there before either.
+        if (currentRoute == CamerasRoutes.LIST) {
+            LiveSendBottomBar(
+                tabs = listOf(
+                    LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
+                    LiveSendNavTab(Icons.Filled.Campaign, "Social", selected = false, onClick = onNavBroadcast),
+                    LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
+                    LiveSendNavTab(Icons.Filled.BarChart, "Stats", selected = false, onClick = onNavStats),
+                    LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
+                ),
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
     }
 }

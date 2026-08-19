@@ -23,10 +23,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -89,9 +89,8 @@ fun RouteDetailScreen(
     // caller keep the FAB by default.
     showRecordFab: Boolean = true,
     onFeedTab: () -> Unit,
-    onProgressTab: () -> Unit,
+    onHistoryTab: () -> Unit,
     onRanksTab: () -> Unit,
-    onClubTab: () -> Unit,
     // Defaults reproduce the original mock content exactly, so
     // com.example.climb.ui.livesend.LiveSendNavHost (the untouched preview) keeps compiling and
     // rendering identically without passing any of these explicitly.
@@ -116,6 +115,14 @@ fun RouteDetailScreen(
     // the mock preview and the member-facing context (isStaff=false there) unchanged.
     isStaff: Boolean = false,
     onUploadBeta: () -> Unit = {},
+    // Staff-only route lifecycle actions — real mechanics
+    // (com.example.climb.clubs.ClubRepository.retireRoute/deleteRoute) live in the caller
+    // (com.example.climb.ui.livesend.real.LiveSendClubExploreHost), same shape as onUploadBeta
+    // above. Archiving has no confirm step (matches retiring a route having none anywhere else in
+    // this app); deleting is a real no-undo cascade, so ArchiveOrDeleteSection below asks first.
+    // Defaults preserve the mock preview and the member-facing context (isStaff=false) unchanged.
+    onArchiveRoute: () -> Unit = {},
+    onDeleteRoute: () -> Unit = {},
     // Real users who've sent this route (com.example.climb.clubs.ClubRepository.observeRouteCompletions),
     // most-recent-first — see RouteCompletionRow's doc comment for how this becomes a real ranked
     // leaderboard. Empty default keeps the mock preview unaffected.
@@ -246,6 +253,11 @@ fun RouteDetailScreen(
                 height = 50,
                 modifier = Modifier.semantics { contentDescription = "Log attempt" },
             )
+
+            if (isStaff) {
+                Spacer(modifier = Modifier.height(20.dp))
+                ArchiveOrDeleteSection(onArchiveRoute = onArchiveRoute, onDeleteRoute = onDeleteRoute)
+            }
         }
 
         Box(modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
@@ -254,9 +266,14 @@ fun RouteDetailScreen(
                     tabs = listOf(
                         // Was "Feed" (no real feed screen exists in club mode) — real Home now.
                         LiveSendNavTab(icon = Icons.Filled.Home, label = "Home", selected = false, onClick = onFeedTab),
-                        LiveSendNavTab(icon = Icons.Filled.ShowChart, label = "Progress", selected = false, onClick = onProgressTab),
+                        LiveSendNavTab(icon = Icons.Filled.History, label = "History", selected = false, onClick = onHistoryTab),
                         LiveSendNavTab(icon = Icons.Filled.EmojiEvents, label = "Ranks", selected = false, onClick = onRanksTab),
-                        LiveSendNavTab(icon = Icons.Filled.Groups, label = "Club", selected = true, onClick = onClubTab),
+                        // Was "Club" (Icons.Filled.Groups), which navigated to the Club Dashboard —
+                        // the same real destination "Home" already goes to in this shell — even
+                        // though it was already marked selected, a redundant, still-live tap
+                        // target. This IS the current route's own page, so it's now a real self
+                        // tab (selected, no-op) instead.
+                        LiveSendNavTab(icon = Icons.Filled.Terrain, label = "Route", selected = true, onClick = {}),
                     ),
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )
@@ -266,6 +283,76 @@ fun RouteDetailScreen(
                     onClick = onRecordAttempt,
                     icon = Icons.Filled.Videocam,
                     modifier = Modifier.align(Alignment.TopCenter),
+                )
+            }
+        }
+    }
+}
+
+/** Staff-only route lifecycle actions, below the Log Attempt CTA. Archiving
+ * ([com.example.climb.clubs.ClubRepository.retireRoute]) is a single tap with no confirm step —
+ * matches this app's only other retire affordance (com.example.climb.ui.clubs.ClubRouteDetailScreen's
+ * "Retire route" button) having none, since existing attempts/analyses stay linked and readable.
+ * Deleting ([com.example.climb.clubs.ClubRepository.deleteRoute]) is a real no-undo cascade
+ * (removes the route's versions and beta video too), so — same reasoning as
+ * com.example.climb.ui.clubs.ClubsScreen's venue/zone delete flows — it asks first, via a plain
+ * inline confirm rather than an AlertDialog (this package uses no dialogs anywhere else).
+ */
+@Composable
+private fun ArchiveOrDeleteSection(onArchiveRoute: () -> Unit, onDeleteRoute: () -> Unit) {
+    var confirmingDelete by remember { mutableStateOf(false) }
+
+    LiveSendCard(cornerRadius = 16, padding = 16) {
+        if (confirmingDelete) {
+            Text(
+                text = "Delete this route? Its versions and beta video go too — this can't be undone.",
+                color = ClimbPalette.liveSendTextMuted,
+                fontSize = 13.sp,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text(
+                    text = "Delete",
+                    color = ClimbPalette.liveSendCta,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable(onClick = { confirmingDelete = false; onDeleteRoute() })
+                        .semantics { role = Role.Button },
+                )
+                Text(
+                    text = "Cancel",
+                    color = ClimbPalette.liveSendTextMuted,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable(onClick = { confirmingDelete = false })
+                        .semantics { role = Role.Button },
+                )
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                Text(
+                    text = "Archive route",
+                    color = ClimbPalette.liveSendAccent,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable(onClick = onArchiveRoute)
+                        .semantics { role = Role.Button },
+                )
+                Text(
+                    text = "Delete route",
+                    color = ClimbPalette.liveSendCta,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .heightIn(min = 44.dp)
+                        .clickable(onClick = { confirmingDelete = true })
+                        .semantics { role = Role.Button },
                 )
             }
         }

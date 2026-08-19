@@ -116,6 +116,13 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         observeCollection(firestore.collection(ROUTES).whereEqualTo("organizationId", organizationId).whereEqualTo("retiredAt", null)) { it.toRoute() }
             .map { routes -> routes.sortedByDescending { it.createdAt } }
 
+    /** Every route (active AND archived) for one organization — the staff Route History screen's
+     * only real data source, filtering to archived ([RouteEntity.retiredAt] non-null) itself. A
+     * single equality filter here, same reasoning as [observeActiveRoutesForOrganization] for why
+     * archived-ness isn't a second equality filter in this query. */
+    fun observeRoutesForOrganization(organizationId: Long): Flow<List<RouteEntity>> =
+        observeCollection(firestore.collection(ROUTES).whereEqualTo("organizationId", organizationId)) { it.toRoute() }
+
     fun observePendingJoinRequests(organizationId: Long): Flow<List<OrganizationJoinRequestEntity>> =
         observeCollection(
             firestore.collection(JOIN_REQUESTS)
@@ -394,6 +401,12 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         observeCollection(firestore.collection(ROUTE_COMPLETIONS).whereEqualTo("routeId", routeId)) { it.toRouteCompletion() }
             .map { completions -> completions.sortedByDescending { it.completedAt } }
 
+    /** Every real send across every route in this club — the org-wide counterpart to
+     * [observeRouteCompletions] (which is scoped to one route), needed so the club rank screen can
+     * work out, per V grade, which real members have sent the most routes at that grade. */
+    fun observeRouteCompletionsForOrganization(organizationId: Long): Flow<List<RouteCompletionEntity>> =
+        observeCollection(firestore.collection(ROUTE_COMPLETIONS).whereEqualTo("organizationId", organizationId)) { it.toRouteCompletion() }
+
     /** Every member-shared attempt video for one route, most-recent-first — what a route's
      * RouteDetail screen shows alongside the staff beta video (see [uploadBetaVideo]) so a member
      * can watch how other real members climbed it, not just the one official beta take. */
@@ -635,26 +648,39 @@ class ClubRepository(private val firestore: FirebaseFirestore, private val stora
         deleteZoneCascade(zone)
     }
 
-    /** Removes every route under [zone] (each route's versions and beta video first), then the
-     * zone's own photo and doc — same delete-doc-then-delete-file shape as
-     * [com.example.climb.sharing.ClimbSyncRepository.deleteSyncedClimb], with each Storage
-     * deletion wrapped in its own [runCatching] so a missing/already-gone file never blocks
-     * removing the rest. Shared by [deleteZone] and [deleteVenue], which already checked staff
-     * access before calling this. */
+    /** Removes every route under [zone] (each via [deleteRouteCascade]), then the zone's own photo
+     * and doc. Shared by [deleteZone] and [deleteVenue], which already checked staff access before
+     * calling this. */
     private suspend fun deleteZoneCascade(zone: ZoneEntity) {
         val routes = firestore.collection(ROUTES).whereEqualTo("zoneId", zone.id).get().await().documents.mapNotNull { it.toRoute() }
-        routes.forEach { route ->
-            val versionDocs = firestore.collection(ROUTE_VERSIONS).whereEqualTo("routeId", route.id).get().await().documents
-            versionDocs.forEach { doc -> runCatching { doc.reference.delete().await() } }
-            if (route.betaVideoUrl != null) {
-                runCatching { storage.reference.child("club_beta_videos/${route.organizationId}/${route.id}.mp4").delete().await() }
-            }
-            firestore.collection(ROUTES).document(route.id.toString()).delete().await()
-        }
+        routes.forEach { route -> deleteRouteCascade(route) }
         if (zone.imageUrl != null) {
             runCatching { storage.reference.child("club_zone_photos/${zone.organizationId}/${zone.id}.jpg").delete().await() }
         }
         firestore.collection(ZONES).document(zone.id.toString()).delete().await()
+    }
+
+    /** Removes [route]'s versions and beta video, then the route doc itself — same delete-doc-
+     * then-delete-file shape as [com.example.climb.sharing.ClimbSyncRepository.deleteSyncedClimb],
+     * with each Storage deletion wrapped in its own [runCatching] so a missing/already-gone file
+     * never blocks removing the rest. Shared by [deleteZoneCascade] and [deleteRoute], which
+     * already checked staff access before calling this. */
+    private suspend fun deleteRouteCascade(route: RouteEntity) {
+        val versionDocs = firestore.collection(ROUTE_VERSIONS).whereEqualTo("routeId", route.id).get().await().documents
+        versionDocs.forEach { doc -> runCatching { doc.reference.delete().await() } }
+        if (route.betaVideoUrl != null) {
+            runCatching { storage.reference.child("club_beta_videos/${route.organizationId}/${route.id}.mp4").delete().await() }
+        }
+        firestore.collection(ROUTES).document(route.id.toString()).delete().await()
+    }
+
+    /** Real hard-delete of a single route — unlike [retireRoute] (which just stops offering it for
+     * new attempts, keeping existing attempts/analyses linked and readable), this actually removes
+     * the route and everything under it. No undo, matching [deleteZone]/[deleteVenue]'s own
+     * no-undo cascade. */
+    suspend fun deleteRoute(organizationId: Long, userId: String, route: RouteEntity): Result<Unit> = runCatching {
+        requireStaffAccess(organizationId, userId)
+        deleteRouteCascade(route)
     }
 
     suspend fun createRoute(organizationId: Long, userId: String, zoneId: Long, name: String, vGrade: Int?, colorHex: Long? = null): Result<RouteEntity> = runCatching {

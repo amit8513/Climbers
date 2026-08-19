@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
@@ -67,6 +68,7 @@ fun LiveSendMembersScreen(
     onGoHome: () -> Unit,
     onExitClub: () -> Unit,
     onNavBroadcast: () -> Unit,
+    onNavStats: () -> Unit,
 ) {
     val members by clubRepository.observeMembersForOrganization(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
     val pendingRequests by clubRepository.observePendingJoinRequests(organization.id).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -140,6 +142,7 @@ fun LiveSendMembersScreen(
                 LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
                 LiveSendNavTab(Icons.Filled.Campaign, "Social", selected = false, onClick = onNavBroadcast),
                 LiveSendNavTab(Icons.Filled.Group, "Members", selected = true, onClick = {}),
+                LiveSendNavTab(Icons.Filled.BarChart, "Stats", selected = false, onClick = onNavStats),
                 LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
             ),
             modifier = Modifier.align(Alignment.BottomCenter),

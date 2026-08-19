@@ -28,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
@@ -121,6 +122,7 @@ fun LiveSendBroadcastScreen(
     // defaulted no-op in the member context, which has no members-management concept.
     onNavBroadcast: () -> Unit = {},
     onNavMembers: () -> Unit = {},
+    onNavStats: () -> Unit = {},
     // Member-only — this screen is a pushed destination reached from the Social tab, not a tab
     // itself, so it needs a real "back to Social" affordance instead of the header's usual Home
     // icon. Null (default) for staff, whose Manage Social is still a real top-level tab.
@@ -196,6 +198,7 @@ fun LiveSendBroadcastScreen(
                     LiveSendNavTab(Icons.Filled.Home, "Home", selected = false, onClick = onGoHome),
                     LiveSendNavTab(Icons.Filled.Campaign, "Social", selected = true, onClick = onNavBroadcast),
                     LiveSendNavTab(Icons.Filled.Group, "Members", selected = false, onClick = onNavMembers),
+                    LiveSendNavTab(Icons.Filled.BarChart, "Stats", selected = false, onClick = onNavStats),
                     LiveSendNavTab(Icons.AutoMirrored.Filled.Logout, "Exit", selected = false, onClick = onExitClub),
                 ),
                 modifier = Modifier.align(Alignment.BottomCenter),
