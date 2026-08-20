@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.climb.clubs.AttemptSource
 import com.example.climb.data.ClimbEntity
 import com.example.climb.data.ClimbRepository
 import com.example.climb.ui.components.HoldBadge
@@ -51,7 +52,7 @@ fun VideoSourceScreen(
     repository: ClimbRepository,
     currentUid: String,
     onRecordNew: () -> Unit,
-    onExistingVideoSelected: (videoPath: String, durationMs: Long, sourceClimbId: Long) -> Unit,
+    onExistingVideoSelected: (videoPath: String, durationMs: Long, sourceClimbId: Long, attemptSource: AttemptSource) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val climbs by repository.observeAll(currentUid).collectAsStateWithLifecycle(initialValue = emptyList())
@@ -109,7 +110,18 @@ fun VideoSourceScreen(
                     climbs.forEach { climb ->
                         ExistingClimbRow(
                             climb = climb,
-                            onClick = { onExistingVideoSelected(climb.videoPath, climb.durationMs, climb.id) },
+                            onClick = {
+                                // Re-analyzing THIS existing climb's video must preserve its own
+                                // original source (or LEGACY_UNKNOWN if that was never recorded) —
+                                // never MANUAL_LOG, since a video always exists here (see
+                                // AttemptSource's own doc comment).
+                                onExistingVideoSelected(
+                                    climb.videoPath,
+                                    climb.durationMs,
+                                    climb.id,
+                                    climb.attemptSource ?: AttemptSource.LEGACY_UNKNOWN,
+                                )
+                            },
                         )
                         Spacer(Modifier.height(8.dp))
                     }

@@ -241,9 +241,6 @@ fun MemberClubNavHost(container: AppContainer, currentUid: String, currentUserna
                     ClubAttemptVideoScreen(
                         attempt = currentAttempt,
                         onBack = { navController.popBackStack() },
-                        clubRepository = container.clubRepository,
-                        currentUid = currentUid,
-                        currentUsername = currentUsername,
                     )
                 }
             }

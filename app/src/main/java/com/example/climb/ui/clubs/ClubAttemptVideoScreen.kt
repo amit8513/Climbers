@@ -16,11 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -33,10 +29,8 @@ import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.example.climb.analysis.ClimbAttemptEntity
-import com.example.climb.clubs.ClubRepository
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
-import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -46,30 +40,22 @@ private val attemptVideoDateFormatter = SimpleDateFormat("MMM d, yyyy · h:mm a"
 
 /** Plays one club attempt's own local video file directly (no Storage download needed — see
  * [ClubVideosScreen]'s doc comment on why this data never left the device). Styled with the fixed
- * liveSend palette to match the rest of the member club shell. When the attempt is linked to a
- * real gym route ([ClimbAttemptEntity.organizationId]/[ClimbAttemptEntity.routeId] both set),
- * shows a "Share with club" action that uploads this video ([ClubRepository.shareAttemptVideo]) so
- * other members can watch it on that route's page, alongside the staff beta video. */
+ * liveSend palette to match the rest of the member club shell.
+ *
+ * No "share with club" action here — a manually recorded/imported video has no verified capture
+ * provenance, so it must never be uploadable as an official club attempt (past behavior let any
+ * attempt with an organizationId/routeId upload itself as if it were one, with no distinction from
+ * a verified capture; that path is removed, not just hidden, until a real verified-capture flow
+ * exists). This screen is view-only. */
 @Composable
 fun ClubAttemptVideoScreen(
     attempt: ClimbAttemptEntity,
     onBack: () -> Unit,
-    clubRepository: ClubRepository,
-    currentUid: String,
-    currentUsername: String,
     modifier: Modifier = Modifier,
 ) {
-    val organizationId = attempt.organizationId
-    val routeId = attempt.routeId
-    val scope = rememberCoroutineScope()
-    var sharing by remember(attempt.id) { mutableStateOf(false) }
-    var shared by remember(attempt.id) { mutableStateOf(false) }
-    var shareError by remember(attempt.id) { mutableStateOf<String?>(null) }
-
     // Without its own scroll, this screen's 9:16 video alone is nearly as tall as the whole
-    // viewport on most phones, pushing the route name/outcome/date/notes/Share-with-club action
-    // entirely below the fold with no way to reach them — a real reported bug (tapping "Share"
-    // wasn't possible because it was never actually on screen).
+    // viewport on most phones, pushing the route name/outcome/date/notes entirely below the fold
+    // with no way to reach them on shorter screens.
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -113,44 +99,6 @@ fun ClubAttemptVideoScreen(
             Text(text = attempt.notes, color = ClimbPalette.liveSendTextMuted, fontSize = 13.sp, lineHeight = 18.sp)
         }
 
-        // Only attempts linked to a real gym route can be shared — there's no route page to show
-        // them on otherwise (see ClubRepository.shareAttemptVideo).
-        if (organizationId != null && routeId != null) {
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = when {
-                    shared -> "Shared with club ✓"
-                    sharing -> "Sharing…"
-                    else -> "Share with club"
-                },
-                color = if (shared) ClimbPalette.liveSendTextMuted else ClimbPalette.liveSendAccent,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-                modifier = Modifier.clickable(enabled = !sharing && !shared) {
-                    sharing = true
-                    shareError = null
-                    scope.launch {
-                        val result = clubRepository.shareAttemptVideo(
-                            organizationId = organizationId,
-                            routeId = routeId,
-                            userId = currentUid,
-                            userDisplayName = currentUsername,
-                            routeName = attempt.routeName,
-                            localVideoPath = attempt.videoPath,
-                            vGrade = attempt.vGrade,
-                            completed = attempt.completed,
-                            flash = attempt.flash,
-                        )
-                        sharing = false
-                        result.onSuccess { shared = true }
-                        result.onFailure { shareError = it.message ?: "Couldn't share video" }
-                    }
-                },
-            )
-            shareError?.let {
-                Text(text = it, color = ClimbPalette.liveSendCta, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
-            }
-        }
         Spacer(Modifier.height(24.dp))
     }
 }

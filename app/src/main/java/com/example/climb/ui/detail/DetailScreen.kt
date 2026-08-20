@@ -67,6 +67,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
 import com.example.climb.BuildConfig
 import com.example.climb.R
+import com.example.climb.clubs.AttemptSource
 import com.example.climb.analysis.AnalysisRepository
 import com.example.climb.analysis.AnalysisStatus
 import com.example.climb.analysis.ClimbAttemptEntity
@@ -166,7 +167,7 @@ fun DetailScreen(
     currentUsername: String,
     analysisRepository: AnalysisRepository,
     onDeleted: () -> Unit,
-    onStartAnalysis: (videoPath: String, durationMs: Long, sourceClimbId: Long) -> Unit,
+    onStartAnalysis: (videoPath: String, durationMs: Long, sourceClimbId: Long, attemptSource: AttemptSource) -> Unit,
     onViewAnalysisProgress: (attemptId: Long) -> Unit,
     onViewAnalysisResult: (analysisId: Long) -> Unit,
     onOpenHoldDetectionDebug: () -> Unit = {},
@@ -762,7 +763,12 @@ fun DetailScreen(
             videoPath = currentClimb.videoPath,
             durationMs = currentClimb.durationMs,
             analysisRepository = analysisRepository,
-            onStartAnalysis = onStartAnalysis,
+            onStartAnalysis = { path, duration, sourceClimbId ->
+                // Re-analyzing THIS existing climb's video must preserve its own original source
+                // (or LEGACY_UNKNOWN if that was never recorded) — never MANUAL_LOG, since a video
+                // always exists here (see AttemptSource's own doc comment).
+                onStartAnalysis(path, duration, sourceClimbId, currentClimb.attemptSource ?: AttemptSource.LEGACY_UNKNOWN)
+            },
             onViewProgress = onViewAnalysisProgress,
             onViewResult = onViewAnalysisResult,
             modifier = Modifier.padding(horizontal = 16.dp),

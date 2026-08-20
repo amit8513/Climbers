@@ -47,6 +47,7 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.work.WorkManager
 import com.example.climb.analysis.Visibility
+import com.example.climb.clubs.AttemptSource
 import com.example.climb.data.ClimbEntity
 import com.example.climb.data.ClimbOutcome
 import com.example.climb.data.ClimbRepository
@@ -76,6 +77,7 @@ fun TagScreen(
     repository: ClimbRepository,
     currentUid: String,
     currentUsername: String,
+    attemptSource: AttemptSource,
     onSaved: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -225,6 +227,7 @@ fun TagScreen(
                             outcome = outcome,
                             notes = notes,
                             visibility = visibility,
+                            attemptSource = attemptSource,
                         ),
                     )
                     ClimbSyncWorker.enqueue(WorkManager.getInstance(context), currentUid, currentUsername, climbId)

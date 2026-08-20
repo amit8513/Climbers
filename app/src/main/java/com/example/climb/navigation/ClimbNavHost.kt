@@ -32,6 +32,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.climb.AppContainer
+import com.example.climb.clubs.AttemptSource
 import com.example.climb.clubs.OrganizationEntity
 import com.example.climb.data.social.UserProfile
 import com.example.climb.ui.analysis.AnalysisProgressScreen
@@ -70,26 +71,38 @@ private object Routes {
     const val CLUBS = "clubs"
     const val CLUB_MEMBER = "club_member/{organizationId}"
     const val LIVE_SEND_PREVIEW = "live_send_preview"
-    const val TAG = "tag/{videoPath}/{durationMs}"
+    const val TAG = "tag/{videoPath}/{durationMs}/{attemptSource}"
     const val DETAIL = "detail/{climbId}"
     const val HOLD_DEBUG = "hold_debug/{climbId}"
     const val VIDEO_SOURCE = "video_source"
     const val ANALYSIS_RECORD = "analysis_record"
-    const val CLIMB_DETAILS_INPUT = "climb_details_input/{videoPath}/{durationMs}/{sourceClimbId}"
+    const val CLIMB_DETAILS_INPUT = "climb_details_input/{videoPath}/{durationMs}/{sourceClimbId}/{attemptSource}"
     const val ANALYSIS_PROGRESS = "analysis_progress/{attemptId}"
     const val ANALYSIS_RESULT = "analysis_result/{analysisId}"
     const val FRIEND_CLIMBS = "friend_climbs/{friendUid}/{friendUsername}"
 
-    fun tag(videoPath: String, durationMs: Long) = "tag/${Uri.encode(videoPath)}/$durationMs"
+    fun tag(videoPath: String, durationMs: Long, attemptSource: AttemptSource) =
+        "tag/${Uri.encode(videoPath)}/$durationMs/${attemptSource.name}"
     fun detail(climbId: Long) = "detail/$climbId"
     fun holdDebug(climbId: Long) = "hold_debug/$climbId"
-    fun climbDetailsInput(videoPath: String, durationMs: Long, sourceClimbId: Long = -1L) =
-        "climb_details_input/${Uri.encode(videoPath)}/$durationMs/$sourceClimbId"
+    fun climbDetailsInput(videoPath: String, durationMs: Long, sourceClimbId: Long = -1L, attemptSource: AttemptSource) =
+        "climb_details_input/${Uri.encode(videoPath)}/$durationMs/$sourceClimbId/${attemptSource.name}"
     fun clubMember(organizationId: Long) = "club_member/$organizationId"
     fun analysisProgress(attemptId: Long) = "analysis_progress/$attemptId"
     fun analysisResult(analysisId: Long) = "analysis_result/$analysisId"
     fun friendClimbs(friendUid: String, friendUsername: String) = "friend_climbs/$friendUid/${Uri.encode(friendUsername)}"
 }
+
+/** Parses an `AttemptSource` nav arg defensively: a missing or unparseable value (e.g. restored
+ * navigation state from an older app version whose enum values have since changed) must never
+ * crash navigation — it falls back to [AttemptSource.LEGACY_UNKNOWN], the same "we don't know"
+ * fallback used for a null `attemptSource` on an old persisted row (see that enum's own doc
+ * comment), never [AttemptSource.MANUAL_LOG] (which specifically means "no video at all" and is
+ * never correct for a nav arg that always accompanies a real video). Extracted as a small,
+ * top-level pure function (rather than inlined in the composable lambda) so it's unit-testable in
+ * isolation — see `AttemptSourceArgParsingTest`. */
+internal fun parseAttemptSourceArg(raw: String?): AttemptSource =
+    raw?.let { runCatching { AttemptSource.valueOf(it) }.getOrNull() } ?: AttemptSource.LEGACY_UNKNOWN
 
 /** Destinations that are bottom-bar tabs, and so keep the bar visible. */
 private val TAB_ROUTES = setOf(Routes.HOME, Routes.PROGRESS, Routes.LEADERBOARD, Routes.FRIENDS)
@@ -371,8 +384,8 @@ private fun NormalNavHost(
             composable(Routes.RECORD) {
                 RecordScreen(
                     moviesDir = container.moviesDirFor(currentUid),
-                    onRecorded = { path, duration ->
-                        navController.navigate(Routes.tag(path, duration)) {
+                    onRecorded = { path, duration, source ->
+                        navController.navigate(Routes.tag(path, duration, source)) {
                             popUpTo(Routes.RECORD) { inclusive = true }
                         }
                     },
@@ -384,16 +397,19 @@ private fun NormalNavHost(
                 arguments = listOf(
                     navArgument("videoPath") { type = NavType.StringType },
                     navArgument("durationMs") { type = NavType.LongType },
+                    navArgument("attemptSource") { type = NavType.StringType },
                 ),
             ) { backStackEntry ->
                 val videoPath = Uri.decode(backStackEntry.arguments?.getString("videoPath").orEmpty())
                 val durationMs = backStackEntry.arguments?.getLong("durationMs") ?: 0L
+                val attemptSource = parseAttemptSourceArg(backStackEntry.arguments?.getString("attemptSource"))
                 TagScreen(
                     videoPath = videoPath,
                     durationMs = durationMs,
                     repository = container.climbRepository,
                     currentUid = currentUid,
                     currentUsername = profile.username,
+                    attemptSource = attemptSource,
                     onSaved = { navController.popBackStack(Routes.HOME, false) },
                 )
             }
@@ -410,8 +426,11 @@ private fun NormalNavHost(
                     currentUsername = profile.username,
                     analysisRepository = container.analysisRepository,
                     onDeleted = { navController.popBackStack(Routes.HOME, false) },
-                    onStartAnalysis = { path, duration, sourceClimbId ->
-                        navController.navigate(Routes.climbDetailsInput(path, duration, sourceClimbId))
+                    onStartAnalysis = { path, duration, sourceClimbId, attemptSource ->
+                        // Re-analyzing an already-logged climb's video preserves that climb's own
+                        // original source (resolved by DetailScreen itself, falling back to
+                        // LEGACY_UNKNOWN) — never MANUAL_LOG, since a video always exists here.
+                        navController.navigate(Routes.climbDetailsInput(path, duration, sourceClimbId, attemptSource))
                     },
                     onViewAnalysisProgress = { attemptId -> navController.navigate(Routes.analysisProgress(attemptId)) },
                     onViewAnalysisResult = { analysisId -> navController.navigate(Routes.analysisResult(analysisId)) },
@@ -437,8 +456,11 @@ private fun NormalNavHost(
                     repository = container.climbRepository,
                     currentUid = currentUid,
                     onRecordNew = { navController.navigate(Routes.ANALYSIS_RECORD) },
-                    onExistingVideoSelected = { path, duration, sourceClimbId ->
-                        navController.navigate(Routes.climbDetailsInput(path, duration, sourceClimbId))
+                    onExistingVideoSelected = { path, duration, sourceClimbId, attemptSource ->
+                        // Re-analyzing an already-logged climb's video preserves that climb's own
+                        // original source (resolved by VideoSourceScreen itself, falling back to
+                        // LEGACY_UNKNOWN) — never MANUAL_LOG, since a video always exists here.
+                        navController.navigate(Routes.climbDetailsInput(path, duration, sourceClimbId, attemptSource))
                     },
                 )
             }
@@ -446,8 +468,8 @@ private fun NormalNavHost(
             composable(Routes.ANALYSIS_RECORD) {
                 RecordScreen(
                     moviesDir = container.moviesDirFor(currentUid),
-                    onRecorded = { path, duration ->
-                        navController.navigate(Routes.climbDetailsInput(path, duration)) {
+                    onRecorded = { path, duration, source ->
+                        navController.navigate(Routes.climbDetailsInput(path, duration, attemptSource = source)) {
                             popUpTo(Routes.ANALYSIS_RECORD) { inclusive = true }
                         }
                     },
@@ -464,17 +486,26 @@ private fun NormalNavHost(
                     navArgument("videoPath") { type = NavType.StringType },
                     navArgument("durationMs") { type = NavType.LongType },
                     navArgument("sourceClimbId") { type = NavType.LongType },
+                    navArgument("attemptSource") { type = NavType.StringType },
                 ),
             ) { backStackEntry ->
                 val videoPath = Uri.decode(backStackEntry.arguments?.getString("videoPath").orEmpty())
                 val durationMs = backStackEntry.arguments?.getLong("durationMs") ?: 0L
                 val sourceClimbIdArg = backStackEntry.arguments?.getLong("sourceClimbId") ?: -1L
+                // Falls back to LEGACY_UNKNOWN only if the arg is ever missing/unparseable — every
+                // real caller always passes an explicit AttemptSource (see Routes.climbDetailsInput's
+                // required, non-defaulted attemptSource parameter). This path always has a video
+                // (a fresh recording/import or a re-analysis of an existing one), so MANUAL_LOG
+                // ("no video at all") is never the correct fallback here — see AttemptSource's own
+                // doc comment.
+                val attemptSourceArg = parseAttemptSourceArg(backStackEntry.arguments?.getString("attemptSource"))
                 ClimbDetailsInputScreen(
                     videoPath = videoPath,
                     durationMs = durationMs,
                     currentUid = currentUid,
                     currentUsername = profile.username,
                     sourceClimbId = sourceClimbIdArg.takeIf { it > 0 },
+                    attemptSource = attemptSourceArg,
                     analysisRepository = container.analysisRepository,
                     clubRepository = container.clubRepository,
                     onAnalyzeStarted = { attemptId ->

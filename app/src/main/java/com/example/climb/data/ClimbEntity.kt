@@ -3,6 +3,7 @@ package com.example.climb.data
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.climb.analysis.Visibility
+import com.example.climb.clubs.AttemptSource
 
 @Entity(tableName = "climbs")
 data class ClimbEntity(
@@ -34,4 +35,10 @@ data class ClimbEntity(
      * this climb restores it instead of requiring the user to tap-to-calibrate again every time.
      * Null for every climb that's never been calibrated. */
     val calibratedColorModelJson: String? = null,
+    /** Where this climb's video actually came from (see `AttemptSource`'s own doc comment for
+     * exact semantics). Null means "logged before source tracking existed, or genuinely unknown
+     * provenance" — kept nullable here (rather than defaulting to the LEGACY_UNKNOWN enum value)
+     * so existing rows deserialize with a real, honest "we have no idea" absence rather than an
+     * enum value implying a migration wrote something. */
+    val attemptSource: AttemptSource? = null,
 )

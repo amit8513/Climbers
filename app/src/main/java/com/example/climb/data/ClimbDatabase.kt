@@ -13,7 +13,7 @@ import com.example.climb.analysis.ClimbAttemptEntity
     entities = [
         ClimbEntity::class, ClimbAttemptEntity::class, ClimbAnalysisEntity::class,
     ],
-    version = 11,
+    version = 13,
     exportSchema = true,
 )
 abstract class ClimbDatabase : RoomDatabase() {
@@ -255,12 +255,37 @@ abstract class ClimbDatabase : RoomDatabase() {
             }
         }
 
+        // Additive: four nullable columns on climb_attempts for the gym-camera automatic-route-
+        // attribution work (Phase 1 — schema only, nothing writes non-null values here yet).
+        // `attemptSource` is a plain enum column (Room stores it as TEXT via `.name`, same as
+        // `wallType`/`visibility` already do on this table, so no TypeConverter is needed).
+        // Internal (not private) so ClimbDatabaseMigrationTest can exercise it directly.
+        internal val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE climb_attempts ADD COLUMN attemptSource TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE climb_attempts ADD COLUMN wallId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climb_attempts ADD COLUMN wallCalibrationId INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE climb_attempts ADD COLUMN captureSessionId TEXT DEFAULT NULL")
+            }
+        }
+
+        // Additive: `attemptSource` on `climbs` itself (the equivalent column already exists on
+        // `climb_attempts` since MIGRATION_11_12) — every existing row gets NULL, meaning "logged
+        // before source tracking existed, or genuinely unknown provenance," same LEGACY_UNKNOWN
+        // spirit as that column, not something that needs backfilling.
+        internal val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE climbs ADD COLUMN attemptSource TEXT DEFAULT NULL")
+            }
+        }
+
         fun getInstance(context: Context): ClimbDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context, ClimbDatabase::class.java, "climb.db")
                     .addMigrations(
                         MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
                         MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10, MIGRATION_10_11,
+                        MIGRATION_11_12, MIGRATION_12_13,
                     )
                     .build()
                     .also { instance = it }

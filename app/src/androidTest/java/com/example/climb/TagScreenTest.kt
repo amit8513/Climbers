@@ -15,6 +15,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
 import com.example.climb.analysis.Visibility
+import com.example.climb.clubs.AttemptSource
 import com.example.climb.data.ClimbDao
 import com.example.climb.data.ClimbEntity
 import com.example.climb.data.ClimbOutcome
@@ -60,6 +61,7 @@ class TagScreenTest {
                 repository = ClimbRepository(dao),
                 currentUid = "test-uid",
                 currentUsername = "tester",
+                attemptSource = AttemptSource.PHONE_CAMERA,
                 onSaved = onSaved,
             )
         }

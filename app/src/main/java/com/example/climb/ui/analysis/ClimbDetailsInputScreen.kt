@@ -39,6 +39,7 @@ import com.example.climb.analysis.ClimbAttemptEntity
 import com.example.climb.analysis.PoseAnalysisWorker
 import com.example.climb.analysis.Visibility
 import com.example.climb.analysis.WallType
+import com.example.climb.clubs.AttemptSource
 import com.example.climb.clubs.ClubRepository
 import com.example.climb.clubs.RouteContext
 import com.example.climb.ui.theme.ClimbPalette
@@ -52,6 +53,11 @@ fun ClimbDetailsInputScreen(
     currentUid: String,
     currentUsername: String,
     sourceClimbId: Long?,
+    /** Where this video actually came from — every real caller passes an explicit, non-null
+     * value (PHONE_CAMERA/IMPORTED_VIDEO/MANUAL_LOG); a historical `null` on an attempt means
+     * "logged before this field existed," never something new code should produce (see
+     * [AttemptSource]'s own doc comment). */
+    attemptSource: AttemptSource,
     analysisRepository: AnalysisRepository,
     clubRepository: ClubRepository,
     onAnalyzeStarted: (attemptId: Long) -> Unit,
@@ -213,6 +219,7 @@ fun ClimbDetailsInputScreen(
                                 zoneId = routeContext?.zoneId,
                                 routeId = routeContext?.routeId,
                                 routeVersionId = routeContext?.routeVersionId,
+                                attemptSource = attemptSource,
                             ),
                         )
                         WorkManager.getInstance(context).enqueueUniqueWork(
@@ -220,17 +227,11 @@ fun ClimbDetailsInputScreen(
                             ExistingWorkPolicy.KEEP,
                             PoseAnalysisWorker.buildRequest(attemptId),
                         )
-                        routeContext?.let { route ->
-                            clubRepository.recordClubAttempt(route.organizationId, currentUid, currentUsername, vGrade, completed)
-                            clubRepository.recordRouteAttempt(route.routeId, route.organizationId, currentUid, completed)
-                            if (completed) {
-                                // attemptId links this send back to the ClimbAttemptEntity just
-                                // created above — see RouteCompletionEntity.attemptId's doc comment
-                                // for why this is real but only resolves to a duration on this
-                                // same device (analyses never sync to Firestore).
-                                clubRepository.recordRouteCompletion(route.routeId, route.organizationId, currentUid, currentUsername, attemptId)
-                            }
-                        }
+                        // A gym route linked here is a personal, unverified tag only — this
+                        // screen's video is always manually recorded/imported, so it must never
+                        // trigger official club aggregates (past behavior was a real trust bug:
+                        // this used to call recordClubAttempt/recordRouteAttempt/
+                        // recordRouteCompletion here, indistinguishable from a verified capture).
                         saving = false
                         onAnalyzeStarted(attemptId)
                     }

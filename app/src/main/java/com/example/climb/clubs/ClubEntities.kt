@@ -1,5 +1,9 @@
 package com.example.climb.clubs
 
+// StartPolicy/FinishPolicy now live in :shared-domain (same package, different module — see
+// RouteAttributionEntities.kt's own doc comment there for why) so a future Camera Edge Device
+// module can reference them without duplication.
+
 /**
  * The Clubs/Organizations domain — stored in Firestore (see [ClubRepository]), not the local Room
  * database, so a request/approval/route/update is visible across every phone, not just the one
@@ -75,7 +79,22 @@ data class RouteEntity(
 
 /** One physical setting of a route — routes get stripped and reset periodically, and a route's
  * "current" setting is versioned rather than mutated in place so historic attempts stay linked
- * to the exact setting they were actually climbed on. */
+ * to the exact setting they were actually climbed on.
+ *
+ * Extended (Phase 1 of the gym-camera automatic-route-attribution work) into a genuinely
+ * complete, self-describing immutable snapshot: rather than only pointing at
+ * [RouteEntity]/[ZoneEntity]/[VenueEntity] for context, this denormalizes the full
+ * org/venue/zone/wall hierarchy plus grade/setter/set-date/wall-calibration/vision-profile/
+ * start-finish policy directly onto the version itself, so a historical RouteVersion stays fully
+ * interpretable even if the org's venue/zone hierarchy is later restructured or renamed. All new
+ * fields are nullable/additive; every route created before this existed (metadata-only, no wall)
+ * simply has them all null.
+ *
+ * [createdAt] is the Firestore document's own creation timestamp; [setAt] is the distinct,
+ * separately-tracked "when was this route physically set on the wall" timestamp — deliberately
+ * NOT reused from [createdAt], since the two are conceptually different moments (a doc could in
+ * principle be created to record a setting that happened earlier) even though for new
+ * registrations they will often be equal in practice. */
 data class RouteVersionEntity(
     val id: Long,
     val organizationId: Long,
@@ -84,6 +103,18 @@ data class RouteVersionEntity(
     val versionNumber: Int,
     val colorHex: Long? = null,
     val createdAt: Long,
+    val venueId: Long? = null,
+    val zoneId: Long? = null,
+    val wallId: Long? = null,
+    val grade: Int? = null,
+    val gradeSystem: String? = null,
+    val publicNumberOrName: String? = null,
+    val setAt: Long? = null,
+    val retiredAt: Long? = null,
+    val wallCalibrationId: Long? = null,
+    val visionProfileId: Long? = null,
+    val startPolicy: StartPolicy? = null,
+    val finishPolicy: FinishPolicy? = null,
 )
 
 /**

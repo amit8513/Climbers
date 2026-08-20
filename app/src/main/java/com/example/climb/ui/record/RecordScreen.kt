@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
+import com.example.climb.clubs.AttemptSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,7 +48,7 @@ private fun hasPermission(context: android.content.Context, permission: String):
 @Composable
 fun RecordScreen(
     moviesDir: File,
-    onRecorded: (videoPath: String, durationMs: Long) -> Unit,
+    onRecorded: (videoPath: String, durationMs: Long, source: AttemptSource) -> Unit,
     countdownSeconds: Int = 0,
 ) {
     val context = LocalContext.current
@@ -104,7 +105,7 @@ fun RecordScreen(
             val recordedFile = pendingFile
             if (success && recordedFile != null) {
                 val duration = System.currentTimeMillis() - startTimeMs
-                onRecorded(recordedFile.absolutePath, duration)
+                onRecorded(recordedFile.absolutePath, duration, AttemptSource.PHONE_CAMERA)
             } else {
                 statusMessage = "Recording failed — try again"
             }
@@ -123,7 +124,7 @@ fun RecordScreen(
                 }
                 isImporting = false
                 if (imported != null) {
-                    onRecorded(imported.first.absolutePath, imported.second)
+                    onRecorded(imported.first.absolutePath, imported.second, AttemptSource.IMPORTED_VIDEO)
                 } else {
                     statusMessage = "Couldn't import that video — try again"
                 }

@@ -815,17 +815,71 @@ private fun DocumentSnapshot.toRoute(): RouteEntity? {
     )
 }
 
+/**
+ * Pure, Firestore-SDK-independent deserialization logic — separated from
+ * [DocumentSnapshot.toRouteVersion] purely so a plain JVM unit test can exercise it directly with
+ * hand-built maps (Firestore's own [DocumentSnapshot] isn't constructible/fakeable outside a real
+ * or emulated backend). `internal` (not private) so `ClubRepositoryRouteVersionMappingTest` (same
+ * module, `app/src/test`) can call it directly. Every field beyond the five required ones defaults
+ * null when absent from [data] — the exact behavior every existing route version (written before
+ * this schema existed) needs.
+ */
+internal fun routeVersionFromMap(id: Long, data: Map<String, Any?>): RouteVersionEntity? {
+    val organizationId = (data["organizationId"] as? Number)?.toLong() ?: return null
+    val routeId = (data["routeId"] as? Number)?.toLong() ?: return null
+    val setterUserId = data["setterUserId"] as? String ?: return null
+    val versionNumber = (data["versionNumber"] as? Number)?.toInt() ?: return null
+    return RouteVersionEntity(
+        id = id,
+        organizationId = organizationId,
+        routeId = routeId,
+        setterUserId = setterUserId,
+        versionNumber = versionNumber,
+        colorHex = (data["colorHex"] as? Number)?.toLong(),
+        createdAt = (data["createdAt"] as? Number)?.toLong() ?: 0L,
+        venueId = (data["venueId"] as? Number)?.toLong(),
+        zoneId = (data["zoneId"] as? Number)?.toLong(),
+        wallId = (data["wallId"] as? Number)?.toLong(),
+        grade = (data["grade"] as? Number)?.toInt(),
+        gradeSystem = data["gradeSystem"] as? String,
+        publicNumberOrName = data["publicNumberOrName"] as? String,
+        setAt = (data["setAt"] as? Number)?.toLong(),
+        retiredAt = (data["retiredAt"] as? Number)?.toLong(),
+        wallCalibrationId = (data["wallCalibrationId"] as? Number)?.toLong(),
+        visionProfileId = (data["visionProfileId"] as? Number)?.toLong(),
+        startPolicy = (data["startPolicy"] as? String)?.let { runCatching { StartPolicy.valueOf(it) }.getOrNull() },
+        finishPolicy = (data["finishPolicy"] as? String)?.let { runCatching { FinishPolicy.valueOf(it) }.getOrNull() },
+    )
+}
+
+/** Symmetric serializer for the write path — not yet wired into [createRoute] (Phase 2 will do
+ * that once real wall/vision-profile creation exists); exists now so the full extended schema has
+ * a genuine round-trip (entity → map → entity) path to test against. `internal` for the same
+ * testability reason as [routeVersionFromMap]. */
+internal fun RouteVersionEntity.toFirestoreMap(): Map<String, Any?> = mapOf(
+    "organizationId" to organizationId,
+    "routeId" to routeId,
+    "setterUserId" to setterUserId,
+    "versionNumber" to versionNumber,
+    "colorHex" to colorHex,
+    "createdAt" to createdAt,
+    "venueId" to venueId,
+    "zoneId" to zoneId,
+    "wallId" to wallId,
+    "grade" to grade,
+    "gradeSystem" to gradeSystem,
+    "publicNumberOrName" to publicNumberOrName,
+    "setAt" to setAt,
+    "retiredAt" to retiredAt,
+    "wallCalibrationId" to wallCalibrationId,
+    "visionProfileId" to visionProfileId,
+    "startPolicy" to startPolicy?.name,
+    "finishPolicy" to finishPolicy?.name,
+)
+
 private fun DocumentSnapshot.toRouteVersion(): RouteVersionEntity? {
     if (!exists()) return null
-    return RouteVersionEntity(
-        id = id.toLong(),
-        organizationId = getLong("organizationId") ?: return null,
-        routeId = getLong("routeId") ?: return null,
-        setterUserId = getString("setterUserId") ?: return null,
-        versionNumber = (getLong("versionNumber") ?: return null).toInt(),
-        colorHex = getLong("colorHex"),
-        createdAt = getLong("createdAt") ?: 0L,
-    )
+    return routeVersionFromMap(id.toLong(), data ?: emptyMap())
 }
 
 private fun DocumentSnapshot.toJoinRequest(): OrganizationJoinRequestEntity? {
