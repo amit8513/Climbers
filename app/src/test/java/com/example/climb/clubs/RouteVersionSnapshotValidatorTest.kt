@@ -29,6 +29,7 @@ class RouteVersionSnapshotValidatorTest {
         visionProfileId = 60L,
         startPolicy = StartPolicy.SINGLE_HOLD_ANY_HAND,
         finishPolicy = FinishPolicy.TOP_OUT_ZONE,
+        registrationStatus = RouteRegistrationStatus.ACTIVE,
     )
 
     /** A legacy, metadata-only route version created before the wall/attribution schema existed —
@@ -53,6 +54,7 @@ class RouteVersionSnapshotValidatorTest {
         visionProfileId = null,
         startPolicy = null,
         finishPolicy = null,
+        registrationStatus = RouteRegistrationStatus.ACTIVE,
     )
 
     @Test
@@ -207,5 +209,67 @@ class RouteVersionSnapshotValidatorTest {
 
         assertTrue(result.isValid)
         assertEquals(emptyList<String>(), result.missingFields)
+    }
+
+    // --- validateDraft() ---
+
+    @Test
+    fun `a fully populated draft with no publicNumberOrName is valid`() {
+        val draft = completeWallRouteVersion().copy(publicNumberOrName = null)
+
+        val result = RouteVersionSnapshotValidator.validateDraft(draft)
+
+        assertTrue(result.isValid)
+        assertEquals(emptyList<String>(), result.missingFields)
+    }
+
+    @Test
+    fun `a fully populated draft with a publicNumberOrName is also valid`() {
+        val result = RouteVersionSnapshotValidator.validateDraft(completeWallRouteVersion())
+
+        assertTrue(result.isValid)
+        assertEquals(emptyList<String>(), result.missingFields)
+    }
+
+    @Test
+    fun `validateDraft never lists publicNumberOrName as missing, even when every other field is also null`() {
+        val bareDraft = completeWallRouteVersion().copy(
+            venueId = null,
+            zoneId = null,
+            colorHex = null,
+            grade = null,
+            gradeSystem = null,
+            publicNumberOrName = null,
+            setAt = null,
+            wallCalibrationId = null,
+            visionProfileId = null,
+            startPolicy = null,
+            finishPolicy = null,
+        )
+
+        val result = RouteVersionSnapshotValidator.validateDraft(bareDraft)
+
+        assertFalse(result.isValid)
+        assertFalse(result.missingFields.contains("publicNumberOrName"))
+        assertEquals(
+            listOf("venueId", "zoneId", "colorHex", "grade", "gradeSystem", "setAt", "wallCalibrationId", "visionProfileId", "startPolicy", "finishPolicy"),
+            result.missingFields,
+        )
+    }
+
+    @Test
+    fun `validateDraft requires wallId, unlike validate which exempts null wallId as legacy`() {
+        val result = RouteVersionSnapshotValidator.validateDraft(legacyRouteVersion())
+
+        assertFalse(result.isValid)
+        assertTrue(result.missingFields.contains("wallId"))
+    }
+
+    @Test
+    fun `validateDraft missing only setAt reports only setAt`() {
+        val result = RouteVersionSnapshotValidator.validateDraft(completeWallRouteVersion().copy(setAt = null))
+
+        assertFalse(result.isValid)
+        assertEquals(listOf("setAt"), result.missingFields)
     }
 }

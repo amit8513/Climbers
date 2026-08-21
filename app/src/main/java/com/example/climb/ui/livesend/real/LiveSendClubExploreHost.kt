@@ -67,6 +67,7 @@ import com.example.climb.ui.livesend.components.rememberSharedAttemptRows
 import com.example.climb.ui.livesend.components.LiveSendPrimaryButton
 import com.example.climb.ui.livesend.components.LiveSendSectionLabel
 import com.example.climb.ui.livesend.components.LiveSendTextField
+import com.example.climb.ui.clubs.routeregistration.RouteRegistrationScreen
 import com.example.climb.ui.theme.ClimbPalette
 import com.example.climb.ui.theme.wallTexture
 import kotlinx.coroutines.launch
@@ -102,6 +103,12 @@ private object ExploreRoutes {
     fun addRoutePickZone(venueId: Long) = "add_route_pick_zone/$venueId"
     const val ADD_ROUTE_SET_ROUTE = "add_route_set_route/{venueId}/{zoneId}"
     fun addRouteSetRoute(venueId: Long, zoneId: Long) = "add_route_set_route/$venueId/$zoneId"
+    // Phase 2A — hardware-independent wall-camera route-registration wizard, per
+    // docs/ROUTE_ATTRIBUTION_PLAN.md §13: "gains one new navigation entry point into this
+    // self-contained flow, instead of hosting every step inline." Reached from
+    // AddRoutePickVenueStep, not from ExploreScreen directly, to avoid growing that shared
+    // screen's own API for a staff-only, still-hardware-independent entry point.
+    const val ROUTE_REGISTRATION = "route_registration"
 }
 
 private const val ONE_DAY_MS = 24 * 60 * 60 * 1000L
@@ -334,10 +341,19 @@ fun LiveSendClubExploreHost(
             )
         }
 
+        composable(ExploreRoutes.ROUTE_REGISTRATION) {
+            RouteRegistrationScreen(
+                organizationId = organization.id,
+                setterUserId = currentUid,
+                onExit = { navController.popBackStack(ExploreRoutes.BROWSE, inclusive = false) },
+            )
+        }
+
         composable(ExploreRoutes.ADD_ROUTE_PICK_VENUE) {
             AddRoutePickVenueStep(
                 venues = venueEntities,
                 onVenueChosen = { venueId -> navController.navigate(ExploreRoutes.addRoutePickZone(venueId)) },
+                onGoRouteRegistration = { navController.navigate(ExploreRoutes.ROUTE_REGISTRATION) },
                 onGoAddVenue = {
                     // Same as Browse's own "Add Venue" entry — a fresh add-venue screen replacing
                     // the whole add-route sub-stack rather than nesting under it, matching the
@@ -449,7 +465,13 @@ private fun AddRouteStepScaffold(onBack: () -> Unit, content: @Composable Column
  * (required, since a route can't exist without a zone, and a zone can't exist without a venue).
  * If the org has no venues at all yet, sends the staffer to [onGoAddVenue] instead of dead-ending. */
 @Composable
-private fun AddRoutePickVenueStep(venues: List<VenueEntity>, onVenueChosen: (Long) -> Unit, onGoAddVenue: () -> Unit, onBack: () -> Unit) {
+private fun AddRoutePickVenueStep(
+    venues: List<VenueEntity>,
+    onVenueChosen: (Long) -> Unit,
+    onGoRouteRegistration: () -> Unit,
+    onGoAddVenue: () -> Unit,
+    onBack: () -> Unit,
+) {
     AddRouteStepScaffold(onBack = onBack) {
         Text2("Choose a Venue")
         Spacer(Modifier.height(16.dp))
@@ -469,6 +491,15 @@ private fun AddRoutePickVenueStep(venues: List<VenueEntity>, onVenueChosen: (Lon
                 }
             }
         }
+        Spacer(Modifier.height(20.dp))
+        // Phase 2A entry point — a separate, hardware-independent wall-camera registration
+        // wizard (own reference-frame/ROI/color/hold flow), not this simple name+grade form.
+        Text(
+            text = "Register a route via wall camera (test fixtures) →",
+            color = ClimbPalette.liveSendInfo,
+            fontSize = 13.sp,
+            modifier = Modifier.clickable(onClick = onGoRouteRegistration),
+        )
     }
 }
 

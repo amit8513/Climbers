@@ -49,6 +49,43 @@ class RouteVersionMappingTest {
         assertNull(entity.visionProfileId)
         assertNull(entity.startPolicy)
         assertNull(entity.finishPolicy)
+        // A real, pre-existing document with no registrationStatus field at all is a route that
+        // was always active/offered - the deserialization-time legacy-compatibility default
+        // (Phase 3A correction: this is now the ONLY place ACTIVE is ever defaulted to; the data
+        // class itself has no default, see RouteVersionEntity.registrationStatus's doc comment).
+        assertEquals(RouteRegistrationStatus.ACTIVE, entity.registrationStatus)
+    }
+
+    @Test
+    fun `a document with an explicit DRAFT registrationStatus deserializes as DRAFT, not the legacy default`() {
+        val draftShapeData = mapOf(
+            "organizationId" to 1L,
+            "routeId" to 2L,
+            "setterUserId" to "staff-uid",
+            "versionNumber" to 1L,
+            "createdAt" to 1000L,
+            "registrationStatus" to "DRAFT",
+        )
+
+        val entity = routeVersionFromMap(id = 99L, data = draftShapeData)
+
+        assertEquals(RouteRegistrationStatus.DRAFT, entity?.registrationStatus)
+    }
+
+    @Test
+    fun `an unparseable registrationStatus value falls back to the legacy ACTIVE default rather than crashing`() {
+        val corruptShapeData = mapOf(
+            "organizationId" to 1L,
+            "routeId" to 2L,
+            "setterUserId" to "staff-uid",
+            "versionNumber" to 1L,
+            "createdAt" to 1000L,
+            "registrationStatus" to "NOT_A_REAL_VALUE",
+        )
+
+        val entity = routeVersionFromMap(id = 99L, data = corruptShapeData)
+
+        assertEquals(RouteRegistrationStatus.ACTIVE, entity?.registrationStatus)
     }
 
     @Test
@@ -79,6 +116,7 @@ class RouteVersionMappingTest {
             visionProfileId = 50L,
             startPolicy = StartPolicy.TWO_HOLDS_ONE_PER_HAND,
             finishPolicy = FinishPolicy.TWO_HANDS_ON_FINISH,
+            registrationStatus = RouteRegistrationStatus.DRAFT,
         )
 
         val roundTripped = routeVersionFromMap(id = original.id, data = original.toFirestoreMap())
@@ -96,6 +134,7 @@ class RouteVersionMappingTest {
             versionNumber = 1,
             createdAt = 1000L,
             setAt = null,
+            registrationStatus = RouteRegistrationStatus.ACTIVE,
         )
         val map = original.toFirestoreMap()
         assertNull("setAt must not be silently derived from createdAt in the serialized form", map["setAt"])

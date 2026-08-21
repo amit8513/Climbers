@@ -71,6 +71,7 @@ private object Routes {
     const val CLUBS = "clubs"
     const val CLUB_MEMBER = "club_member/{organizationId}"
     const val LIVE_SEND_PREVIEW = "live_send_preview"
+    const val VALIDATION_DEBUG = "validation_debug"
     const val TAG = "tag/{videoPath}/{durationMs}/{attemptSource}"
     const val DETAIL = "detail/{climbId}"
     const val HOLD_DEBUG = "hold_debug/{climbId}"
@@ -303,6 +304,7 @@ private fun NormalNavHost(
                     onOpenClubs = { navController.navigate(Routes.CLUBS) },
                     staffOrganizations = staffOrganizations,
                     onEnterClubMode = onEnterClubMode,
+                    onOpenValidationHarness = { navController.navigate(Routes.VALIDATION_DEBUG) },
                 )
             }
 
@@ -313,6 +315,15 @@ private fun NormalNavHost(
             // bubbles up and pops this composable off the outer back stack, returning to Settings.
             composable(Routes.LIVE_SEND_PREVIEW) {
                 LiveSendNavHost()
+            }
+
+            // Phase 3B developer/debug tooling — reached only via the "Manual Validation
+            // Harness" row in Settings. Entirely self-contained (owns its own ViewModel via
+            // application Context, no AppContainer) and entirely local/debug — see
+            // com.example.climb.validation's trust-boundary doc comments for what it never
+            // touches.
+            composable(Routes.VALIDATION_DEBUG) {
+                com.example.climb.ui.validation.ValidationDebugScreen()
             }
 
             // Entirely optional feature — reached only via the "Clubs" row in Settings, never

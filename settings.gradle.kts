@@ -25,4 +25,5 @@ dependencyResolutionManagement {
 rootProject.name = "Climb"
 include(":app")
 include(":shared-domain")
+include(":edge-agent")
  

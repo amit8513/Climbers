@@ -34,12 +34,27 @@ data class WallEntity(
     val retiredAt: Long? = null,
 )
 
+/** Where a [WallCalibrationEntity]'s reference frame actually came from. [TEST_FIXTURE] exists
+ * specifically for hardware-independent development/testing (Phase 2A's route-registration UI
+ * flow, which has no real Edge Capture Agent to talk to yet) — see
+ * [WallCalibrationActivationGuard], the one place that enforces a [TEST_FIXTURE] calibration can
+ * never be treated as eligible for real activation, no matter how complete its other fields look. */
+enum class ReferenceSource { EDGE_AGENT_CAPTURE, TEST_FIXTURE }
+
 /** One captured "clean wall, no climber" reference frame plus the geometric calibration that lets
  * hold geometry (already normalized against it) and pose landmarks (transformed via a
  * `CaptureToReferenceTransform`, resolved in Phase 3) be compared in the same coordinate space.
  * Versioned (not mutated in place) so re-calibrating a wall after a camera bump doesn't
  * retroactively invalidate old profiles silently — see
- * [RouteVisionProfileEntity.needsReconfirmation]. */
+ * [RouteVisionProfileEntity.needsReconfirmation].
+ *
+ * The authoritative wall reference cannot merely come from "the same physical camera" — its
+ * FOV/crop/orientation must match the future attempt-video path exactly, which is what
+ * [cameraGeometryProfileVersion] (see `com.example.climb.edge.CameraGeometryProfile`) exists to
+ * pin down; [WallCalibrationActivationGuard] is the one place that checks it against whatever
+ * profile version an attempt capture actually used. [referenceSource] and [hardwareValidated] are
+ * the other two gates that guard — see [WallCalibrationActivationGuard]'s doc comment for why all
+ * three are independent, never-bypassed checks rather than one combined flag. */
 data class WallCalibrationEntity(
     val id: Long,
     val organizationId: Long,
@@ -56,6 +71,14 @@ data class WallCalibrationEntity(
     val createdAt: Long,
     val supersededAt: Long? = null,
     val configVersion: Int,
+    val referenceSource: ReferenceSource,
+    /** The `CameraGeometryProfile.version` the reference frame was actually captured under — see
+     * this entity's own doc comment and [WallCalibrationActivationGuard]. */
+    val cameraGeometryProfileVersion: Int,
+    /** Never set true by anything in Phase 2A — real hardware validation (the Phase 1.5A/1.25
+     * gates) is a precondition this codebase cannot fabricate its way past. Only a future phase
+     * that actually confirms real capture hardware may set this. */
+    val hardwareValidated: Boolean = false,
 )
 
 /** Which purpose one detected hold serves within a route, tagged at staff-confirmation time

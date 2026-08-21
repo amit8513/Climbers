@@ -44,6 +44,15 @@ data class HoldContactConfig(
     val contactTransitionOverlapMs: Long = 400L,
     /** Bounded top-K of nearby hold candidates kept per limb for disambiguation/debugging. */
     val topKNearbyHolds: Int = 3,
+    /** Max plausible limb-proxy displacement (normalized `WallReferenceSpace` units) per
+     * millisecond between two consecutively-resolved frames — `HoldContactDetector` (Phase 3A)
+     * compares actual displacement/elapsed-time against this to catch a tracking failure
+     * masquerading as real motion (e.g. MediaPipe briefly locking onto the wrong limb) and reset
+     * immediately rather than smoothing it in as if it were a real, fast movement. Per this
+     * codebase's ROUTE_ATTRIBUTION_PLAN.md (unresolved decision #4), this exact number is not yet
+     * grounded in real climbing movement speed — an explicitly unvalidated POC placeholder, same
+     * honesty standard as every other threshold in this class. */
+    val maxPlausibleNormalizedDisplacementPerMs: Float = 0.004f,
     val version: Int = 1,
 ) {
     init {
@@ -57,5 +66,6 @@ data class HoldContactConfig(
             "short-gap threshold must be below the long-gap reset threshold"
         }
         require(topKNearbyHolds > 0) { "topKNearbyHolds must be positive" }
+        require(maxPlausibleNormalizedDisplacementPerMs > 0f) { "maxPlausibleNormalizedDisplacementPerMs must be positive" }
     }
 }

@@ -849,6 +849,11 @@ internal fun routeVersionFromMap(id: Long, data: Map<String, Any?>): RouteVersio
         visionProfileId = (data["visionProfileId"] as? Number)?.toLong(),
         startPolicy = (data["startPolicy"] as? String)?.let { runCatching { StartPolicy.valueOf(it) }.getOrNull() },
         finishPolicy = (data["finishPolicy"] as? String)?.let { runCatching { FinishPolicy.valueOf(it) }.getOrNull() },
+        // Absent (every document written before this field existed) or unparseable defaults to
+        // ACTIVE, matching every existing route version's real, always-offered status.
+        registrationStatus = (data["registrationStatus"] as? String)
+            ?.let { runCatching { RouteRegistrationStatus.valueOf(it) }.getOrNull() }
+            ?: RouteRegistrationStatus.ACTIVE,
     )
 }
 
@@ -875,6 +880,7 @@ internal fun RouteVersionEntity.toFirestoreMap(): Map<String, Any?> = mapOf(
     "visionProfileId" to visionProfileId,
     "startPolicy" to startPolicy?.name,
     "finishPolicy" to finishPolicy?.name,
+    "registrationStatus" to registrationStatus.name,
 )
 
 private fun DocumentSnapshot.toRouteVersion(): RouteVersionEntity? {

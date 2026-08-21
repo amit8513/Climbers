@@ -115,7 +115,29 @@ data class RouteVersionEntity(
     val visionProfileId: Long? = null,
     val startPolicy: StartPolicy? = null,
     val finishPolicy: FinishPolicy? = null,
+    /** Deliberately REQUIRED, no default — a Phase 3A correction. A default here would silently
+     * make ACTIVE the accidental outcome of any new programmatic construction that simply forgot
+     * to think about registration status, which is exactly backwards for a field whose entire
+     * purpose is gating real-world visibility/attribution eligibility. Every construction site in
+     * this codebase must say which one it means. Legacy-document compatibility (a real Firestore
+     * doc written before this field existed) is handled entirely separately, in
+     * [routeVersionFromMap] — a deserialization-time decision ("an absent field on a real, already
+     * -offered route means ACTIVE"), not a language-level default applied to fresh objects too. */
+    val registrationStatus: RouteRegistrationStatus,
 )
+
+/** Whether a [RouteVersionEntity] is a real, offered route or still mid-registration. [DRAFT]
+ * exists specifically for the wall-camera route-registration flow (Phase 2A) — a draft is never
+ * shown to members, never eligible for attribution, and this codebase has no path that flips a
+ * [DRAFT] to [ACTIVE] yet (that's a deliberately later, separate phase).
+ *
+ * [RouteVersionEntity.registrationStatus] has no language-level default (see that field's doc
+ * comment, a Phase 3A correction) — every *new* construction must say which one it means.
+ * [ClubRepository.createRoute]'s existing personal-route path never constructs a
+ * [RouteVersionEntity] object at all (it writes a raw Firestore map), so it is unaffected by this
+ * requirement; [routeVersionFromMap] is where a real, legacy (pre-this-field) Firestore document's
+ * absence of this field is deliberately, separately interpreted as [ACTIVE]. */
+enum class RouteRegistrationStatus { DRAFT, ACTIVE }
 
 /**
  * The optional, denormalized context an analysis/attempt can be enhanced with when the climber

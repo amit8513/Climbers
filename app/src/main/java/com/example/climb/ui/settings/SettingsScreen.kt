@@ -77,6 +77,7 @@ fun SettingsScreen(
     onOpenClubs: () -> Unit,
     staffOrganizations: List<OrganizationEntity> = emptyList(),
     onEnterClubMode: (OrganizationEntity) -> Unit = {},
+    onOpenValidationHarness: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Box(modifier = modifier.fillMaxSize().wallTexture(bg = ClimbPalette.liveSendBg, dot = ClimbPalette.liveSendTextPrimary.copy(alpha = 0.05f))) {
@@ -126,6 +127,29 @@ fun SettingsScreen(
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp,
                         modifier = Modifier.padding(top = 10.dp).clickable(onClick = onOpenClubs),
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+
+            LiveSendCard {
+                Column {
+                    LiveSendSectionLabel(text = "Developer Tools")
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "Manual Validation Harness (Phase 3B) — hand-check HoldContactDetector " +
+                            "against a real climbing video you record and import yourself. Local/debug " +
+                            "only, never official club-camera data.",
+                        color = ClimbPalette.liveSendTextMuted,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                    )
+                    Text(
+                        text = "Open Validation Harness →",
+                        color = ClimbPalette.liveSendAccent,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 10.dp).clickable(onClick = onOpenValidationHarness),
                     )
                 }
             }
