@@ -1,6 +1,7 @@
 package com.example.climb.validation
 
 import com.example.climb.analysis.contact.Limb
+import com.example.climb.clubs.AttemptResult
 import com.example.climb.colordetection.Point2D
 
 /**
@@ -14,6 +15,20 @@ import com.example.climb.colordetection.Point2D
  * two types, and nothing in this package (`com.example.climb.validation`) imports `ClubRepository`
  * or writes to Firestore at all. See `ManualValidationTrustBoundaryTest` for the enforced
  * guarantee this is never accidentally treated as, or promoted into, official club-camera data.
+ *
+ * Phase 4B adds five fields for wiring this harness up to
+ * `com.example.climb.attribution.RouteAttributionEngine`, purely inside this debug path:
+ * [routeDefinitions] are Phase 4B's candidate routes for the attribution engine, kept deliberately
+ * separate from the older, Phase 3B [startHoldIds]/[finishHoldIds] fields above — those remain
+ * exactly as they were (still used by whatever consumed them before) and are not consumed by the
+ * new attribution path at all. [attemptStartTimestampMs] has no real wristband-tap equivalent in
+ * this dev harness, so it defaults to the start of the clip and is meant to be adjustable from the
+ * debug UI once a developer decides where in the clip the "attempt" actually begins.
+ * [wallSetupId] is a pure grouping/traceability convenience (see ValidationWallSetup.kt) with no
+ * runtime lookup dependency — a session remains fully self-contained even if the wall setup it was
+ * copied from is later deleted. [expectedRouteId]/[expectedResult] are optional human-entered
+ * ground truth for comparison against the engine's own output only — never fed into the resolver
+ * itself.
  */
 data class ManualValidationSession(
     val validationSessionId: String,
@@ -31,6 +46,13 @@ data class ManualValidationSession(
     val groundTruthContacts: List<GroundTruthContactAnnotation> = emptyList(),
     val notes: String? = null,
     val createdAtEpochMs: Long,
+    /** Phase 4B's candidate routes for `RouteAttributionEngine` — see this class's own doc
+     * comment for how this relates to the older [startHoldIds]/[finishHoldIds] fields above. */
+    val routeDefinitions: List<ValidationRouteDefinition> = emptyList(),
+    val attemptStartTimestampMs: Long = 0L,
+    val wallSetupId: String? = null,
+    val expectedRouteId: Long? = null,
+    val expectedResult: AttemptResult? = null,
 ) {
     init {
         require(validationSessionId.isNotBlank()) { "validationSessionId must not be blank" }

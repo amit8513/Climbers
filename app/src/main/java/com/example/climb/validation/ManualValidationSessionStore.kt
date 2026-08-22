@@ -1,6 +1,7 @@
 package com.example.climb.validation
 
 import com.example.climb.analysis.contact.Limb
+import com.example.climb.clubs.AttemptResult
 import com.example.climb.colordetection.Point2D
 import org.json.JSONArray
 import org.json.JSONObject
@@ -59,6 +60,11 @@ fun ManualValidationSession.toJson(): String = JSONObject().apply {
     put("groundTruthContacts", JSONArray(groundTruthContacts.map { it.toJsonObject() }))
     put("notes", notes ?: JSONObject.NULL)
     put("createdAtEpochMs", createdAtEpochMs)
+    put("routeDefinitions", JSONArray(routeDefinitions.map { it.toJsonObject() }))
+    put("attemptStartTimestampMs", attemptStartTimestampMs)
+    put("wallSetupId", wallSetupId ?: JSONObject.NULL)
+    put("expectedRouteId", expectedRouteId ?: JSONObject.NULL)
+    put("expectedResult", expectedResult?.name ?: JSONObject.NULL)
 }.toString()
 
 fun String.toManualValidationSession(): ManualValidationSession {
@@ -69,6 +75,13 @@ fun String.toManualValidationSession(): ManualValidationSession {
     val finishHolds = o.getJSONArray("finishHoldIds").let { array -> (0 until array.length()).map { array.getInt(it) } }
     val groundTruthArray = o.getJSONArray("groundTruthContacts")
     val groundTruth = (0 until groundTruthArray.length()).map { groundTruthArray.getJSONObject(it).toGroundTruthContactAnnotation() }
+    // opt*-style reads below so any hand-authored or pre-Phase-4B JSON without these keys still
+    // parses, coming back as the same defaults ManualValidationSession itself declares - never
+    // throwing on a missing key.
+    val routeDefinitions = o.optJSONArray("routeDefinitions")?.let { array ->
+        (0 until array.length()).map { array.getJSONObject(it).toValidationRouteDefinition() }
+    } ?: emptyList()
+    val expectedResultName = o.opt("expectedResult")?.takeIf { it != JSONObject.NULL } as? String
 
     return ManualValidationSession(
         validationSessionId = o.getString("validationSessionId"),
@@ -82,6 +95,11 @@ fun String.toManualValidationSession(): ManualValidationSession {
         groundTruthContacts = groundTruth,
         notes = o.opt("notes")?.takeIf { it != JSONObject.NULL } as? String,
         createdAtEpochMs = o.getLong("createdAtEpochMs"),
+        routeDefinitions = routeDefinitions,
+        attemptStartTimestampMs = o.optLong("attemptStartTimestampMs", 0L),
+        wallSetupId = o.opt("wallSetupId")?.takeIf { it != JSONObject.NULL } as? String,
+        expectedRouteId = (o.opt("expectedRouteId")?.takeIf { it != JSONObject.NULL } as? Number)?.toLong(),
+        expectedResult = expectedResultName?.let { AttemptResult.valueOf(it) },
     )
 }
 

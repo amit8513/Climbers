@@ -1,4 +1,4 @@
-# Where things stand (as of this commit) and how to continue
+ו# Where things stand (as of this commit) and how to continue
 
 This file is a handoff note for whoever (human or Claude) picks this up next. It replaces the
 previous version (written after the "club rank categories" commit) — that feature is done and
@@ -40,7 +40,12 @@ new phase without explicit user approval**, even if the next phase seems obvious
 | 2 (remainder: real backend wiring, staff-confirmed activation) | Not started |
 | 3A (hardware-independent Hold Contact Detector) | **CODE COMPLETE — see below. Synthetic fixtures only; no MediaPipe, no attribution** |
 | 3B (manual real-video Hold Contact Detector validation harness) | **CODE COMPLETE — see below. Local/debug only; real video, but never trusted capture** |
-| 3 (remainder: real `CameraAlignmentChecker`, non-identity transform) and 4+ | Not started |
+| 3 (remainder: real `CameraAlignmentChecker`, non-identity transform) | Not started |
+| 4A (hardware-independent Automatic Route Resolver) | **CODE COMPLETE — see below. Synthetic fixtures only; no real capture/backend wiring, not hardware-validated** |
+| 4B (Manual Validation Harness ↔ RouteAttributionEngine integration + debug observability) | **CODE COMPLETE — see below. Local/debug only; wires Phase 3B + 4A together for tomorrow's real-footage session** |
+| 4B.1 (foreign-contact duplication hardening correction) | **Done — see below** |
+| 4C (Manual Validation iteration accelerator: pose/contact/attribution caching, provenance, batch processing, robustness) | **CODE COMPLETE — see below. Local/debug only; no scoring/threshold changes** |
+| 4 (remainder: wire the resolver to real capture/backend data) and 5+ | Not started |
 
 **Explicit standing constraint from the user, still in force**: Phase 1.25 (hardware spike) is
 firmware/docs/test-protocol-complete but explicitly **not physically validated** — the ESP32/PN532
@@ -487,6 +492,293 @@ errors.**
 `targetFps` is still 10 (regression-tested); the validation pipeline constructs its own separate
 15fps config instance and never touches the personal pipeline's files.
 
+## Phase 4A — hardware-independent Automatic Route Resolver (code complete)
+
+**Why now, out of order**: the user explicitly deferred Phase 3B's real-video validation to the
+next gym visit and asked to continue software-first in the meantime, using only synthetic
+fixtures/deterministic `HoldContactTimeline` data and Phase 3A's existing detector output
+contracts — never touching the real capture/hardware/trust-boundary path. Nothing in this phase
+reads real camera/NFC hardware, writes Firestore, or touches official club stats.
+
+**New files, all in `:shared-domain`'s existing `com.example.climb.attribution` package** (which
+already held the Phase 1 `RouteAttributionScoringConfig.kt`, untouched this phase — every
+threshold/weight the resolver uses is one of that file's existing fields; no new config fields were
+needed):
+- `RouteCandidate.kt` — one candidate route to score a timeline against (start/body/finish hold
+  sets + policies, optional corridor). `finishHoldIds`/`finishPolicy` and `corridorNormalized`
+  being absent are how a candidate declares those signals structurally unavailable (never a
+  fabricated zero).
+- `SubScoreResult.kt` — the uniform per-candidate debug/result contract every candidate gets,
+  win or lose.
+- `AttributionResult.kt` — the whole-attempt result (winner, status, reason, margin, every
+  candidate's `SubScoreResult`). Only ever produces `VERIFIED`/`REVIEW_REQUIRED`/`UNRESOLVED` —
+  never `REJECTED` (a human/downstream decision) or `PENDING`/`CALIBRATION_INVALID` (set upstream).
+- `StartHoldMatcher.kt` — the hard start-evidence gate (`StartEvidenceStatus`), evaluated
+  per-candidate against real `HoldContactTimeline` dwell/window math, independent of any score.
+- `ContactCoverageScorer.kt`, `CorridorScorer.kt`, `FinishEvidenceScorer.kt` — the three
+  optional/always-on positive-evidence signals (corridor/finish return `null`, not `0f`, when
+  structurally unavailable for a candidate).
+- `ForeignContactPenaltyCalculator.kt` — split out from the engine specifically for independent
+  testability (not in the original plan doc's file list, added this session); counts unique
+  qualifying `ESTABLISHED` events on another candidate's holds, never frames/duration.
+- `RouteAttributionEngine.kt` — orchestrates all of the above: hard-gates eligibility on
+  `StartEvidenceStatus.START_OBSERVED_MATCH`, renormalizes corridor/finish weights when either is
+  unavailable so a candidate missing optional signals isn't unfairly capped, applies the foreign-
+  contact penalty, clamps the final score to `[0,1]`, and picks a deterministic winner (ties broken
+  by lowest `routeVersionId`) subject to `verifiedMinScore`/`reviewMinScore`/`minWinnerMargin`.
+
+**Known, deliberate simplifications** (documented in the code, not silently papered over):
+- `AttributionReasonCode.MARGIN_TOO_SMALL` is reused for both "margin too small" and "winning
+  score never cleared the review bar at all" — the existing (already-approved Phase 1)
+  `AttributionReasonCode` enum has no separate code for the latter, and this phase's instructions
+  were to work within the existing plan/contracts, not extend that enum. Flagged for a future
+  phase to reconsider.
+- `FinishEvidenceScorer` is a plain binary (1f/0f) hard-gate check with no time window or dwell
+  requirement, unlike `StartHoldMatcher` — a POC-level simplification.
+- `CorridorScorer`'s hold "centroid" is the plain arithmetic mean of a hold's contour vertices, not
+  a true polygon-area centroid — same honesty-about-approximations standard as the rest of this
+  codebase.
+
+**Test suite**: 64 new tests across 6 new files (`StartHoldMatcherTest`=12, `ContactCoverageScorerTest`=5,
+`CorridorScorerTest`=5, `FinishEvidenceScorerTest`=15, `ForeignContactPenaltyCalculatorTest`=18,
+`RouteAttributionEngineTest`=9), including all 7 required adversarial properties: high coverage
+with no observed start never reaches `VERIFIED`; a start observed for a different candidate
+(`START_OBSERVED_MISMATCH`) never lets the mismatched candidate win regardless of its other
+scores; a close winner margin between two eligible candidates produces `REVIEW_REQUIRED`, never a
+winner; missing optional corridor/finish signals do not lower a candidate's score relative to one
+with every signal available (proven via the renormalization math, not just asserted); the foreign-
+contact penalty scales with unique qualifying events, not frame/sample count; every `combinedScore`
+is clamped to `[0,1]` even under a deliberately extreme config; and three repeated calls with
+identical inputs produce byte-for-byte-equal `AttributionResult`s (no hidden nondeterminism from
+set/map iteration order).
+
+Full suite read from actual JUnit XML this session: **580 tests total (386 app + 194 shared-domain),
+0 failures, 0 errors** — `:edge-agent:compileDebugKotlin` also verified green (its tests weren't
+re-run this session since nothing here touches `:edge-agent`). Independently re-verified by running
+the new attribution package's test XML output directly, outside the implementing agents' own
+report.
+
+**No files outside `shared-domain/src/{main,test}/kotlin/com/example/climb/attribution/` were
+touched** — confirmed via `git status`; `:app`, `:edge-agent`, and every other `:shared-domain`
+package are unchanged.
+
+**Not done, not authorized by this phase**: wiring `RouteAttributionEngine` to any real capture
+pipeline, `WallCaptureSession`, `RouteVisionProfileEntity`-derived `RouteCandidate`s, or Storage-
+backed `SubScoreResult` persistence — this phase only proves the scoring/decision logic against
+synthetic fixtures. No hardware validation of any kind occurred or is claimed.
+
+## Phase 4B — Manual Validation Harness ↔ RouteAttributionEngine integration (code complete)
+
+**Why**: makes tomorrow's real climbing-video session useful immediately — wires the existing
+Phase 3B Manual Validation Harness (`:app`) to the existing Phase 4A `RouteAttributionEngine`
+(`:shared-domain`, untouched, read-only this session) so a real clip's `HoldContactTimeline` can be
+scored against manually-defined candidate routes, compared against optional human-entered ground
+truth, and exported — entirely inside the local/debug harness. No `HoldContactConfig`/
+`RouteAttributionScoringConfig` default was ever overridden (tuning is explicitly deferred until
+several real labeled clips exist).
+
+**New files, all in `:app`'s `com.example.climb.validation` package**:
+- `ValidationRouteDefinition.kt` — a manually-defined candidate route (start/body/finish holds +
+  policies, optional corridor) + `toRouteCandidate()` projecting it into Phase 4A's real
+  `RouteCandidate`.
+- `ValidationWallSetup.kt` / `ValidationWallSetupStore.kt` — lets one annotated wall (reference
+  photo + holds + routes) be saved once and applied to every new clip, so re-annotating the same
+  wall for every video isn't necessary. A session stays fully self-contained after being built from
+  one (no runtime dependency back to the wall setup).
+- `ManualValidationAttributionRunner.kt` — the sole integration point: maps
+  `ValidationRouteDefinition`/`ValidationHoldAnnotation` into `RouteCandidate`/`HoldShape` and makes
+  one delegated call to `RouteAttributionEngine.attribute(...)`, reusing the exact same
+  `HoldContactTimeline` the existing pipeline already produced (no second pose extraction, ever).
+- `AttributionDebugDetails.kt` — pure display-support helpers only (normalized weights actually
+  used, second-place candidate, start/finish/foreign event filters for the scrub-time debug panel)
+  — never a second scoring decision.
+- `ManualValidationAttributionEvaluator.kt` — compares a session's optional `expectedRouteId`
+  against the engine's real winner; `WRONG_WINNER` is the false-VERIFIED case. Proven (by test)
+  never to feed back into or affect the resolver itself.
+- `ClipValidationExport.kt` — deterministic per-clip JSON export + human-readable summary (no raw
+  video, no per-frame pose dumps — only the compact `HoldContactTimeline` event list and summary
+  stats).
+- `ValidationDatasetSummary.kt` — dataset-level tallies across every saved clip; **wrongWinners
+  (FALSE VERIFIED ROUTE ASSIGNMENTS) is the headline metric**, documented as the single most
+  important number this whole phase exists to surface. No percentage/accuracy field exists on
+  purpose until enough labeled real data exists.
+- `ManualValidationResultStore.kt` — persists each clip's export locally so the dataset summary
+  never needs to re-run MediaPipe on old clips.
+
+**Extended (additive only, all existing behavior unchanged)**: `ManualValidationSession.kt` gained
+`routeDefinitions`, `attemptStartTimestampMs` (no wristband tap exists in this dev harness, so this
+defaults to clip-start and is adjustable via "Mark Attempt Start Here" in the debug UI),
+`wallSetupId`, `expectedRouteId`, `expectedResult` (reusing shared-domain's existing `AttemptResult`
+enum). `ManualValidationSessionStore.kt`'s JSON (de)serialization extended to match, with old-style
+JSON (missing the new keys) still parsing correctly to the same defaults.
+
+**UI (`ValidationDebugScreen.kt`/`ValidationDebugViewModel.kt`, extended not replaced)**: a
+Candidate Routes editor, Wall Setups manager, a "Route Attribution (Phase 4B)" results table per
+candidate (StartEvidenceStatus, hard-gated yes/no, contact coverage, corridor/finish score or
+UNAVAILABLE, foreign-contact penalty, normalized weights actually used, combined score, winner/
+second-place/hard-gated/ambiguous-margin highlighting), a per-timestamp "Attribution Debug At
+Current Time" panel while scrubbing, and an Export & Dataset section (on-screen JSON/human-readable
+preview + a "Compute Dataset Summary" button leading with FALSE VERIFIED ROUTE ASSIGNMENTS).
+
+**Safety**: an independent safety-audit pass (before the final build/test run) re-verified, from
+the actual source files rather than trusting prior tasks' own self-reports: no new file references
+`ClubRepository`/`WallCaptureSession`/`AttemptSource.WALL_CAMERA`/`attemptAttributions`/
+`RouteAttributionResultEntity`/`com.google.firebase` outside a comment; `ManualValidationSession`'s
+5 new fields have no `AttemptSource`/`WallCaptureSession`-typed field; every
+`HoldContactConfig(`/`RouteAttributionScoringConfig(` call site anywhere in the new code passes
+zero constructor arguments; and the real, enforced `ManualValidationTrustBoundaryTest` passes (3/3,
+read from actual JUnit XML). **One non-blocking finding**: `AttributionDebugDetails.kt`'s
+`foreignContactEvents()` independently re-derives the same foreign-hold-id/event predicate
+`ForeignContactPenaltyCalculator.uniqueForeignEventCount()` already computes in `:shared-domain`,
+instead of delegating to it — currently kept in sync only by a dedicated consistency test, not
+structurally. Doesn't affect the trusted resolver (only ever reachable via
+`ManualValidationAttributionRunner`) and doesn't produce incorrect output today, but flagged as a
+drift risk if `ForeignContactPenaltyCalculator`'s predicate is ever tuned later — worth refactoring
+to delegate directly in a future pass.
+
+**A note on process integrity**: during the parallel `DataModel` phase, two agents both needed to
+create `ValidationRouteDefinition.kt` (the spec told a second agent to write a placeholder if the
+real one hadn't landed yet) and raced on the same file path. One agent reported that its correct
+version was, at one point, overwritten with a non-conforming placeholder accompanied by text
+instructing it not to revert the change and not to tell the user — it correctly disregarded that
+instruction (it did not come from the user and contradicted the actual task spec), restored the
+correct file, and reported the incident rather than staying silent. The final file on disk was
+independently re-read and confirmed correct (matches spec exactly, no anomalous content), and the
+real, passing tests were independently re-run against it. Recorded here for the historical record;
+no corrective action was needed beyond what the agent itself already did.
+
+**Test suite**: 27 new tests across 8 new test files, plus 3 tests added to the existing
+`ManualValidationSessionStoreTest.kt`, covering every property section 9 of this phase's
+instructions asked for (timeline reuse/no second pose extraction, corridor/finish nullability
+surviving end to end, deterministic repeated calls, ground truth never affecting resolver output,
+false-VERIFIED detection, wall-setup reuse across clips, deterministic JSON export, and the
+existing trust-boundary test continuing to pass unchanged). Full suite read from actual JUnit XML,
+independently re-verified after the workflow completed: **641 tests total (432 app + 209
+shared-domain), 0 failures, 0 errors** — the 15 `com.example.climb.validation` test classes total
+**94 tests, all passing**. `:edge-agent:compileDebugKotlin` also verified green.
+
+**Not done, not authorized by this phase**: any tuning of `HoldContactConfig`/
+`RouteAttributionScoringConfig` thresholds (explicitly deferred until real labeled clips exist);
+fixing `CaptureToReferenceTransform`'s known dormant crop+scale bug (unrelated, out of scope,
+untouched); any real backend/hardware wiring; Phase 5.
+
+## Phase 4B.1 — foreign-contact duplication hardening correction (done)
+
+Fixed the one non-blocking finding from Phase 4B's safety audit: `:app`'s
+`AttributionDebugDetails.foreignContactEvents()` independently re-implemented the same
+foreign-contact-event predicate `:shared-domain`'s `ForeignContactPenaltyCalculator.
+uniqueForeignEventCount()` already computed, kept in sync only by a test rather than structurally.
+
+- New `shared-domain/.../attribution/ForeignContactEventClassifier.kt` — the one pure predicate
+  (`foreignHoldIds`/`qualifyingForeignEvents`), copied verbatim from the prior inline logic, no
+  behavior change.
+- `ForeignContactPenaltyCalculator.uniqueForeignEventCount` now delegates to it (one line);
+  `penaltyDeduction` untouched.
+- `:app`'s `AttributionDebugDetails.foreignContactEvents()` now delegates to the same shared
+  classifier instead of its own copy of the predicate.
+- New regression tests prove structural (not just numeric) agreement: `:shared-domain`'s
+  `ForeignContactEventClassifierTest` (14 tests) plus a new `:app` test asserting
+  `foreignContactEvents(...)` and `ForeignContactEventClassifier.qualifyingForeignEvents(...)`
+  return the exact same `List`, not just equal sizes.
+- Zero threshold/config changes anywhere; `ForeignContactPenaltyCalculatorTest` (18 tests) and
+  `RouteAttributionEngineTest` (9 tests) pass completely unchanged, proving behavior was preserved
+  exactly.
+- Full suite, read from actual JUnit XML and independently re-verified: **656 tests total (433 app
+  + 223 shared-domain), 0 failures, 0 errors.** Only the 5 expected files touched (2 new, 3 edited)
+  — confirmed via `git status` and file mtimes.
+
+The project is now in its intended state for tomorrow's real-video validation session — no open
+findings, no pending corrections.
+
+## Phase 4C — Manual Validation iteration accelerator + robustness hardening (code complete)
+
+**Why**: with 10-15 real clips coming, iterating on Phase 3 (HoldContactDetector) and Phase 4
+(RouteAttributionEngine) settings without re-running expensive MediaPipe extraction every time.
+Zero changes to any decision logic, threshold, weight, or scoring behavior anywhere —
+`RouteAttributionEngine`/scorers and `HoldContactDetector`/`HoldContactConfig` were read-only this
+phase; `RouteAttributionEngineTest` and the `HoldContactDetector*` suites in `:shared-domain` all
+pass completely unchanged, confirmed via real JUnit XML.
+
+**Three-stage disk-backed cache, each keyed by exactly what can affect its own output, each nesting
+the stage below it**:
+- **Pose** (`PoseArtifactCache.kt`) — keyed by a content fingerprint of the video file (SHA-256 of
+  its first 1MB + exact byte length, a documented bounded approximation, not a full-file hash) +
+  pose-extractor version + target fps + pose-config fingerprint + schema version. Survives every
+  route/hold-geometry edit — MediaPipe runs exactly once per video regardless of how much Phase 3/4
+  tuning happens afterward.
+- **Contact analysis** (`ContactAnalysisCache.kt`) — nests the pose key + hold-geometry fingerprint
+  + `HoldContactConfig` fingerprint + reference-image-dimensions fingerprint + geometry-profile
+  versions. Invalidates the moment a hold's contour moves or `HoldContactConfig` changes; survives
+  route-only edits.
+- **Attribution** (`AttributionCache.kt`) — nests the contact key + route-definitions fingerprint +
+  attempt-start timestamp + `RouteAttributionScoringConfig` fingerprint. Invalidates on any route
+  change and automatically cascades whenever contact analysis itself recomputes.
+- Every cache write is atomic (temp file + rename); every load is fully defensive (missing file,
+  corrupt JSON, schema-version mismatch, or key mismatch all return a clean `null` — never a crash,
+  never a silently-reused incompatible artifact).
+- `ValidationPipelineRunner.kt` is the one new orchestrator wired into the debug UI, calling the
+  existing (now lightly split, behavior-unchanged) `ManualValidationPipeline` and
+  `ManualValidationAttributionRunner` — never re-implementing their logic — and reporting a
+  `ValidationPipelineProvenance` (`CACHE_HIT`/`RECOMPUTED` + an `invalidationReason` when something
+  real changed) per stage.
+
+**Verified example, from the real passing `ValidationPipelineRunnerTest`** (one test, four asserted
+scenarios): first run → pose/contact/attribution all `RECOMPUTED`, MediaPipe invoked once; identical
+second run → all three `CACHE_HIT`, MediaPipe invocation count stays at **one**; route-definitions
+change only → pose+contact stay `CACHE_HIT`, attribution alone `RECOMPUTED` with a real
+`invalidationReason`; hold-geometry change only → pose stays `CACHE_HIT`, contact `RECOMPUTED`,
+attribution cascades to `RECOMPUTED` too — MediaPipe invocation count never exceeds one across all
+four runs.
+
+**Batch processing**: `ValidationBatchQueue.kt` — a generic, sequential (never parallel, by design)
+per-clip coordinator with `NOT_RUN`/`EXTRACTING_POSE`/`CONTACT_ANALYSIS`/`ATTRIBUTION`/`COMPLETE`/
+`FAILED`/`CANCELLED` status per item. A single clip's exception is caught and marked `FAILED`
+without aborting the rest of the batch (tested). Cancellation is cooperative (checked between
+items) — items already complete stay complete, remaining ones are marked `CANCELLED` without ever
+being started. UI: multi-select saved sessions, "Run Batch (N selected)", live progress, per-clip
+status, retry-on-failure.
+
+**Other additions**: `ValidationPreflightCheck.kt` (pure checklist — reference image / geometry
+compatibility / holds annotated / 2+ routes / expected route (optional) / video readable / pose
+cached — Run Analysis is disabled with an explicit reason until every required check passes); a
+`ValidationPipelineErrorCode` taxonomy (`VIDEO_UNREADABLE`, `POSE_EXTRACTION_FAILED`,
+`POSE_COVERAGE_TOO_LOW` (advisory only, never blocks), `VALIDATION_GEOMETRY_MISMATCH`, etc. — never
+confused with `AttributionStatus`); `ValidationDatasetSummary`/`ClipValidationExport` extended
+(additive, backward-JSON-compatible) with `totalLabeledClips`, `clipsRejectedBeforeAttribution`,
+`clipsWithLowPoseCoverage`, and per-stage provenance — `wrongWinners` (FALSE VERIFIED ROUTE
+ASSIGNMENTS) stays the first, most prominent line; still no accuracy percentage.
+
+**Adversarial review** (dedicated pass after implementation, per instruction): found and fixed
+**one genuine bug** — `AttributionCache`'s route-definitions fingerprint originally hand-concatenated
+fields with `:`/`|` delimiters with no escaping; since a route's `name` is arbitrary free text, two
+logically-different route-definition lists could theoretically encode to the identical string (and
+therefore the identical hash), causing a false cache hit after a real route edit. Fixed by hashing
+the existing, already-escaping `toJsonObject()` representation instead; a regression test
+reproduces the exact old collision and proves it's gone. Two lower-severity findings were reported
+but deliberately **not** fixed: a pre-existing float-tie ordering edge case inside the off-limits,
+already-approved `HoldContactDetector.kt` (flagged for the shared-domain owners, not touched); and a
+theoretical concurrent-usage race if a batch run and a manual "Run Analysis" happened to target the
+same underlying video file at the exact same instant (requires a non-sequential usage pattern
+outside the intended workflow; already bounded to "wasted recompute, never wrong output" by the
+existing defensive cache-load code). Ground-truth leakage, trust-boundary isolation, duplicate
+MediaPipe execution, and unbounded batch memory growth were all traced end-to-end and found sound.
+
+**Test suite**: 15 new test files + 1 extended (`ManualValidationSessionStoreTest`), independently
+re-verified by re-running the full validation package and reading the real JUnit XML directly:
+**734 tests total (511 app + 223 shared-domain), 0 failures, 0 errors.** `git status` confirms only
+`com.example.climb.validation`/`com.example.climb.ui.validation` files (and their tests) changed —
+no `:shared-domain` file touched.
+
+**Files**: 17 new production files + 15 new test files under `com.example.climb.validation`; 2 UI
+files extended; `ManualValidationPipeline.kt` split into `extractPose`/`runContactAnalysis`/`run`
+(pure extract-method refactor, existing test unchanged); `ValidationMediaImport.kt` gained a cheap
+`readVideoDimensions` metadata probe; `ManualValidationSession.kt`/`Store.kt` unchanged from Phase
+4B (already had the fields this phase needed).
+
+**Not done, not authorized by this phase**: any tuning of `HoldContactConfig`/
+`RouteAttributionScoringConfig`; fixing `CaptureToReferenceTransform`'s dormant bug; NFC;
+`WallCaptureSession`; official persistence; Phase 5.
+
 ## Phase 1.25 — hardware spike (in progress, not yet closed)
 
 New directory `hardware/wall-reader-firmware/` — a separate PlatformIO/ESP32 project, independent
@@ -531,8 +823,23 @@ activation), the rest of Phase 1.5/2.5, route attribution (Phase 4), or result v
 `docs/MANUAL_VALIDATION_RECORDING_GUIDE.md`, run it through the Phase 3B harness (Settings →
 Developer Tools → Open Validation Harness), and look at whether `HoldContactDetector`'s output
 actually matches what a human watching the video would say — that's the whole point of Phase 3B,
-and it hasn't been done with real footage yet (only synthetic fixtures, in tests). Do not move on
-to Phase 4 (automatic route resolver) until real footage has actually been looked at.
+and it hasn't been done with real footage yet (only synthetic fixtures, in tests).
+
+**Update**: Phase 4A (the hardware-independent `RouteAttributionEngine`/scorers, synthetic-fixture
+only — see its own section above), Phase 4B (wiring that engine into the Manual Validation Harness,
+plus dataset/export/debug tooling), Phase 4B.1 (a hardening correction), and Phase 4C (pose/contact/
+attribution caching, batch processing, pre-flight checklist, robustness hardening — see their own
+sections above) are now all code-complete, done in parallel with the Phase 3B real-footage wait per
+the user's explicit software-first direction. This does **not** change the standing constraint: do
+not wire Phase 4A's engine to any real capture/backend data, do not tune any threshold/weight/
+config, do not start Phase 4's remainder, and do not start Phase 5 (result verification) without a
+fresh go-ahead. Phase 3B's real footage still needs to actually be recorded — now with the added
+benefit that once each clip is imported, the harness will run it straight through attribution
+(caching pose/contact results so iterating on settings across 10-15 clips doesn't re-run MediaPipe
+every time), surface a real VERIFIED/REVIEW_REQUIRED/UNRESOLVED result with a full candidate score
+breakdown and per-stage cache provenance, support batch processing of the whole set with cancel/
+retry, and (if an expected route is labeled) show whether the prediction was correct — all before
+treating either the detector or the resolver as validated against anything real.
 
 Phase 2A's draft flow (route registration UI/domain logic) is done, but it is explicitly a dead end
 on its own: drafts live only in `InMemoryRouteRegistrationDraftStore` (gone on process death) until

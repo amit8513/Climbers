@@ -1,7 +1,13 @@
 package com.example.climb.validation
 
 import com.example.climb.analysis.contact.Limb
+import com.example.climb.clubs.AttemptResult
+import com.example.climb.clubs.FinishPolicy
+import com.example.climb.clubs.StartPolicy
+import com.example.climb.colordetection.NormalizedRect
 import com.example.climb.colordetection.Point2D
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -83,5 +89,78 @@ class ManualValidationSessionStoreTest {
         store.saveSession(session)
 
         assertEquals(session, store.loadSession("minimal"))
+    }
+
+    @Test
+    fun `a session with every Phase 4B field populated round-trips exactly`() {
+        val store = LocalJsonManualValidationSessionStore(tempFolder.root)
+        val session = fullSession("session-4b", 3_000L).copy(
+            routeDefinitions = listOf(
+                ValidationRouteDefinition(
+                    routeId = 42L,
+                    name = "red overhang",
+                    startHoldIds = setOf(1, 2),
+                    startPolicy = StartPolicy.TWO_HOLDS_ONE_PER_HAND,
+                    bodyHoldIds = setOf(3, 4),
+                    finishHoldIds = setOf(9),
+                    finishPolicy = FinishPolicy.ONE_HAND_ON_FINISH,
+                    corridorNormalized = NormalizedRect(0.1f, 0.2f, 0.8f, 0.9f),
+                ),
+            ),
+            attemptStartTimestampMs = 1_500L,
+            wallSetupId = "wall-setup-1",
+            expectedRouteId = 42L,
+            expectedResult = AttemptResult.SEND,
+        )
+
+        store.saveSession(session)
+        val loaded = store.loadSession("session-4b")
+
+        assertEquals(session, loaded)
+    }
+
+    @Test
+    fun `a session built the old way still round-trips with Phase 4B fields defaulted`() {
+        val store = LocalJsonManualValidationSessionStore(tempFolder.root)
+        val session = fullSession("pre-4b", 4_000L)
+
+        store.saveSession(session)
+        val loaded = store.loadSession("pre-4b")
+
+        assertEquals(session, loaded)
+        assertEquals(emptyList<ValidationRouteDefinition>(), loaded?.routeDefinitions)
+        assertEquals(0L, loaded?.attemptStartTimestampMs)
+        assertNull(loaded?.wallSetupId)
+        assertNull(loaded?.expectedRouteId)
+        assertNull(loaded?.expectedResult)
+    }
+
+    @Test
+    fun `a hand-constructed JSON string missing every Phase 4B key parses without throwing`() {
+        val legacyJson = JSONObject().apply {
+            put("validationSessionId", "hand-written")
+            put("referenceImagePath", "/local/ref.jpg")
+            put("videoPath", "/local/video.mp4")
+            put("wallOrFixtureId", "wall-a")
+            put("cameraGeometryProfileVersion", 1)
+            put("annotatedHolds", JSONArray())
+            put("startHoldIds", JSONArray())
+            put("finishHoldIds", JSONArray())
+            put("groundTruthContacts", JSONArray())
+            put("notes", JSONObject.NULL)
+            put("createdAtEpochMs", 5_000L)
+            // Deliberately no "routeDefinitions"/"attemptStartTimestampMs"/"wallSetupId"/
+            // "expectedRouteId"/"expectedResult" keys at all - this is what a pre-Phase-4B, or any
+            // other hand-authored, session JSON file looks like.
+        }.toString()
+
+        val session = legacyJson.toManualValidationSession()
+
+        assertEquals("hand-written", session.validationSessionId)
+        assertEquals(emptyList<ValidationRouteDefinition>(), session.routeDefinitions)
+        assertEquals(0L, session.attemptStartTimestampMs)
+        assertNull(session.wallSetupId)
+        assertNull(session.expectedRouteId)
+        assertNull(session.expectedResult)
     }
 }

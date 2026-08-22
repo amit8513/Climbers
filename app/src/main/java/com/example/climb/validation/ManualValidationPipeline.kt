@@ -61,29 +61,35 @@ sealed interface ManualValidationOutcome {
  */
 object ManualValidationPipeline {
 
-    suspend fun run(
+    /** Runs the existing MediaPipe pose extraction exactly once for this session - no other code
+     * path in this file (or anywhere in :shared-domain) performs pose extraction of its own. Split
+     * out from [run] (Phase 4C) so a caller that already holds a cached [PoseAnalysisResult.Success]
+     * can skip straight to [runContactAnalysis] without ever invoking MediaPipe again. */
+    suspend fun extractPose(
         session: ManualValidationSession,
         poseEstimator: PoseEstimator,
+        onProgress: (PoseAnalysisProgress) -> Unit = {},
+    ): PoseAnalysisResult = poseEstimator.analyzeVideo(
+        source = VideoSource.LocalFile(session.videoPath),
+        configuration = PoseAnalysisConfiguration(targetFps = MANUAL_VALIDATION_TARGET_FPS),
+        onProgress = onProgress,
+    )
+
+    /** Everything [run] used to do after pose extraction returned - the geometry gate, then the
+     * [HoldContactDetector] loop, unchanged. Takes an already-extracted [PoseAnalysisResult.Success]
+     * directly (whether freshly computed or loaded from [PoseArtifactStore]) rather than ever calling
+     * the pose estimator itself. */
+    fun runContactAnalysis(
+        session: ManualValidationSession,
+        poseSuccess: PoseAnalysisResult.Success,
         referenceImageDimensions: ImageDimensions,
         expectedGeometryProfileVersion: Int,
         holdContactConfig: HoldContactConfig = HoldContactConfig(),
-        onProgress: (PoseAnalysisProgress) -> Unit = {},
     ): ManualValidationOutcome {
-        // Exactly one call, exactly one video - MediaPipe never runs a second time for this
-        // session, and no other code path in this file (or anywhere in :shared-domain) performs
-        // pose extraction of its own.
-        val poseResult = poseEstimator.analyzeVideo(
-            source = VideoSource.LocalFile(session.videoPath),
-            configuration = PoseAnalysisConfiguration(targetFps = MANUAL_VALIDATION_TARGET_FPS),
-            onProgress = onProgress,
-        )
-        val success = poseResult as? PoseAnalysisResult.Success
-            ?: return ManualValidationOutcome.Rejected((poseResult as PoseAnalysisResult.Failure).reason)
-
         val alignment = ManualValidationGeometryGate.check(
             session = session,
             referenceImageDimensions = referenceImageDimensions,
-            videoDimensions = ImageDimensions(success.videoWidth, success.videoHeight),
+            videoDimensions = ImageDimensions(poseSuccess.videoWidth, poseSuccess.videoHeight),
             expectedGeometryProfileVersion = expectedGeometryProfileVersion,
         )
         val validIdentity = alignment as? AlignmentCheckResult.ValidIdentity
@@ -95,7 +101,7 @@ object ManualValidationPipeline {
         val detector = HoldContactDetector(holds, holdContactConfig)
         val identity = CaptureToReferenceTransform.identity(validIdentity.wallCalibrationId)
 
-        val diagnostics = success.frames.map { frame ->
+        val diagnostics = poseSuccess.frames.map { frame ->
             detector.processFrame(frame.toContactPoseFrame(), identity)
             val statesByLimb = Limb.entries.associateWith { detector.stateOf(it) }
             ManualValidationFrameDiagnostics(
@@ -111,8 +117,22 @@ object ManualValidationPipeline {
 
         return ManualValidationOutcome.Processed(
             frameDiagnostics = diagnostics,
-            videoDurationMs = success.videoDurationMs,
+            videoDurationMs = poseSuccess.videoDurationMs,
             timeline = detector.timeline,
         )
+    }
+
+    suspend fun run(
+        session: ManualValidationSession,
+        poseEstimator: PoseEstimator,
+        referenceImageDimensions: ImageDimensions,
+        expectedGeometryProfileVersion: Int,
+        holdContactConfig: HoldContactConfig = HoldContactConfig(),
+        onProgress: (PoseAnalysisProgress) -> Unit = {},
+    ): ManualValidationOutcome {
+        val poseResult = extractPose(session, poseEstimator, onProgress)
+        val success = poseResult as? PoseAnalysisResult.Success
+            ?: return ManualValidationOutcome.Rejected((poseResult as PoseAnalysisResult.Failure).reason)
+        return runContactAnalysis(session, success, referenceImageDimensions, expectedGeometryProfileVersion, holdContactConfig)
     }
 }
